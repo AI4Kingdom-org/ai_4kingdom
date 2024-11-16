@@ -1,0 +1,81 @@
+.chatWindow {
+    width: 400px;
+    max-height: 600px;
+    margin: 0 auto;
+    border: 1px solid #ddd;
+    border-radius: 10px;
+    background-color: #f9f9f9;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0px 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+.messages {
+    flex: 1;
+    padding: 10px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.message {
+    max-width: 70%;
+    padding: 10px;
+    border-radius: 10px;
+    word-wrap: break-word;
+    font-size: 14px;
+}
+
+.user {
+    align-self: flex-end;
+    background-color: #007bff;
+    color: white;
+}
+
+.bot {
+    align-self: flex-start;
+    background-color: #e1e1e1;
+    color: black;
+}
+
+.inputArea {
+    display: flex;
+    padding: 10px;
+    gap: 10px;
+    border-top: 1px solid #ddd;
+    background-color: #fff;
+}
+
+/* 为 input 添加局部类名 */
+.inputField {
+    flex: 1;
+    padding: 8px;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+    font-size: 14px;
+}
+
+/* 为 button 添加局部类名 */
+.sendButton {
+    padding: 10px 20px;
+    border: none;
+    border-radius: 5px;
+    background-color: #007bff;
+    color: white;
+    font-size: 14px;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+}
+
+.sendButton:disabled {
+    background-color: #ccc;
+    cursor: not-allowed;
+}
+
+.error {
+    color: red;
+    text-align: center;
+    font-size: 12px;
+    margin-bottom: 10px;
+}
