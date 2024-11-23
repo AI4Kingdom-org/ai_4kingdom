@@ -2,7 +2,13 @@ import { OpenAI } from "openai";
 import { DynamoDBClient, PutItemCommand, QueryCommand } from "@aws-sdk/client-dynamodb";
 import { NextResponse } from "next/server";
 
-const dynamoClient = new DynamoDBClient({ region: "us-east-2" });
+const dynamoDb = new DynamoDBClient({
+  region: process.env.NEXT_PUBLIC_AWS_REGION,
+  credentials: {
+    accessKeyId: process.env.NEXT_PUBLIC_AWS_ACCESS_KEY!,
+    secretAccessKey: process.env.NEXT_PUBLIC_AWS_SECRET_KEY!
+  }
+});
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
@@ -18,7 +24,7 @@ async function saveChatMessage(userId: string, message: string, reply: string) {
     },
   };
 
-  await dynamoClient.send(new PutItemCommand(params));
+  await dynamoDb.send(new PutItemCommand(params));
 }
 
 async function getChatHistory(userId: string) {
@@ -33,7 +39,7 @@ async function getChatHistory(userId: string) {
   
     try {
       const command = new QueryCommand(params);
-      const response = await dynamoClient.send(command);
+      const response = await dynamoDb.send(command);
   
       // 遍历记录，解析用户消息和机器人回复
       return (response.Items || []).flatMap((item) => {
