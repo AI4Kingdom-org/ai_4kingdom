@@ -36,11 +36,24 @@ const Chat = ({ userId }: { userId: string }) => {
     // 获取聊天历史记录
     async function fetchHistory() {
         try {
+            console.log('开始获取历史记录，userId:', userId);
             const response = await fetch(`/api/chat?userId=${userId}`);
-            if (!response.ok) {
-                throw new Error(`获取聊天历史失败: ${response.status}`);
+            console.log('API 响应状态:', response.status);
+            
+            const responseText = await response.text();
+            console.log('API 原始响应:', responseText);
+            
+            let data;
+            try {
+                data = JSON.parse(responseText);
+            } catch (e) {
+                console.error('JSON 解析错误:', e);
+                throw new Error(`响应解析失败: ${responseText}`);
             }
-            const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(`获取聊天历史失败: ${response.status} - ${data.details || data.error}`);
+            }
             
             // 处理历史消息
             const allMessages = data.flatMap((item: ChatItem) => parseHistoryMessage(item.Message));
@@ -48,8 +61,12 @@ const Chat = ({ userId }: { userId: string }) => {
             setError('');
             scrollToBottom();
         } catch (err) {
-            console.error(err);
-            setError('加载聊天历史失败，请稍后重试');
+            console.error('获取历史记录完整错误:', {
+                error: err,
+                message: err instanceof Error ? err.message : '未知错误',
+                stack: err instanceof Error ? err.stack : undefined
+            });
+            setError(err instanceof Error ? err.message : '加载聊天历史失败，请稍后重试');
         }
     }
 
@@ -84,7 +101,7 @@ const Chat = ({ userId }: { userId: string }) => {
             setError('');
             scrollToBottom();
         } catch (err) {
-            console.error('发送消息错��:', err);
+            console.error('发送消息错:', err);
             setError('发送消息失败，请重试');
         } finally {
             setLoading(false);

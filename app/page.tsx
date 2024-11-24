@@ -15,9 +15,9 @@ Amplify.configure({
   ...awsconfig,
   Auth: {
     Cognito: {
-      userPoolId: 'us-east-2_VnxerjL1q',
-      userPoolClientId: '31bsofh52pmgt5h1t2jdorcv88',
-      identityPoolId: 'us-east-2:cd501363-bb36-4790-901e-13e9fd66ae6c',
+      userPoolId: process.env.NEXT_PUBLIC_USER_POOL_ID!,
+      userPoolClientId: process.env.NEXT_PUBLIC_USER_POOL_CLIENT_ID!,
+      identityPoolId: process.env.NEXT_PUBLIC_IDENTITY_POOL_ID!,
       signUpVerificationMethod: "code"
     }
   }
