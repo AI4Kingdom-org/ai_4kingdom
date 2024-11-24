@@ -57,14 +57,14 @@ amplify/mock-data
 amplify/mock-api-resources
 
 # aws config files
-aws-exports.js
+# aws-exports.js  # 暂时注释掉
 aws-exports.ts
 awsconfiguration.json
 amplifyconfiguration.json
 amplify-build-config.json
 amplify-gradle-config.json
 amplifytools.xcconfig
-amplify_outputs.json
+# amplify_outputs.json  # 暂时注释掉
 amplifyconfiguration*
 
 # IDE
