@@ -6,12 +6,12 @@ import { defineAuth } from "@aws-amplify/backend";
  */
 export const auth = defineAuth({
   loginWith: {
-    email: true,
-    phone: false,
-    username: false
-  },
-  verification: {
-    verificationEmailSubject: '验证码',
-    verificationEmailBody: '您的验证码是: {####}'
+    email: {
+      verificationEmailSubject: 'Verify your email',
+      verificationEmailBody: (createCode: () => string): string => {
+        const code = createCode();
+        return `Your verification code is ${code}`;
+      }
+    }
   }
 });
