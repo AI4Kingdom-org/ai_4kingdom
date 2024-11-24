@@ -19,7 +19,8 @@ Amplify.configure({
       userPoolClientId: process.env.NEXT_PUBLIC_USER_POOL_CLIENT_ID!,
       identityPoolId: process.env.NEXT_PUBLIC_IDENTITY_POOL_ID!,
       signUpVerificationMethod: "code"
-    }
+    },
+    mandatorySignIn: true
   }
 });
 
@@ -39,7 +40,7 @@ export default function App() {
     <main>
       <div className="chat-container">
         <h1>国度AI</h1>
-        {userId ? <Chat userId={userId} /> : <p>加载中...</p>}
+        {userId ? <Chat userId={userId} /> : <p>请先登录</p>}
       </div>
     </main>
   );
