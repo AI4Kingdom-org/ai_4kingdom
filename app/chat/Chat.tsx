@@ -3,17 +3,34 @@
 import { useState, useEffect, useRef } from 'react';
 import styles from './Chat.module.css';
 
+interface ChatItem {
+    Message: string;
+    Timestamp: string;
+    UserId: string;
+}
+
 const Chat = ({ userId }: { userId: string }) => {
-    // 定义组件状态
     const [messages, setMessages] = useState<{ sender: string; text: string }[]>([]);
     const [input, setInput] = useState('');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
-    const messagesEndRef = useRef<HTMLDivElement>(null); // 用于自动滚动到底部
+    const messagesEndRef = useRef<HTMLDivElement>(null);
 
-    // 滚动到底部函数
     const scrollToBottom = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    };
+
+    // 解析消息
+    const parseHistoryMessage = (messageStr: string) => {
+        try {
+            const parsed = JSON.parse(messageStr);
+            return [
+                { sender: 'user', text: parsed.userMessage },
+                { sender: 'bot', text: parsed.botReply }
+            ];
+        } catch (e) {
+            return [];
+        }
     };
 
     // 获取聊天历史记录
@@ -21,34 +38,32 @@ const Chat = ({ userId }: { userId: string }) => {
         try {
             const response = await fetch(`/api/chat?userId=${userId}`);
             if (!response.ok) {
-                throw new Error(`Failed to fetch chat history: ${response.status} ${response.statusText}`);
+                throw new Error(`获取聊天历史失败: ${response.status}`);
             }
             const data = await response.json();
-            setMessages(data.history || []);
-            setError(''); // 清除错误状态
-            scrollToBottom(); // 滚动到底部
+            
+            // 处理历史消息
+            const allMessages = data.flatMap((item: ChatItem) => parseHistoryMessage(item.Message));
+            setMessages(allMessages);
+            setError('');
+            scrollToBottom();
         } catch (err) {
             console.error(err);
-            setError('Failed to load chat history. Please try again later.');
+            setError('加载聊天历史失败，请稍后重试');
         }
     }
 
-    // 使用 useEffect 在组件加载时调用 fetchHistory
     useEffect(() => {
-        if (!userId) {
-            console.error('UserId is required');
-            setError('UserId is missing. Cannot load chat history.');
-            return;
+        if (userId) {
+            fetchHistory();
         }
-        fetchHistory();
     }, [userId]);
 
-    // 发送消息
     async function sendMessage() {
         if (!input.trim()) return;
 
         const newMessage = { sender: 'user', text: input };
-        setMessages((prev) => [...prev, newMessage]);
+        setMessages(prev => [...prev, newMessage]);
         setInput('');
         setLoading(true);
 
@@ -60,19 +75,17 @@ const Chat = ({ userId }: { userId: string }) => {
             });
 
             if (!response.ok) {
-                throw new Error(`Failed to send message: ${response.status} ${response.statusText}`);
+                throw new Error(`发送消息失败: ${response.status}`);
             }
 
             const data = await response.json();
             const botReply = { sender: 'bot', text: data.reply };
-
-            // 更新消息状态，显示 bot 回复
-            setMessages((prev) => [...prev, botReply]);
-            setError(''); // 清除错误状态
-            scrollToBottom(); // 滚动到底部
+            setMessages(prev => [...prev, botReply]);
+            setError('');
+            scrollToBottom();
         } catch (err) {
-            console.error('Error sending message:', err);
-            setError('Failed to send message. Please try again.');
+            console.error('发送消息错��:', err);
+            setError('发送消息失败，请重试');
         } finally {
             setLoading(false);
         }
@@ -86,10 +99,19 @@ const Chat = ({ userId }: { userId: string }) => {
                         key={index}
                         className={`${styles.message} ${msg.sender === 'user' ? styles.user : styles.bot}`}
                     >
-                        {msg.text}
+                        {msg.sender === 'bot' && (
+                            <img 
+                                src="https://logos-world.net/wp-content/uploads/2023/02/ChatGPT-Logo.png"
+                                alt="AI Avatar" 
+                                className={styles.avatar}
+                            />
+                        )}
+                        <div className={styles.messageContent}>
+                            {msg.text}
+                        </div>
                     </div>
                 ))}
-                <div ref={messagesEndRef} /> {/* 用于自动滚动 */}
+                <div ref={messagesEndRef} />
             </div>
 
             {error && <div className={styles.error}>{error}</div>}
@@ -100,19 +122,18 @@ const Chat = ({ userId }: { userId: string }) => {
                     value={input}
                     onChange={(e) => setInput(e.target.value)}
                     onKeyDown={(e) => e.key === 'Enter' && !loading && sendMessage()}
-                    placeholder="Type your message..."
-                    className={styles.inputField} // 更新了样式类名
+                    placeholder="输入消息..."
+                    className={styles.inputField}
                 />
 
                 <button
                     onClick={sendMessage}
                     disabled={loading || !input.trim()}
-                    className={styles.sendButton} // 更新了样式类名
+                    className={styles.sendButton}
                 >
-                    {loading ? 'Sending...' : 'Send'}
+                    {loading ? '发送中...' : '发送'}
                 </button>
             </div>
-
         </div>
     );
 };

@@ -1,101 +1,92 @@
-import { OpenAI } from "openai";
-import { DynamoDBClient, PutItemCommand, QueryCommand } from "@aws-sdk/client-dynamodb";
-import { NextResponse } from "next/server";
+import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
+import { DynamoDBDocumentClient, QueryCommand } from "@aws-sdk/lib-dynamodb";
+import { CognitoIdentityClient } from "@aws-sdk/client-cognito-identity";
+import { fromCognitoIdentityPool } from "@aws-sdk/credential-providers";
+import { fetchAuthSession } from 'aws-amplify/auth';
 
-const dynamoDb = new DynamoDBClient({
-  region: process.env.NEXT_PUBLIC_AWS_REGION,
-  credentials: {
-    accessKeyId: process.env.NEXT_PUBLIC_AWS_ACCESS_KEY!,
-    secretAccessKey: process.env.NEXT_PUBLIC_AWS_SECRET_KEY!
+const REGION = process.env.NEXT_PUBLIC_REGION || "us-east-2";
+const IDENTITY_POOL_ID = process.env.NEXT_PUBLIC_IDENTITY_POOL_ID!;
+
+// 创建一个未认证的身份池凭证
+const getUnAuthCredentials = () => {
+  return fromCognitoIdentityPool({
+    clientConfig: { region: REGION },
+    identityPoolId: IDENTITY_POOL_ID
+  })();
+};
+
+async function getCredentials() {
+  try {
+    const session = await fetchAuthSession();
+    return session.credentials;
+  } catch (error) {
+    console.error('获取凭证时出错:', error);
+    throw error;
   }
-});
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
-
-// 保存聊天记录到 DynamoDB
-async function saveChatMessage(userId: string, message: string, reply: string) {
-  const params = {
-    TableName: "ChatHistory",
-    Item: {
-      UserId: { S: userId },
-      Timestamp: { S: new Date().toISOString() },
-      Message: { S: JSON.stringify({ userMessage: message, botReply: reply }) },
-    },
-  };
-
-  await dynamoDb.send(new PutItemCommand(params));
 }
 
 async function getChatHistory(userId: string) {
-    const params = {
+  try {
+    const credentials = await getCredentials();
+    
+    // 创建 DynamoDB 客户端
+    const client = new DynamoDBClient({
+      region: REGION,
+      credentials: credentials
+    });
+
+    const docClient = DynamoDBDocumentClient.from(client);
+    
+    // 查询聊天历史
+    const command = new QueryCommand({
       TableName: "ChatHistory",
       KeyConditionExpression: "UserId = :userId",
       ExpressionAttributeValues: {
-        ":userId": { S: userId },
-      },
-      ScanIndexForward: true, // 按时间升序返回
-    };
-  
-    try {
-      const command = new QueryCommand(params);
-      const response = await dynamoDb.send(command);
-  
-      // 遍历记录，解析用户消息和机器人回复
-      return (response.Items || []).flatMap((item) => {
-        const message = JSON.parse(item.Message.S || "{}");
-        return [
-          { sender: "user", text: message.userMessage },
-          { sender: "bot", text: message.botReply },
-        ];
-      });
-    } catch (error) {
-      console.error("Error fetching chat history:", error);
-      return [];
-    }
-  }
-
-// 处理 POST 请求：保存用户消息并生成回复
-export async function POST(req: Request) {
-  const { userId, message } = await req.json();
-
-  if (!userId || !message) {
-    return NextResponse.json({ error: "Invalid userId or message" }, { status: 400 });
-  }
-
-  try {
-    // 调用 OpenAI API
-    const response = await openai.chat.completions.create({
-      model: "gpt-3.5-turbo",
-      messages: [{ role: "user", content: message }],
+        ":userId": userId
+      }
     });
 
-    const botReply = response.choices[0]?.message?.content || "I couldn't understand that.";
-
-    // 保存聊天记录
-    await saveChatMessage(userId, message, botReply);
-
-    return NextResponse.json({ reply: botReply });
+    const response = await docClient.send(command);
+    console.log('DynamoDB response:', response);
+    
+    return response.Items || [];
+    
   } catch (error) {
-    console.error("Error handling POST request:", error);
-    return NextResponse.json({ error: "Failed to process request" }, { status: 500 });
+    console.error('获取聊天历史时出错:', error);
+    throw error;
   }
 }
 
-// 处理 GET 请求：获取聊天历史记录
-export async function GET(req: Request) {
-    const { searchParams } = new URL(req.url);
-    const userId = searchParams.get("userId");
-  
+export async function GET(request: Request) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const userId = searchParams.get('userId');
+    
     if (!userId) {
-      return NextResponse.json({ error: "UserId is required" }, { status: 400 });
+      return new Response(JSON.stringify({ error: 'Missing userId' }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' }
+      });
     }
-  
-    try {
-      const history = await getChatHistory(userId);
-      return NextResponse.json({ history });
-    } catch (error) {
-      console.error("Error fetching chat history:", error);
-      return NextResponse.json({ error: "Failed to fetch chat history" }, { status: 500 });
-    }
+
+    console.log('Fetching chat history for userId:', userId);
+    const history = await getChatHistory(userId);
+    
+    return new Response(JSON.stringify(history), {
+      headers: { 'Content-Type': 'application/json' },
+    });
+  } catch (error: unknown) {
+    console.error('API Error:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+    const errorStack = error instanceof Error ? error.stack : undefined;
+    
+    return new Response(JSON.stringify({ 
+      error: 'Internal Server Error',
+      message: errorMessage,
+      stack: process.env.NODE_ENV === 'development' ? errorStack : undefined
+    }), { 
+      status: 500,
+      headers: { 'Content-Type': 'application/json' }
+    });
   }
+}
