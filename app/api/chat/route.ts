@@ -12,6 +12,19 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
+const isDev = process.env.NODE_ENV === 'development';
+
+const dynamoDBConfig = isDev ? {
+  region: 'local',
+  endpoint: 'http://localhost:8000',
+  credentials: {
+    accessKeyId: 'local',
+    secretAccessKey: 'local'
+  }
+} : {
+  region: REGION
+};
+
 // 创建一个未认证的身份池凭证
 const getUnAuthCredentials = () => {
   return fromCognitoIdentityPool({
@@ -60,11 +73,7 @@ async function getChatHistory(userId: string) {
       hasSessionToken: !!credentials.sessionToken
     });
     
-    const client = new DynamoDBClient({
-      region: REGION,
-      credentials: credentials,
-      maxAttempts: 3 // 添加重试
-    });
+    const client = new DynamoDBClient(dynamoDBConfig);
 
     const docClient = DynamoDBDocumentClient.from(client, {
       marshallOptions: {
@@ -127,10 +136,7 @@ export async function GET(request: Request) {
         hasSecretAccessKey: !!credentials.secretAccessKey
       });
 
-      const client = new DynamoDBClient({
-        region: REGION,
-        credentials: credentials
-      });
+      const client = new DynamoDBClient(dynamoDBConfig);
 
       const docClient = DynamoDBDocumentClient.from(client);
       
@@ -223,10 +229,7 @@ export async function POST(request: Request) {
       const botReply = completion.choices[0]?.message?.content || "抱歉，我现在无法回答。";
 
       // 保存对话记录到 DynamoDB
-      const client = new DynamoDBClient({
-        region: REGION,
-        credentials: await getCredentials()
-      });
+      const client = new DynamoDBClient(dynamoDBConfig);
 
       const docClient = DynamoDBDocumentClient.from(client);
       const timestamp = new Date().toISOString();
