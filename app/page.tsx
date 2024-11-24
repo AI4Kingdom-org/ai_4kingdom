@@ -3,25 +3,8 @@
 import { useState, useEffect } from "react";
 import { useAuthenticator } from "@aws-amplify/ui-react";
 import "./../app/app.css";
-import { Amplify } from "aws-amplify";
-import awsconfig from "@/aws-exports";
 import "@aws-amplify/ui-react/styles.css";
 import Chat from "./chat/Chat";
-
-Amplify.configure({
-  ...awsconfig,
-  Auth: {
-    Cognito: {
-      userPoolId: process.env.NEXT_PUBLIC_USER_POOL_ID!,
-      userPoolClientId: process.env.NEXT_PUBLIC_USER_POOL_CLIENT_ID!,
-      identityPoolId: process.env.NEXT_PUBLIC_IDENTITY_POOL_ID!,
-      signUpVerificationMethod: "code",
-      loginWith: {
-        email: true
-      }
-    }
-  }
-});
 
 export default function App() {
   const [userId, setUserId] = useState<string | null>(null);

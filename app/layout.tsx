@@ -6,15 +6,13 @@ import "./app.css";
 import { Authenticator } from "@aws-amplify/ui-react";
 import "@aws-amplify/ui-react/styles.css";
 import { Amplify } from 'aws-amplify';
-import awsconfig from "@/aws-exports";
 
 Amplify.configure({
-  ...awsconfig,
   Auth: {
     Cognito: {
-      userPoolId: process.env.NEXT_PUBLIC_USER_POOL_ID!,
-      userPoolClientId: process.env.NEXT_PUBLIC_USER_POOL_CLIENT_ID!,
-      identityPoolId: process.env.NEXT_PUBLIC_IDENTITY_POOL_ID!,
+      identityPoolId: 'us-east-2:e39629e5-24d5-45b7-8fff-1c2b219a9a7b',
+      userPoolId: 'us-east-2_covgiAC78',
+      userPoolClientId: '2uhbcgreed9lkahgrlh9b9bn7k'
     }
   }
 });

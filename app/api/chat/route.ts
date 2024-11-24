@@ -4,6 +4,7 @@ import { CognitoIdentityClient } from "@aws-sdk/client-cognito-identity";
 import { fromCognitoIdentityPool } from "@aws-sdk/credential-providers";
 import { fetchAuthSession } from 'aws-amplify/auth';
 import OpenAI from 'openai';
+import { Amplify } from 'aws-amplify';
 
 const REGION = process.env.NEXT_PUBLIC_REGION || "us-east-2";
 const IDENTITY_POOL_ID = process.env.NEXT_PUBLIC_IDENTITY_POOL_ID!;
@@ -113,6 +114,17 @@ async function getChatHistory(userId: string) {
     throw error;
   }
 }
+
+// 在路由处理器之前添加配置
+Amplify.configure({
+  Auth: {
+    Cognito: {
+      identityPoolId: 'us-east-2:e39629e5-24d5-45b7-8fff-1c2b219a9a7b',
+      userPoolId: 'us-east-2_covgiAC78',
+      userPoolClientId: '2uhbcgreed9lkahgrlh9b9bn7k'
+    }
+  }
+});
 
 export async function GET(request: Request) {
   try {
