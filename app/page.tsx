@@ -6,54 +6,41 @@ import { generateClient } from "aws-amplify/data";
 import type { Schema } from "@/amplify/data/resource";
 import "./../app/app.css";
 import { Amplify } from "aws-amplify";
+import awsconfig from "@/aws-exports";
 import outputs from "@/amplify_outputs.json";
 import "@aws-amplify/ui-react/styles.css";
 import Chat from "./chat/Chat";
 
-Amplify.configure(outputs);
+Amplify.configure({
+  ...awsconfig,
+  Auth: {
+    Cognito: {
+      userPoolId: 'us-east-2_VnxerjL1q',
+      userPoolClientId: '31bsofh52pmgt5h1t2jdorcv88',
+      identityPoolId: 'us-east-2:cd501363-bb36-4790-901e-13e9fd66ae6c',
+      signUpVerificationMethod: "code"
+    }
+  }
+});
 
 const client = generateClient<Schema>();
 
 export default function App() {
-  const [todos, setTodos] = useState<Array<Schema["Todo"]["type"]>>([]);
   const [userId, setUserId] = useState<string | null>(null);
-  const { user, signOut } = useAuthenticator();
-
-  function listTodos() {
-    client.models.Todo.observeQuery().subscribe({
-      next: (data) => setTodos([...data.items]),
-    });
-  }
+  const { user } = useAuthenticator();
 
   useEffect(() => {
-    listTodos();
-  }, []);
-
-  useEffect(() => {
-    // 假设 user.username 是用户 ID
     if (user) {
       setUserId(user.username);
     }
   }, [user]);
 
-  function createTodo() {
-    client.models.Todo.create({
-      content: window.prompt("Todo content"),
-    });
-  }
-
-  function deleteTodo(id: string) {
-    client.models.Todo.delete({ id });
-  }
-
   return (
     <main>
-      <div>
-        <h1>Welcome to the Chat App</h1>
-        {userId ? <Chat userId={userId} /> : <p>Loading...</p>}
+      <div className="chat-container">
+        <h1>国度AI</h1>
+        {userId ? <Chat userId={userId} /> : <p>加载中...</p>}
       </div>
-      <div style={{ height: '20px' }}></div> {/* 空隙 */}
-      <button onClick={signOut}>Sign out</button>
     </main>
   );
 }

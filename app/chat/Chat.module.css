@@ -1,7 +1,7 @@
 .chatWindow {
-    width: 400px;
-    max-height: 600px;
-    margin: 0 auto;
+    width: 100%;
+    height: calc(100vh - 100px);
+    margin: 0;
     border: 1px solid #ddd;
     border-radius: 10px;
     background-color: #f9f9f9;
@@ -12,7 +12,7 @@
 
 .messages {
     flex: 1;
-    padding: 10px;
+    padding: 20px;
     overflow-y: auto;
     display: flex;
     flex-direction: column;
@@ -25,12 +25,30 @@
     border-radius: 10px;
     word-wrap: break-word;
     font-size: 14px;
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+}
+
+.messageContent {
+    flex: 1;
+}
+
+.avatar {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    object-fit: contain;
+    background-color: white;
+    padding: 2px;
+    border: 1px solid #ddd;
 }
 
 .user {
     align-self: flex-end;
     background-color: #007bff;
     color: white;
+    flex-direction: row-reverse;
 }
 
 .bot {

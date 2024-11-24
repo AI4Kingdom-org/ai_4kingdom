@@ -26,7 +26,11 @@ yarn-debug.log*
 yarn-error.log*
 
 # local env files
-.env*.local
+.env*
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
 
 # vercel
 .vercel
@@ -35,7 +39,45 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-# amplify
-.amplify
-amplify_outputs*
+# amplify specific
+.amplify/
+amplify/team-provider-info.json
+amplify/backend/amplify-meta.json
+amplify/backend/awscloudformation/
+amplify/backend/team-provider-info.json
+amplify/backend/auth/
+amplify/backend/api/
+amplify/backend/storage/
+amplify/backend/function/
+amplify/backend/hosting/
+amplify/backend/types/
+amplify/#current-cloud-backend
+amplify/backend/.temp
+amplify/mock-data
+amplify/mock-api-resources
+
+# aws config files
+aws-exports.js
+aws-exports.ts
+awsconfiguration.json
+amplifyconfiguration.json
+amplify-build-config.json
+amplify-gradle-config.json
+amplifytools.xcconfig
+amplify_outputs.json
 amplifyconfiguration*
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
