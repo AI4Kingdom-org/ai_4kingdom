@@ -9,10 +9,35 @@ import { Amplify } from 'aws-amplify';
 const REGION = process.env.NEXT_PUBLIC_REGION || "us-east-2";
 const IDENTITY_POOL_ID = process.env.NEXT_PUBLIC_IDENTITY_POOL_ID!;
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-  organization: process.env.OPENAI_ORG_ID
+// 添加环境变量检查
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+const OPENAI_ORG_ID = process.env.OPENAI_ORG_ID;
+
+// 在初始化时检查配置
+console.log('[DEBUG] OpenAI 配置检查:', {
+  hasApiKey: !!OPENAI_API_KEY,
+  apiKeyPrefix: OPENAI_API_KEY?.substring(0, 7) + '...',
+  hasOrgId: !!OPENAI_ORG_ID
 });
+
+// 修改 OpenAI 客户端初始化
+let openai: OpenAI | null = null;
+try {
+  if (OPENAI_API_KEY && OPENAI_ORG_ID) {
+    openai = new OpenAI({
+      apiKey: OPENAI_API_KEY,
+      organization: OPENAI_ORG_ID
+    });
+    console.log('[DEBUG] OpenAI 客户端初始化成功');
+  } else {
+    console.error('[ERROR] OpenAI 配置缺失:', {
+      hasApiKey: !!OPENAI_API_KEY,
+      hasOrgId: !!OPENAI_ORG_ID
+    });
+  }
+} catch (error) {
+  console.error('[ERROR] OpenAI 客户端初始化失败:', error);
+}
 
 const isDev = process.env.NODE_ENV === 'development';
 
@@ -197,14 +222,14 @@ export async function POST(request: Request) {
       });
     }
 
-    // 检查环境变量是否已配置
-    if (!process.env.OPENAI_API_KEY || !process.env.OPENAI_ORG_ID) {
-      console.error('[ERROR] OpenAI 配置缺失');
+    // 检查 OpenAI 客户端是否可用
+    if (!openai) {
+      console.error('[ERROR] OpenAI 客户端未初始化或配置缺失');
       return new Response(JSON.stringify({
-        error: 'Configuration Error',
-        details: 'OpenAI configuration is missing'
+        error: 'Service Unavailable',
+        details: 'OpenAI service is not properly configured'
       }), {
-        status: 500,
+        status: 503,
         headers: { 'Content-Type': 'application/json' }
       });
     }
