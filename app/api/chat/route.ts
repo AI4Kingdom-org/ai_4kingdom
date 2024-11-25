@@ -51,7 +51,11 @@ async function getCredentials() {
     
     if (!session.credentials) {
       console.log('[DEBUG] 没有找到凭证，尝试使用未认证凭证');
-      return await getUnAuthCredentials();
+      const credentials = await fromCognitoIdentityPool({
+        clientConfig: { region: REGION },
+        identityPoolId: IDENTITY_POOL_ID
+      })();
+      return credentials;
     }
     
     return session.credentials;
