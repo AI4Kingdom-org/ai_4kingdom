@@ -11,6 +11,7 @@ const IDENTITY_POOL_ID = process.env.NEXT_PUBLIC_IDENTITY_POOL_ID!;
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
+  organization: process.env.OPENAI_ORG_ID
 });
 
 const isDev = process.env.NODE_ENV === 'development';
@@ -196,8 +197,21 @@ export async function POST(request: Request) {
       });
     }
 
+    // 检查环境变量是否已配置
+    if (!process.env.OPENAI_API_KEY || !process.env.OPENAI_ORG_ID) {
+      console.error('[ERROR] OpenAI 配置缺失');
+      return new Response(JSON.stringify({
+        error: 'Configuration Error',
+        details: 'OpenAI configuration is missing'
+      }), {
+        status: 500,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+
     // 调用 OpenAI ChatGPT API
     try {
+      console.log('[DEBUG] 开始调用 OpenAI API');
       const completion = await openai.chat.completions.create({
         model: "gpt-3.5-turbo",
         messages: [
@@ -214,6 +228,7 @@ export async function POST(request: Request) {
         max_tokens: 500
       });
 
+      console.log('[DEBUG] OpenAI API 调用成功');
       const botReply = completion.choices[0]?.message?.content || "抱歉，我现在无法回答。";
 
       // 保存对话记录到 DynamoDB
@@ -244,10 +259,16 @@ export async function POST(request: Request) {
       });
 
     } catch (openaiError) {
-      console.error('[ERROR] OpenAI API 调用失败:', openaiError);
+      console.error('[ERROR] OpenAI API 调用失败:', {
+        error: openaiError,
+        message: openaiError instanceof Error ? openaiError.message : String(openaiError),
+        type: openaiError instanceof Error ? openaiError.constructor.name : typeof openaiError
+      });
+      
       return new Response(JSON.stringify({
         error: 'OpenAI API Error',
-        details: openaiError instanceof Error ? openaiError.message : '调用 AI 服务失败'
+        details: openaiError instanceof Error ? openaiError.message : '调用 AI 服务失败',
+        type: openaiError instanceof Error ? openaiError.constructor.name : typeof openaiError
       }), {
         status: 500,
         headers: { 'Content-Type': 'application/json' }
