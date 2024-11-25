@@ -15,71 +15,69 @@ const openai = new OpenAI({
 
 const isDev = process.env.NODE_ENV === 'development';
 
-const dynamoDBConfig = isDev ? {
-  region: 'local',
-  endpoint: 'http://localhost:8000',
-  credentials: {
-    accessKeyId: 'local',
-    secretAccessKey: 'local'
-  }
-} : {
-  region: REGION
-};
-
 // 创建一个未认证的身份池凭证
 const getUnAuthCredentials = () => {
+  console.log('[DEBUG] 尝试获取未认证凭证');
   return fromCognitoIdentityPool({
     clientConfig: { region: REGION },
     identityPoolId: IDENTITY_POOL_ID
   })();
 };
 
+// 修改为异步配置函数
+async function getDynamoDBConfig() {
+  if (isDev) {
+    return {
+      region: 'local',
+      endpoint: 'http://localhost:8000',
+      credentials: {
+        accessKeyId: 'local',
+        secretAccessKey: 'local'
+      }
+    };
+  }
+  
+  const credentials = await getUnAuthCredentials();
+  console.log('[DEBUG] 获取到未认证凭证:', {
+    hasAccessKeyId: !!credentials.accessKeyId,
+    hasSecretAccessKey: !!credentials.secretAccessKey,
+    hasSessionToken: !!credentials.sessionToken
+  });
+  
+  return {
+    region: REGION,
+    credentials
+  };
+}
+
 async function getCredentials() {
   try {
     console.log('[DEBUG] 开始获取凭证...');
     const session = await fetchAuthSession();
     console.log('[DEBUG] 原始 session:', JSON.stringify(session, null, 2));
-    console.log('[DEBUG] session 信息:', {
-      hasCredentials: !!session.credentials,
-      identityId: session.identityId,
-      hasTokens: !!session.tokens,
-      tokenDetails: session.tokens ? {
-        accessToken: !!session.tokens.accessToken,
-        idToken: !!session.tokens.idToken,
-      } : null
-    });
     
     if (!session.credentials) {
-      console.log('[DEBUG] 没有找到凭证，尝试使用未认证凭证');
-      const credentials = await fromCognitoIdentityPool({
-        clientConfig: { region: REGION },
-        identityPoolId: IDENTITY_POOL_ID
-      })();
-      return credentials;
+      console.log('[DEBUG] 没有找到 session 凭证，使用未认证凭证');
+      return await getUnAuthCredentials();
     }
     
     return session.credentials;
   } catch (error) {
-    console.error('[ERROR] 获取凭证失败:', {
-      errorType: error instanceof Error ? error.constructor.name : typeof error,
-      message: error instanceof Error ? error.message : String(error),
-      stack: error instanceof Error ? error.stack : undefined
-    });
-    throw error;
+    console.error('[ERROR] 获取凭证失败:', error);
+    console.log('[DEBUG] 使用未认证凭证作为后备');
+    return await getUnAuthCredentials();
   }
 }
 
 async function getChatHistory(userId: string) {
   try {
-    const credentials = await getCredentials();
-    console.log('[DEBUG] DynamoDB 凭证:', {
-      hasAccessKeyId: !!credentials.accessKeyId,
-      hasSecretAccessKey: !!credentials.secretAccessKey,
-      hasSessionToken: !!credentials.sessionToken
+    const config = await getDynamoDBConfig();
+    console.log('[DEBUG] DynamoDB 配置:', {
+      region: config.region,
+      hasCredentials: !!config.credentials
     });
     
-    const client = new DynamoDBClient(dynamoDBConfig);
-
+    const client = new DynamoDBClient(config);
     const docClient = DynamoDBDocumentClient.from(client, {
       marshallOptions: {
         removeUndefinedValues: true,
@@ -144,51 +142,25 @@ export async function GET(request: Request) {
       });
     }
 
-    try {
-      console.log('[DEBUG] 开始获取凭证');
-      const credentials = await getCredentials();
-      console.log('[DEBUG] 获取到凭证:', {
-        hasAccessKeyId: !!credentials.accessKeyId,
-        hasSecretAccessKey: !!credentials.secretAccessKey
-      });
+    const config = await getDynamoDBConfig();
+    const client = new DynamoDBClient(config);
+    const docClient = DynamoDBDocumentClient.from(client);
+    
+    const command = new QueryCommand({
+      TableName: "ChatHistory",
+      KeyConditionExpression: "UserId = :userId",
+      ExpressionAttributeValues: {
+        ":userId": userId
+      }
+    });
 
-      const client = new DynamoDBClient(dynamoDBConfig);
+    console.log('[DEBUG] 执行 DynamoDB 查询');
+    const response = await docClient.send(command);
+    console.log('[DEBUG] DynamoDB 响应:', JSON.stringify(response, null, 2));
 
-      const docClient = DynamoDBDocumentClient.from(client);
-      
-      const command = new QueryCommand({
-        TableName: "ChatHistory",
-        KeyConditionExpression: "UserId = :userId",
-        ExpressionAttributeValues: {
-          ":userId": userId
-        }
-      });
-
-      console.log('[DEBUG] 执行 DynamoDB 查询');
-      const response = await docClient.send(command);
-      console.log('[DEBUG] DynamoDB 响应:', JSON.stringify(response, null, 2));
-
-      return new Response(JSON.stringify(response.Items || []), {
-        headers: { 'Content-Type': 'application/json' }
-      });
-
-    } catch (innerError) {
-      console.error('[ERROR] 内部错误:', {
-        error: innerError,
-        type: innerError instanceof Error ? innerError.constructor.name : typeof innerError,
-        message: innerError instanceof Error ? innerError.message : String(innerError),
-        stack: innerError instanceof Error ? innerError.stack : undefined
-      });
-
-      return new Response(JSON.stringify({
-        error: 'Internal Server Error',
-        details: innerError instanceof Error ? innerError.message : '内部服务错误',
-        type: innerError instanceof Error ? innerError.constructor.name : typeof innerError
-      }), {
-        status: 500,
-        headers: { 'Content-Type': 'application/json' }
-      });
-    }
+    return new Response(JSON.stringify(response.Items || []), {
+      headers: { 'Content-Type': 'application/json' }
+    });
 
   } catch (error) {
     console.error('[ERROR] 顶层错误:', {
@@ -245,9 +217,10 @@ export async function POST(request: Request) {
       const botReply = completion.choices[0]?.message?.content || "抱歉，我现在无法回答。";
 
       // 保存对话记录到 DynamoDB
-      const client = new DynamoDBClient(dynamoDBConfig);
-
+      const config = await getDynamoDBConfig();
+      const client = new DynamoDBClient(config);
       const docClient = DynamoDBDocumentClient.from(client);
+      
       const timestamp = new Date().toISOString();
       
       const chatItem = {
