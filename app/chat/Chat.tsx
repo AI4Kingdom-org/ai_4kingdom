@@ -36,11 +36,7 @@ const Chat = ({ userId }: { userId: string }) => {
     // 获取聊天历史记录
     async function fetchHistory() {
         try {
-<<<<<<< HEAD
             console.log('开始获取史记录，userId:', userId);
-=======
-            console.log('开始获取��史记录，userId:', userId);
->>>>>>> 44d991b40406b5ed12dbd3731740d81f976b7b04
             const response = await fetch(`/api/chat?userId=${userId}`);
             console.log('API 响应状态:', response.status);
             
@@ -70,11 +66,7 @@ const Chat = ({ userId }: { userId: string }) => {
                 message: err instanceof Error ? err.message : '未知错误',
                 stack: err instanceof Error ? err.stack : undefined
             });
-<<<<<<< HEAD
             setError(err instanceof Error ? err.message : '加载聊天历史失败，请稍重试');
-=======
-            setError(err instanceof Error ? err.message : '加载聊天历史失败，请稍��重试');
->>>>>>> 44d991b40406b5ed12dbd3731740d81f976b7b04
         }
     }
 
@@ -91,10 +83,7 @@ const Chat = ({ userId }: { userId: string }) => {
         setMessages(prev => [...prev, newMessage]);
         setInput('');
         setLoading(true);
-<<<<<<< HEAD
         setError('');
-=======
->>>>>>> 44d991b40406b5ed12dbd3731740d81f976b7b04
 
         try {
             const response = await fetch('/api/chat', {
@@ -103,7 +92,6 @@ const Chat = ({ userId }: { userId: string }) => {
                 body: JSON.stringify({ userId, message: input }),
             });
 
-<<<<<<< HEAD
             const data = await response.json();
 
             if (!response.ok) {
@@ -116,20 +104,6 @@ const Chat = ({ userId }: { userId: string }) => {
             console.error('发送消息错误:', err);
             setError(err instanceof Error ? err.message : '发送消息失败，请重试');
             setMessages(prev => prev.slice(0, -1));
-=======
-            if (!response.ok) {
-                throw new Error(`发送消息失败: ${response.status}`);
-            }
-
-            const data = await response.json();
-            const botReply = { sender: 'bot', text: data.reply };
-            setMessages(prev => [...prev, botReply]);
-            setError('');
-            scrollToBottom();
-        } catch (err) {
-            console.error('发送消息错:', err);
-            setError('发送消息失败，请重试');
->>>>>>> 44d991b40406b5ed12dbd3731740d81f976b7b04
         } finally {
             setLoading(false);
         }
