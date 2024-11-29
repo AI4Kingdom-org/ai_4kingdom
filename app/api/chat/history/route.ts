@@ -1,4 +1,5 @@
 import { DynamoDBClient, QueryCommand } from "@aws-sdk/client-dynamodb";
+<<<<<<< HEAD
 import { fromCognitoIdentityPool } from "@aws-sdk/credential-providers";
 import { fetchAuthSession } from 'aws-amplify/auth';
 import { NextResponse } from "next/server";
@@ -75,6 +76,11 @@ async function getDynamoDBConfig() {
     credentials
   };
 }
+=======
+import { NextResponse } from "next/server";
+
+const dynamoClient = new DynamoDBClient({ region: "us-east-2" });
+>>>>>>> 44d991b40406b5ed12dbd3731740d81f976b7b04
 
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
@@ -85,11 +91,14 @@ export async function GET(req: Request) {
   }
 
   try {
+<<<<<<< HEAD
     console.log('[DEBUG] 开始获取聊天历史, userId:', userId);
     
     const config = await getDynamoDBConfig();
     const client = new DynamoDBClient(config);
 
+=======
+>>>>>>> 44d991b40406b5ed12dbd3731740d81f976b7b04
     const params = {
       TableName: "ChatHistory",
       KeyConditionExpression: "UserId = :userId",
@@ -99,12 +108,17 @@ export async function GET(req: Request) {
       ScanIndexForward: true,
     };
 
+<<<<<<< HEAD
     console.log('[DEBUG] DynamoDB 查询参数:', JSON.stringify(params, null, 2));
     
     const command = new QueryCommand(params);
     const response = await client.send(command);
 
     console.log('[DEBUG] DynamoDB 响应:', JSON.stringify(response, null, 2));
+=======
+    const command = new QueryCommand(params);
+    const response = await dynamoClient.send(command);
+>>>>>>> 44d991b40406b5ed12dbd3731740d81f976b7b04
 
     const history = (response.Items || []).map((item) => {
       const message = JSON.parse(item.Message.S || "{}");
@@ -116,6 +130,7 @@ export async function GET(req: Request) {
 
     return NextResponse.json({ history });
   } catch (error) {
+<<<<<<< HEAD
     console.error('[ERROR] 获取聊天历史失败:', {
       error,
       type: error instanceof Error ? error.constructor.name : typeof error,
@@ -125,5 +140,9 @@ export async function GET(req: Request) {
       { error: "Failed to fetch chat history", details: error instanceof Error ? error.message : '未知错误' }, 
       { status: 500 }
     );
+=======
+    console.error("Error fetching chat history:", error);
+    return NextResponse.json({ error: "Failed to fetch chat history" }, { status: 500 });
+>>>>>>> 44d991b40406b5ed12dbd3731740d81f976b7b04
   }
 }
