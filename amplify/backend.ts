@@ -12,4 +12,7 @@ const backend = defineBackend({
 export const openaiApiKey = secret('OPENAI_API_KEY');
 export const openaiOrgId = secret('OPENAI_ORG_ID');
 
+export const awsAccessKey = secret('AWS_ACCESS_KEY');
+export const awsSecretKey = secret('AWS_SECRET_KEY');
+
 export default backend;
