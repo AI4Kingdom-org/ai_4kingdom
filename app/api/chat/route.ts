@@ -79,13 +79,10 @@ export async function POST(request: Request) {
       console.log('[DEBUG] OpenAI 客户端初始化成功');
 
       // 读取 vector store ID
-      let vector_store_id;
-      try {
-        const vectorStoreData = await fs.readFile('vector_store_id.json', 'utf-8');
-        vector_store_id = JSON.parse(vectorStoreData).vector_store_id;
-      } catch (error) {
-        console.log('无法读取 vector_store_id.json，使用默认值');
-        vector_store_id = process.env.NEXT_PUBLIC_VECTOR_STORE_ID;
+      let vector_store_id = process.env.NEXT_PUBLIC_VECTOR_STORE_ID;
+      if (!vector_store_id) {
+        console.error('NEXT_PUBLIC_VECTOR_STORE_ID 环境变量未设置');
+        throw new Error('Vector store ID 配置缺失');
       }
 
       // 创建 assistant
@@ -236,7 +233,7 @@ export async function GET(request: Request) {
     });
 
     const response = await docClient.send(command);
-    console.log('[DEBUG] DynamoDB 响应:', JSON.stringify(response, null, 2));
+    console.log('[DEBUG] DynamoDB ���应:', JSON.stringify(response, null, 2));
 
     const items = response.Items?.map(item => ({
       UserId: item.UserId,
