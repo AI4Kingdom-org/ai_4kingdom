@@ -79,8 +79,14 @@ export async function POST(request: Request) {
       console.log('[DEBUG] OpenAI 客户端初始化成功');
 
       // 读取 vector store ID
-      const vectorStoreData = await fs.readFile('vector_store_id.json', 'utf-8');
-      const { vector_store_id } = JSON.parse(vectorStoreData);
+      let vector_store_id;
+      try {
+        const vectorStoreData = await fs.readFile('vector_store_id.json', 'utf-8');
+        vector_store_id = JSON.parse(vectorStoreData).vector_store_id;
+      } catch (error) {
+        console.log('无法读取 vector_store_id.json，使用默认值');
+        vector_store_id = process.env.NEXT_PUBLIC_VECTOR_STORE_ID;
+      }
 
       // 创建 assistant
       const assistant = await openai.beta.assistants.create({
