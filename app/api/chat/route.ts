@@ -75,7 +75,7 @@ export async function POST(request: Request) {
     const body = await request.json();
     const { userId, message } = body;
 
-    console.log('[DEBUG] 收到 POST 请求:', { userId, message });
+    console.log('[DEBUG] 收到 POST 请求:', { userId: String(userId), message });
 
     if (!userId || !message) {
       return new Response(JSON.stringify({ error: 'Missing userId or message' }), {
@@ -165,7 +165,7 @@ export async function POST(request: Request) {
       const timestamp = new Date().toISOString();
       
       const chatItem = {
-        UserId: userId,
+        UserId: String(userId),
         Timestamp: timestamp,
         Message: JSON.stringify({
           userMessage: message,
