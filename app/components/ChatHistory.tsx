@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { getCurrentUser } from 'aws-amplify/auth';
 
 interface ChatMessage {
   Message: string;
@@ -14,7 +13,11 @@ interface ParsedMessage {
   botReply: string;
 }
 
-export default function ChatHistory() {
+interface ChatHistoryProps {
+  userId: string;
+}
+
+export default function ChatHistory({ userId }: ChatHistoryProps) {
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -22,13 +25,11 @@ export default function ChatHistory() {
   useEffect(() => {
     async function fetchChatHistory() {
       try {
-        const user = await getCurrentUser();
-        const response = await fetch(`/api/chat?userId=${user.userId}`);
+        const response = await fetch(`/api/chat?userId=${userId}`);
         if (!response.ok) {
           throw new Error('Failed to fetch chat history');
         }
         const data = await response.json();
-        // 按时间戳排序，最新的消息在前
         const sortedData = data.sort((a: ChatMessage, b: ChatMessage) => 
           new Date(b.Timestamp).getTime() - new Date(a.Timestamp).getTime()
         );
@@ -40,8 +41,10 @@ export default function ChatHistory() {
       }
     }
 
-    fetchChatHistory();
-  }, []);
+    if (userId) {
+      fetchChatHistory();
+    }
+  }, [userId]);
 
   function parseMessage(messageStr: string): ParsedMessage {
     try {

@@ -1,40 +1,18 @@
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocumentClient, PutCommand, QueryCommand } from "@aws-sdk/lib-dynamodb";
-import { fromCognitoIdentityPool } from "@aws-sdk/credential-providers";
 import OpenAI from 'openai';
 import { promises as fs } from 'fs';
 
-const REGION = process.env.NEXT_PUBLIC_REGION || "us-east-2";
-const IDENTITY_POOL_ID = process.env.NEXT_PUBLIC_IDENTITY_POOL_ID!;
-const isDev = process.env.NODE_ENV === 'development';
-
-// 获取未认证凭证
-const getUnAuthCredentials = () => {
-  console.log('[DEBUG] 尝试获取未认证凭证');
-  return fromCognitoIdentityPool({
-    clientConfig: { region: REGION },
-    identityPoolId: IDENTITY_POOL_ID
-  })();
+const dbConfig = {
+  region: process.env.NEXT_PUBLIC_REGION || "us-east-2",
+  credentials: {
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!
+  }
 };
 
-// 获取 DynamoDB 配置
-async function getDynamoDBConfig() {
-  if (isDev) {
-    return {
-      region: REGION,
-      credentials: {
-        accessKeyId: process.env.NEXT_PUBLIC_AWS_ACCESS_KEY!,
-        secretAccessKey: process.env.NEXT_PUBLIC_AWS_SECRET_KEY!
-      }
-    };
-  }
-  
-  const credentials = await getUnAuthCredentials();
-  return {
-    region: REGION,
-    credentials
-  };
-}
+const client = new DynamoDBClient(dbConfig);
+const docClient = DynamoDBDocumentClient.from(client);
 
 // 直接从环境变量获取配置
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY?.trim();
@@ -47,7 +25,7 @@ function createOpenAIClient() {
     orgId: OPENAI_ORG_ID ? '存在' : '缺失'
   });
 
-  // 首先检查配置
+  // 先检查配置
   if (!OPENAI_API_KEY) {
     throw new Error('OpenAI API Key 缺失');
   }
@@ -151,10 +129,6 @@ export async function POST(request: Request) {
       }
 
       // 保存到 DynamoDB
-      const dbConfig = await getDynamoDBConfig();
-      const client = new DynamoDBClient(dbConfig);
-      const docClient = DynamoDBDocumentClient.from(client);
-      
       const timestamp = new Date().toISOString();
       
       const chatItem = {
@@ -218,12 +192,6 @@ export async function GET(request: Request) {
   try {
     console.log('[DEBUG] GET 请求开始, 参数:', { userId });
     
-    const dbConfig = await getDynamoDBConfig();
-    const client = new DynamoDBClient(dbConfig);
-    const docClient = DynamoDBDocumentClient.from(client);
-
-    console.log('[DEBUG] 执行 DynamoDB 查询');
-    
     const command = new QueryCommand({
       TableName: "ChatHistory",
       KeyConditionExpression: "UserId = :userId",
@@ -233,7 +201,7 @@ export async function GET(request: Request) {
     });
 
     const response = await docClient.send(command);
-    console.log('[DEBUG] DynamoDB ���应:', JSON.stringify(response, null, 2));
+    console.log('[DEBUG] DynamoDB 应:', JSON.stringify(response, null, 2));
 
     const items = response.Items?.map(item => ({
       UserId: item.UserId,

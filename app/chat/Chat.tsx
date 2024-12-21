@@ -1,5 +1,6 @@
 'use client';
 
+import { useAuth } from '../contexts/AuthContext';
 import { useState, useEffect, useRef } from 'react';
 import styles from './Chat.module.css';
 
@@ -9,12 +10,20 @@ interface ChatItem {
     UserId: string;
 }
 
-const Chat = ({ userId }: { userId: string }) => {
+const Chat = () => {
+    const { userData, loading } = useAuth();
     const [messages, setMessages] = useState<{ sender: string; text: string }[]>([]);
     const [input, setInput] = useState('');
-    const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
     const messagesEndRef = useRef<HTMLDivElement>(null);
+
+    if (loading) {
+        return <div>加载中...</div>;
+    }
+
+    if (!userData) {
+        return <div>请登录后使用</div>;
+    }
 
     const scrollToBottom = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -35,9 +44,11 @@ const Chat = ({ userId }: { userId: string }) => {
 
     // 获取聊天历史记录
     async function fetchHistory() {
+        if (!userData) return;
+        
         try {
-            console.log('开始获取史记录，userId:', userId);
-            const response = await fetch(`/api/chat?userId=${userId}`);
+            console.log('开始获取历史记录，userId:', userData.ID);
+            const response = await fetch(`/api/chat?userId=${userData.ID}`);
             console.log('API 响应状态:', response.status);
             
             const responseText = await response.text();
@@ -71,25 +82,24 @@ const Chat = ({ userId }: { userId: string }) => {
     }
 
     useEffect(() => {
-        if (userId) {
+        if (userData) {
             fetchHistory();
         }
-    }, [userId]);
+    }, [userData]);
 
     async function sendMessage() {
-        if (!input.trim()) return;
+        if (!input.trim() || !userData) return;
 
         const newMessage = { sender: 'user', text: input };
         setMessages(prev => [...prev, newMessage]);
         setInput('');
-        setLoading(true);
         setError('');
 
         try {
             const response = await fetch('/api/chat', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ userId, message: input }),
+                body: JSON.stringify({ userId: userData.ID, message: input }),
             });
 
             const data = await response.json();
@@ -104,8 +114,6 @@ const Chat = ({ userId }: { userId: string }) => {
             console.error('发送消息错误:', err);
             setError(err instanceof Error ? err.message : '发送消息失败，请重试');
             setMessages(prev => prev.slice(0, -1));
-        } finally {
-            setLoading(false);
         }
     }
 
@@ -139,17 +147,17 @@ const Chat = ({ userId }: { userId: string }) => {
                     type="text"
                     value={input}
                     onChange={(e) => setInput(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && !loading && sendMessage()}
+                    onKeyDown={(e) => e.key === 'Enter' && sendMessage()}
                     placeholder="输入消息..."
                     className={styles.inputField}
                 />
 
                 <button
                     onClick={sendMessage}
-                    disabled={loading || !input.trim()}
+                    disabled={!input.trim()}
                     className={styles.sendButton}
                 >
-                    {loading ? '发送中...' : '发送'}
+                    发送
                 </button>
             </div>
         </div>
