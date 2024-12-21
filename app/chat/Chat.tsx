@@ -156,7 +156,7 @@ const Chat = () => {
                 {membershipType === 'free' && (
                     <button 
                         className={styles.upgradeButton}
-                        onClick={() => window.location.href = '/upgrade'}
+                        onClick={() => window.location.href = 'https://ai4kingdom.com/pricing'}
                     >
                         升级会员
                     </button>
