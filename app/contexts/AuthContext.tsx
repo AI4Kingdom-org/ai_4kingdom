@@ -2,35 +2,30 @@
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
 
-interface MembershipStatus {
-  ultimate?: {
-    id: string;
-    is_active: boolean;
-    status: string;
-    start_date: string;
-    expiration_date: string;
+interface Subscription {
+  level: string;
+  status: string;
+  expiration: string | null;
+  api_calls: {
+    today: number;
+    limit: number;
+    remaining: number;
   };
-}
-
-interface WordPressMembership {
-  user_id: string;
-  membership_status: MembershipStatus;
-  has_active_membership: boolean;
-  timestamp: string;
 }
 
 interface UserData {
   ID: string;
-  membershipType: 'free' | 'pro' | 'ultimate';
   user_email: string;
-  display_name: string;
+  subscription: Subscription;
 }
 
 interface AuthContextType {
   userData: UserData | null;
   loading: boolean;
-  refreshAuth: () => Promise<void>;
   error: string | null;
+  login: (username: string, password: string) => Promise<void>;
+  canCallApi: () => boolean;
+  refreshAuth: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -38,123 +33,87 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [userData, setUserData] = useState<UserData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [retryCount, setRetryCount] = useState(0);
-  const MAX_RETRIES = 3;
   const [error, setError] = useState<string | null>(null);
 
-  const checkMembership = async (isRetry = false) => {
+  const checkSubscription = async () => {
     try {
-      console.log('检查会员状态，重试次数:', retryCount);
-      
-      // 获取 nonce
-      const nonceResponse = await fetch('https://ai4kingdom.com/wp-json/custom/v1/get-nonce', {
+      const response = await fetch('https://your-wordpress-site.com/wp-json/custom/v1/user-subscription', {
         credentials: 'include',
         headers: {
           'Accept': 'application/json',
-        },
-        mode: 'cors'
-      });
-
-      if (!nonceResponse.ok) {
-        throw new Error('获取 nonce 失败');
-      }
-
-      const { nonce } = await nonceResponse.json();
-
-      const response = await fetch('https://ai4kingdom.com/wp-json/custom/v1/check-membership', {
-        method: 'GET',
-        credentials: 'include',
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json',
-          'X-WP-Nonce': nonce
-        },
-        mode: 'cors'
-      });
-
-      if (response.status === 401 && !isRetry && retryCount < MAX_RETRIES) {
-        console.log('认证失败，尝试重试...');
-        setRetryCount(prev => prev + 1);
-        // 等待1秒后重试
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        return checkMembership(true);
-      }
-
-      const responseText = await response.text();
-      console.log('会员检查原始响���:', responseText);
-      
-      try {
-        const data = JSON.parse(responseText) as WordPressMembership;
-        console.log('会员数据:', data);
-        
-        if (data.has_active_membership && data.membership_status.ultimate?.is_active) {
-          setUserData({
-            ID: data.user_id,
-            membershipType: 'ultimate',
-            user_email: '',
-            display_name: ''
-          });
-        } else {
-          setUserData({
-            ID: data.user_id,
-            membershipType: 'free',
-            user_email: '',
-            display_name: ''
-          });
+          'Authorization': `Bearer ${localStorage.getItem('jwt_token')}`
         }
-      } catch (parseError) {
-        console.error('解析响应数据失败:', parseError);
+      });
+
+      if (!response.ok) {
+        throw new Error('Subscription check failed');
       }
-    } catch (error) {
-      console.error('获取会员信息失败:', error);
+
+      const data = await response.json();
+      setUserData(data);
       
-      if (!isRetry && retryCount < MAX_RETRIES) {
-        setRetryCount(prev => prev + 1);
-        // 等待1秒后重试
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        return checkMembership(true);
+      // 检查订阅是否过期
+      if (data.subscription.status === 'expired') {
+        setError('您的订阅已过期，请续订以继续使用服务');
       }
-      
-      setUserData(null);
-    } finally {
-      if (isRetry || retryCount >= MAX_RETRIES) {
-        setLoading(false);
-      }
-    }
-  };
-
-  // 添加路由变化监听
-  useEffect(() => {
-    const handleRouteChange = () => {
-      setRetryCount(0); // 重置重试次数
-      checkMembership();
-    };
-
-    // 监听路由变化
-    window.addEventListener('popstate', handleRouteChange);
-    
-    // 初始检查
-    checkMembership();
-
-    return () => {
-      window.removeEventListener('popstate', handleRouteChange);
-    };
-  }, []);
-
-  const refreshAuth = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      await checkMembership();
     } catch (err) {
-      setError(err instanceof Error ? err.message : '认证刷新失败');
+      setError(err instanceof Error ? err.message : '获取订阅信息失败');
+      setUserData(null);
     } finally {
       setLoading(false);
     }
   };
 
+  // 登录函数
+  const login = async (username: string, password: string) => {
+    try {
+      const response = await fetch('https://your-wordpress-site.com/wp-json/jwt-auth/v1/token', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ username, password })
+      });
+
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.message);
+      }
+
+      localStorage.setItem('jwt_token', data.token);
+      await checkSubscription();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '登录失败');
+    }
+  };
+
+  // 检查是否可以调用 API
+  const canCallApi = () => {
+    if (!userData?.subscription) return false;
+    
+    const { remaining } = userData.subscription.api_calls;
+    return remaining === -1 || remaining > 0;
+  };
+
+  useEffect(() => {
+    const token = localStorage.getItem('jwt_token');
+    if (token) {
+      checkSubscription();
+    } else {
+      setLoading(false);
+    }
+  }, []);
+
   return (
-    <AuthContext.Provider value={{ userData, loading, refreshAuth, error }}>
+    <AuthContext.Provider value={{ 
+      userData, 
+      loading, 
+      error,
+      login,
+      canCallApi,
+      refreshAuth: checkSubscription 
+    }}>
       {children}
     </AuthContext.Provider>
   );

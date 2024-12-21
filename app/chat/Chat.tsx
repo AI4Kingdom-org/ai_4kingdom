@@ -11,6 +11,7 @@ interface ChatItem {
 }
 
 interface UsageLimit {
+    [key: string]: number;
     free: number;
     pro: number;
     ultimate: number;
@@ -23,7 +24,7 @@ const WEEKLY_LIMITS: UsageLimit = {
 };
 
 const Chat = () => {
-    const { userData, loading, error: authError, refreshAuth } = useAuth();
+    const { userData, loading, error: authError, canCallApi, refreshAuth } = useAuth();
     const [messages, setMessages] = useState<{ sender: string; text: string }[]>([]);
     const [input, setInput] = useState('');
     const [error, setError] = useState('');
@@ -95,11 +96,11 @@ const Chat = () => {
     }, [userData]);
 
     const checkUsageLimit = () => {
-        const membershipType = userData?.membershipType || 'free';
-        const limit = WEEKLY_LIMITS[membershipType];
+        const membershipType = userData?.subscription?.level || 'free';
+        const limit = WEEKLY_LIMITS[membershipType.toLowerCase()];
         
         if (weeklyUsage >= limit) {
-            setError(`本周使用次数已���上限 (${limit}次)。请升级会员以获取更多使用次数。`);
+            setError(`本周使用次数已达上限 (${limit}次)。请升级会员以获取更多使用次数。`);
             return false;
         }
         return true;
@@ -116,7 +117,10 @@ const Chat = () => {
     const sendMessage = async () => {
         if (!input.trim() || !userData) return;
         
-        if (!checkUsageLimit()) return;
+        if (!canCallApi()) {
+            setError('您已达到今日API调用限制。请升级订阅以获取更多使用次数。');
+            return;
+        }
         
         setIsLoading(true);
         const currentInput = input;
@@ -144,6 +148,7 @@ const Chat = () => {
             
             setWeeklyUsage(prev => prev + 1);
 
+            await refreshAuth();
         } catch (err) {
             await handleSendError(err instanceof Error ? err : new Error('发送失败'));
         } finally {
@@ -152,19 +157,27 @@ const Chat = () => {
         }
     };
 
-    const renderMembershipStatus = () => {
-        const membershipType = userData?.membershipType || 'free';
-        const limit = WEEKLY_LIMITS[membershipType];
+    const renderSubscriptionStatus = () => {
+        if (!userData?.subscription) return null;
+        
+        const { level, api_calls } = userData.subscription;
+        const { today, limit, remaining } = api_calls;
+        
         return (
-            <div className={styles.membershipStatus}>
-                <p>会员等级: {membershipType.toUpperCase()}</p>
-                <p>本周已使用: {weeklyUsage} / {limit === Infinity ? '无限制' : limit}</p>
-                {membershipType === 'free' && (
+            <div className={styles.subscriptionStatus}>
+                <p>订阅等级: {level.toUpperCase()}</p>
+                <p>今日已用: {today} / {limit === -1 ? '无限制' : limit}</p>
+                {remaining !== -1 && remaining <= 5 && (
+                    <div className={styles.warning}>
+                        剩余调用次数不多了！仅剩 {remaining} 次
+                    </div>
+                )}
+                {level === 'free' && (
                     <button 
                         className={styles.upgradeButton}
-                        onClick={() => window.open('https://ai4kingdom.com/pricing', '_blank')}
+                        onClick={() => window.location.href = 'https://your-wordpress-site.com/pricing'}
                     >
-                        升级会员
+                        升级订阅
                     </button>
                 )}
             </div>
@@ -186,7 +199,7 @@ const Chat = () => {
 
     return (
         <div className={styles.chatWindow}>
-            {renderMembershipStatus()}
+            {renderSubscriptionStatus()}
             <div className={styles.messages}>
                 {messages.map((msg, index) => (
                     <div
