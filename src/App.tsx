@@ -1,38 +1,41 @@
-import React from 'react';
-import { useAuth } from './contexts/AuthContext';
+import React, { useEffect, useState } from 'react';
+
+interface UserData {
+  ID: string;
+  user_email: string;
+  display_name: string;
+}
 
 function App() {
-  const { isAuthenticated, membershipStatus, loading } = useAuth();
+  const [userData, setUserData] = useState<UserData | null>(null);
 
-  if (loading) {
-    return <div>加载中...</div>;
+  useEffect(() => {
+    // 监听来自WordPress的消息
+    const handleMessage = (event: MessageEvent) => {
+      // 确保消息来源是WordPress站点
+      if (event.origin === 'https://ai4kingdom.com') {
+        if (event.data.type === 'USER_DATA') {
+          setUserData(event.data.data);
+        }
+      }
+    };
+
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, []);
+
+  // 如果有用户数据，直接显示主界面
+  if (userData) {
+    return (
+      <div>
+        <h1>欢迎, {userData.display_name}!</h1>
+        {/* 这里放置您的主应用内容 */}
+      </div>
+    );
   }
 
-  return (
-    <div>
-      {isAuthenticated ? (
-        <div>
-          <h1>欢迎回来！</h1>
-          {membershipStatus?.membership_status?.ultimate?.is_active ? (
-            <div>
-              <h2>Ultimate会员专享内容</h2>
-              {/* Ultimate会员可见的内容 */}
-            </div>
-          ) : (
-            <div>
-              <h2>普通会员内容</h2>
-              {/* 普通会员可见的内容 */}
-            </div>
-          )}
-        </div>
-      ) : (
-        <div>
-          <h2>请登录查看内容</h2>
-          {/* 未登录用户可见的内容 */}
-        </div>
-      )}
-    </div>
-  );
+  // 如果没有用户数据，显示加载中
+  return <div>加载中...</div>;
 }
 
 export default App; 
