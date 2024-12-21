@@ -11,9 +11,9 @@ console.log('[DEBUG] 所有环境变量:', {
 
 // 详细的环境变量检查
 const envCheck = {
-  accessKey: process.env.NEXT_PUBLIC_AWS_ACCESS_KEY,
-  secretKey: process.env.NEXT_PUBLIC_AWS_SECRET_KEY,
-  region: process.env.NEXT_PUBLIC_AWS_REGION || 'us-east-2',
+  accessKey: process.env.NEXT_PUBLIC_ACCESS_KEY_ID,
+  secretKey: process.env.NEXT_PUBLIC_SECRET_ACCESS_KEY,
+  region: process.env.NEXT_PUBLIC_REGION || 'us-east-2',
   allEnvs: Object.keys(process.env)
 };
 
