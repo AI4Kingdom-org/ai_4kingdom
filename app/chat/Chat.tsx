@@ -69,34 +69,62 @@ const Chat = () => {
     const sendMessage = async () => {
         if (!input.trim() || !userData) return;
         setIsLoading(true);
-        console.log('[DEBUG] 发送消息:', input);
+        const currentInput = input;
+        setInput('');
+        
+        // 添加重试逻辑
+        const maxRetries = 2;
+        let retryCount = 0;
 
-        try {
-            const response = await fetch('/api/chat', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
-                    userId: userData.ID,
-                    message: input 
-                }),
-            });
+        while (retryCount <= maxRetries) {
+            try {
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 30000); // 30秒超时
 
-            const data = await response.json();
-            console.log('[DEBUG] 收到回复:', data);
+                const response = await fetch('/api/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        userId: userData.ID,
+                        message: currentInput 
+                    }),
+                    signal: controller.signal
+                });
 
-            if (!response.ok) throw new Error(data.error || '发送失败');
-            
-            setMessages(prev => [...prev, 
-                { sender: 'user', text: input },
-                { sender: 'bot', text: data.reply }
-            ]);
-        } catch (err) {
-            console.error('[ERROR]:', err);
-            setError(err instanceof Error ? err.message : '发送失败');
-        } finally {
-            setIsLoading(false);
-            scrollToBottom();
+                clearTimeout(timeoutId);
+
+                if (!response.ok) {
+                    if (response.status === 504 && retryCount < maxRetries) {
+                        console.log(`[DEBUG] 重试 ${retryCount + 1}/${maxRetries}`);
+                        retryCount++;
+                        await new Promise(resolve => setTimeout(resolve, 1000 * retryCount));
+                        continue;
+                    }
+                    throw new Error(await response.text() || '发送失败');
+                }
+
+                const data = await response.json();
+                setMessages(prev => [...prev, 
+                    { sender: 'user', text: currentInput },
+                    { sender: 'bot', text: data.reply }
+                ]);
+                break;
+
+            } catch (err) {
+                console.error('[ERROR]:', err);
+                if (retryCount === maxRetries) {
+                    setError(err instanceof Error ? err.message : '发送失败');
+                    setInput(currentInput); // 恢复输入
+                } else {
+                    retryCount++;
+                    await new Promise(resolve => setTimeout(resolve, 1000 * retryCount));
+                    continue;
+                }
+            }
         }
+
+        setIsLoading(false);
+        scrollToBottom();
     };
 
     if (loading) return <div>加载中...</div>;
