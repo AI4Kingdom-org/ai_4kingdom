@@ -9,15 +9,25 @@ console.log('[DEBUG] 所有环境变量:', {
   NEXT_PUBLIC_AWS_SECRET_KEY: '已设置'  // 不打印实际值
 });
 
+// 使用 SSM Parameter Store 中的值
 const accessKey = process.env.NEXT_PUBLIC_AWS_ACCESS_KEY;
 const secretKey = process.env.NEXT_PUBLIC_AWS_SECRET_KEY;
+const region = process.env.NEXT_PUBLIC_REGION || 'us-east-2';
+
+console.log('[DEBUG] AWS 配置检查:', {
+  accessKeyExists: !!accessKey,
+  secretKeyExists: !!secretKey,
+  region,
+  envKeys: Object.keys(process.env).filter(key => key.includes('AWS') || key.includes('NEXT'))
+});
 
 if (!accessKey || !secretKey) {
-  throw new Error(`AWS 凭证缺失: accessKey=${!!accessKey}, secretKey=${!!secretKey}`);
+  console.error('[ERROR] AWS 凭证缺失');
+  throw new Error('AWS credentials missing');
 }
 
 const dbConfig = {
-  region: 'us-east-2',
+  region,
   credentials: {
     accessKeyId: accessKey,
     secretAccessKey: secretKey
