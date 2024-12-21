@@ -16,6 +16,8 @@
 # production
 /build
 
+/wordpress
+
 # misc
 .DS_Store
 *.pem
