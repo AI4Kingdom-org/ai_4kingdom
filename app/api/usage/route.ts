@@ -35,10 +35,15 @@ export async function GET(request: Request) {
     }
 
     try {
+        // 添加更多调试日志
+        console.log('[DEBUG] Starting usage check for userId:', userId);
+        
         const dbConfig = await getDynamoDBConfig();
         console.log('[DEBUG] DB Config:', { 
             region: dbConfig.region,
-            hasCredentials: !!dbConfig.credentials 
+            hasCredentials: !!dbConfig.credentials,
+            environment: process.env.NODE_ENV,
+            identityPoolId: process.env.NEXT_PUBLIC_IDENTITY_POOL_ID?.substring(0, 10) + '...'
         });
 
         const client = new DynamoDBClient(dbConfig);
@@ -58,20 +63,57 @@ export async function GET(request: Request) {
             }
         });
 
-        console.log('[DEBUG] Query Command:', command);
-        const response = await docClient.send(command);
-        console.log('[DEBUG] DynamoDB Response:', response);
+        console.log('[DEBUG] Query Command:', {
+            TableName: command.input.TableName,
+            KeyConditionExpression: command.input.KeyConditionExpression,
+            ExpressionAttributeValues: command.input.ExpressionAttributeValues
+        });
 
-        return NextResponse.json({ weeklyCount: response.Items?.length || 0 });
+        try {
+            const response = await docClient.send(command);
+            console.log('[DEBUG] DynamoDB Response:', {
+                Count: response.Count,
+                ScannedCount: response.ScannedCount,
+                Items: response.Items?.length
+            });
+            
+            return NextResponse.json({ 
+                weeklyCount: response.Items?.length || 0,
+                debug: {
+                    timestamp: new Date().toISOString(),
+                    startOfWeek: startOfWeek.toISOString()
+                }
+            });
+        } catch (dbError) {
+            console.error('[ERROR] DynamoDB Error:', {
+                message: dbError instanceof Error ? dbError.message : 'Unknown DB error',
+                name: dbError instanceof Error ? dbError.name : 'Unknown',
+                stack: dbError instanceof Error ? dbError.stack : undefined
+            });
+            
+            return NextResponse.json({
+                error: "Database operation failed",
+                details: dbError instanceof Error ? dbError.message : 'Unknown DB error',
+                debug: {
+                    timestamp: new Date().toISOString(),
+                    errorType: dbError instanceof Error ? dbError.name : 'Unknown'
+                }
+            }, { status: 500 });
+        }
     } catch (error) {
-        console.error('[ERROR] 获取使用次数失败:', error);
-        return NextResponse.json(
-            { 
-                error: "Failed to fetch usage count",
-                details: error instanceof Error ? error.message : '未知错误',
-                stack: error instanceof Error ? error.stack : undefined
-            }, 
-            { status: 500 }
-        );
+        console.error('[ERROR] General error:', {
+            message: error instanceof Error ? error.message : 'Unknown error',
+            name: error instanceof Error ? error.name : 'Unknown',
+            stack: error instanceof Error ? error.stack : undefined
+        });
+        
+        return NextResponse.json({ 
+            error: "Failed to fetch usage count",
+            details: error instanceof Error ? error.message : '未知错误',
+            debug: {
+                timestamp: new Date().toISOString(),
+                errorType: error instanceof Error ? error.name : 'Unknown'
+            }
+        }, { status: 500 });
     }
 } 
