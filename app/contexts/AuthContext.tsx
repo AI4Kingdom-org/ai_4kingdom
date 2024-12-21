@@ -46,21 +46,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             'Accept': 'application/json',
             'Content-Type': 'application/json',
             'Origin': 'https://main.d3ts7h8kta7yzt.amplifyapp.com'
-          },
-          mode: 'cors'
+          }
         });
         
         if (response.status === 401) {
-          console.error('认证失败:', await response.text());
-          // 不要立即重定向，而是先检查 cookie
-          const cookies = document.cookie;
-          if (!cookies.includes('wordpress_logged_in_')) {
-            console.log('WordPress cookie 未找到，需要登录');
-            window.location.href = 'https://ai4kingdom.com/login';
-            return;
-          }
-          // 如果有 cookie 但认证失败，可能是其他问题
-          console.log('有 WordPress cookie 但认证失败');
+          console.log('用户未登录');
+          setUserData(null);
+          setLoading(false);
           return;
         }
         
@@ -78,6 +70,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       } catch (error) {
         console.error('获取会员信息失败:', error);
+        setUserData(null);
+      } finally {
+        setLoading(false);
       }
     };
 
