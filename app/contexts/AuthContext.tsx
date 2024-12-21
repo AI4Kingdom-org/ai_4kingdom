@@ -37,60 +37,60 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [userData, setUserData] = useState<UserData | null>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    const checkMembership = async () => {
-      try {
-        const response = await fetch('https://ai4kingdom.com/wp-json/custom/v1/check-membership', {
-          credentials: 'include',
-          headers: {
-            'Accept': 'application/json',
-            'Content-Type': 'application/json',
-            'Origin': 'https://main.d3ts7h8kta7yzt.amplifyapp.com'
-          }
-        });
-        
-        if (response.status === 401) {
-          console.log('用户未登录');
-          setUserData(null);
-          setLoading(false);
-          return;
-        }
-        
-        if (response.ok) {
-          const data: WordPressMembership = await response.json();
-          console.log('会员状态:', data);
-          
-          if (data.has_active_membership && data.membership_status.ultimate?.is_active) {
-            setUserData(prevData => ({
-              ...prevData,
-              ID: data.user_id,
-              membershipType: 'ultimate'
-            } as UserData));
-          }
-        }
-      } catch (error) {
-        console.error('获取会员信息失败:', error);
+  const checkMembership = async () => {
+    try {
+      const response = await fetch('https://ai4kingdom.com/wp-json/custom/v1/check-membership', {
+        method: 'GET',
+        credentials: 'include',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+        },
+        mode: 'cors'
+      });
+      
+      const responseText = await response.text();
+      console.log('API Response:', responseText);
+      
+      if (response.status === 401) {
+        console.log('认证失败，响应内容:', responseText);
         setUserData(null);
-      } finally {
         setLoading(false);
+        return;
       }
-    };
-
-    const handleMessage = (event: MessageEvent) => {
-      if (event.origin === 'https://ai4kingdom.com') {
-        if (event.data.type === 'USER_DATA') {
-          setUserData(prev => ({
-            ...event.data.data,
-            membershipType: 'free' // 默认为免费用户，等待会员检查
-          }));
-          checkMembership(); // 检查会员状态
-          setLoading(false);
+      
+      try {
+        const data = JSON.parse(responseText) as WordPressMembership;
+        console.log('解析后的会员数据:', data);
+        
+        if (data.has_active_membership && data.membership_status.ultimate?.is_active) {
+          setUserData({
+            ID: data.user_id,
+            membershipType: 'ultimate',
+            user_email: '',
+            display_name: ''
+          });
+        } else {
+          setUserData({
+            ID: data.user_id,
+            membershipType: 'free',
+            user_email: '',
+            display_name: ''
+          });
         }
+      } catch (parseError) {
+        console.error('解析响应数据失败:', parseError);
       }
-    };
+    } catch (error) {
+      console.error('获取会员信息失败:', error);
+      setUserData(null);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-    window.addEventListener('message', handleMessage);
-    return () => window.removeEventListener('message', handleMessage);
+  useEffect(() => {
+    checkMembership();
   }, []);
 
   return (
