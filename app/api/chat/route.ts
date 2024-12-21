@@ -89,8 +89,28 @@ function createOpenAIClient() {
   });
 }
 
+// 添加错误处理中间件
+const withErrorHandler = (handler: Function) => async (request: Request) => {
+  try {
+    return await handler(request);
+  } catch (error) {
+    console.error('[ERROR]:', error);
+    return new Response(
+      JSON.stringify({
+        error: '请求处理失败',
+        message: error instanceof Error ? error.message : '未知错误',
+        code: error instanceof Error ? error.name : 'UNKNOWN_ERROR'
+      }),
+      {
+        status: 500,
+        headers: { 'Content-Type': 'application/json' }
+      }
+    );
+  }
+};
+
 // POST 处理函数
-export async function POST(request: Request) {
+export const POST = withErrorHandler(async (request: Request) => {
   try {
     const { userId, message } = await request.json();
     console.log('[DEBUG] 收到用户消息:', { userId, message });
@@ -201,7 +221,7 @@ export async function POST(request: Request) {
       headers: { 'Content-Type': 'application/json' }
     });
   }
-}
+});
 
 // 添加 GET 方法处理历史记录查询
 export async function GET(request: Request) {

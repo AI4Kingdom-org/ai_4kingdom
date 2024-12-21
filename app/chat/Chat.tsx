@@ -23,7 +23,7 @@ const WEEKLY_LIMITS: UsageLimit = {
 };
 
 const Chat = () => {
-    const { userData, loading } = useAuth();
+    const { userData, loading, error: authError, refreshAuth } = useAuth();
     const [messages, setMessages] = useState<{ sender: string; text: string }[]>([]);
     const [input, setInput] = useState('');
     const [error, setError] = useState('');
@@ -99,10 +99,18 @@ const Chat = () => {
         const limit = WEEKLY_LIMITS[membershipType];
         
         if (weeklyUsage >= limit) {
-            setError(`本周使用次数已达上限 (${limit}次)。请升级会员以获取更多使用次数。`);
+            setError(`本周使用次数已���上限 (${limit}次)。请升级会员以获取更多使用次数。`);
             return false;
         }
         return true;
+    };
+
+    const handleSendError = async (err: Error) => {
+        if (err.message.includes('认证失败')) {
+            await refreshAuth();
+            return sendMessage();
+        }
+        setError(err.message);
     };
 
     const sendMessage = async () => {
@@ -137,9 +145,7 @@ const Chat = () => {
             setWeeklyUsage(prev => prev + 1);
 
         } catch (err) {
-            console.error('[ERROR]:', err);
-            setError(err instanceof Error ? err.message : '发送失败');
-            setInput(currentInput);
+            await handleSendError(err instanceof Error ? err : new Error('发送失败'));
         } finally {
             setIsLoading(false);
             scrollToBottom();

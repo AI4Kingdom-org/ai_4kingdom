@@ -29,6 +29,8 @@ interface UserData {
 interface AuthContextType {
   userData: UserData | null;
   loading: boolean;
+  refreshAuth: () => Promise<void>;
+  error: string | null;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -38,6 +40,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [retryCount, setRetryCount] = useState(0);
   const MAX_RETRIES = 3;
+  const [error, setError] = useState<string | null>(null);
 
   const checkMembership = async (isRetry = false) => {
     try {
@@ -78,7 +81,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       const responseText = await response.text();
-      console.log('会员检查原始响应:', responseText);
+      console.log('会员检查原始响���:', responseText);
       
       try {
         const data = JSON.parse(responseText) as WordPressMembership;
@@ -138,8 +141,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
+  const refreshAuth = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      await checkMembership();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '认证刷新失败');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
-    <AuthContext.Provider value={{ userData, loading }}>
+    <AuthContext.Provider value={{ userData, loading, refreshAuth, error }}>
       {children}
     </AuthContext.Provider>
   );
