@@ -76,7 +76,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         headers: {
           'Accept': 'application/json',
           'Content-Type': 'application/json',
-          'X-WP-Nonce': nonce
+          'X-WP-Nonce': nonce,
+          'Cookie': document.cookie
         },
         mode: 'cors'
       });
