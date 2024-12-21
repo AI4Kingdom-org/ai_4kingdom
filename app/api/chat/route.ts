@@ -9,30 +9,40 @@ console.log('[DEBUG] 所有环境变量:', {
   NEXT_PUBLIC_AWS_SECRET_KEY: '已设置'  // 不打印实际值
 });
 
-// 使用 SSM Parameter Store 中的值
-const accessKey = process.env.NEXT_PUBLIC_AWS_ACCESS_KEY;
-const secretKey = process.env.NEXT_PUBLIC_AWS_SECRET_KEY;
-const region = process.env.NEXT_PUBLIC_REGION || 'us-east-2';
+// 详细的环境变量检查
+const envCheck = {
+  accessKey: process.env.NEXT_PUBLIC_AWS_ACCESS_KEY,
+  secretKey: process.env.NEXT_PUBLIC_AWS_SECRET_KEY,
+  region: process.env.NEXT_PUBLIC_AWS_REGION || 'us-east-2',
+  allEnvs: Object.keys(process.env)
+};
 
-console.log('[DEBUG] AWS 配置检查:', {
-  accessKeyExists: !!accessKey,
-  secretKeyExists: !!secretKey,
-  region,
-  envKeys: Object.keys(process.env).filter(key => key.includes('AWS') || key.includes('NEXT'))
+console.log('[DEBUG] 详细环境变量检查:', {
+  ...envCheck,
+  secretKey: envCheck.secretKey ? '已设置' : undefined,
+  accessKey: envCheck.accessKey ? '已设置' : undefined
 });
 
-if (!accessKey || !secretKey) {
-  console.error('[ERROR] AWS 凭证缺失');
+if (!envCheck.accessKey || !envCheck.secretKey) {
+  console.error('[ERROR] AWS 凭证缺失:', {
+    accessKeyExists: !!envCheck.accessKey,
+    secretKeyExists: !!envCheck.secretKey
+  });
   throw new Error('AWS credentials missing');
 }
 
 const dbConfig = {
-  region,
+  region: envCheck.region,
   credentials: {
-    accessKeyId: accessKey,
-    secretAccessKey: secretKey
+    accessKeyId: envCheck.accessKey,
+    secretAccessKey: envCheck.secretKey
   }
 };
+
+console.log('[DEBUG] DynamoDB 配置:', {
+  region: dbConfig.region,
+  hasCredentials: !!dbConfig.credentials
+});
 
 const client = new DynamoDBClient(dbConfig);
 const docClient = DynamoDBDocumentClient.from(client);
