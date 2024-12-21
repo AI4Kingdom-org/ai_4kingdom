@@ -9,17 +9,17 @@ if (!process.env.NEXT_PUBLIC_AWS_ACCESS_KEY || !process.env.NEXT_PUBLIC_AWS_SECR
 }
 
 const dbConfig = {
-  region: 'us-east-2',  // 硬编码区域
+  region: 'us-east-2',
   credentials: {
-    accessKeyId: process.env.AWS_ACCESS_KEY_ID || '',
-    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || ''
+    accessKeyId: process.env.NEXT_PUBLIC_AWS_ACCESS_KEY || '',
+    secretAccessKey: process.env.NEXT_PUBLIC_AWS_SECRET_KEY || ''
   }
 };
 
-console.log('[DEBUG] AWS Config:', {
-  region: dbConfig.region,
-  accessKeyId: dbConfig.credentials.accessKeyId ? '已设置' : '未设置',
-  secretKeyExists: !!dbConfig.credentials.secretAccessKey
+console.log('[DEBUG] 环境变量检查:', {
+  accessKey: process.env.NEXT_PUBLIC_AWS_ACCESS_KEY?.substring(0, 5),
+  secretKey: process.env.NEXT_PUBLIC_AWS_SECRET_KEY ? '存在' : '不存在',
+  region: dbConfig.region
 });
 
 const client = new DynamoDBClient(dbConfig);
