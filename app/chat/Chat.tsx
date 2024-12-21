@@ -69,11 +69,7 @@ const Chat = () => {
     const sendMessage = async () => {
         if (!input.trim() || !userData) return;
         setIsLoading(true);
-
-        const newMessage = { sender: 'user', text: input };
-        setMessages(prev => [...prev, newMessage]);
-        setInput('');
-        setError('');
+        console.log('[DEBUG] 发送消息:', input);
 
         try {
             const response = await fetch('/api/chat', {
@@ -85,16 +81,18 @@ const Chat = () => {
                 }),
             });
 
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.error || '发送失败');
-            }
-
             const data = await response.json();
-            setMessages(prev => [...prev, { sender: 'bot', text: data.reply }]);
+            console.log('[DEBUG] 收到回复:', data);
+
+            if (!response.ok) throw new Error(data.error || '发送失败');
+            
+            setMessages(prev => [...prev, 
+                { sender: 'user', text: input },
+                { sender: 'bot', text: data.reply }
+            ]);
         } catch (err) {
+            console.error('[ERROR]:', err);
             setError(err instanceof Error ? err.message : '发送失败');
-            setMessages(prev => prev.slice(0, -1));
         } finally {
             setIsLoading(false);
             scrollToBottom();
