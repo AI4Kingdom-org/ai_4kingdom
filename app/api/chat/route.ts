@@ -11,14 +11,14 @@ if (!process.env.NEXT_PUBLIC_AWS_ACCESS_KEY || !process.env.NEXT_PUBLIC_AWS_SECR
 const dbConfig = {
   region: 'us-east-2',  // 硬编码区域
   credentials: {
-    accessKeyId: process.env.NEXT_PUBLIC_AWS_ACCESS_KEY || '',
-    secretAccessKey: process.env.NEXT_PUBLIC_AWS_SECRET_KEY || ''
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID || '',
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || ''
   }
 };
 
 console.log('[DEBUG] AWS Config:', {
   region: dbConfig.region,
-  accessKeyId: dbConfig.credentials.accessKeyId.substring(0, 5) + '...',
+  accessKeyId: dbConfig.credentials.accessKeyId ? '已设置' : '未设置',
   secretKeyExists: !!dbConfig.credentials.secretAccessKey
 });
 
