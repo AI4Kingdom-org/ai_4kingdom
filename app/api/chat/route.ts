@@ -3,24 +3,26 @@ import { DynamoDBDocumentClient, PutCommand, QueryCommand } from "@aws-sdk/lib-d
 import OpenAI from 'openai';
 import { promises as fs } from 'fs';
 
-// 检查环境变量
-if (!process.env.NEXT_PUBLIC_AWS_ACCESS_KEY || !process.env.NEXT_PUBLIC_AWS_SECRET_KEY) {
-  console.error('AWS credentials missing');
+// 先打印所有环境变量（仅开发调试用）
+console.log('[DEBUG] 所有环境变量:', {
+  ...process.env,
+  NEXT_PUBLIC_AWS_SECRET_KEY: '已设置'  // 不打印实际值
+});
+
+const accessKey = process.env.NEXT_PUBLIC_AWS_ACCESS_KEY;
+const secretKey = process.env.NEXT_PUBLIC_AWS_SECRET_KEY;
+
+if (!accessKey || !secretKey) {
+  throw new Error(`AWS 凭证缺失: accessKey=${!!accessKey}, secretKey=${!!secretKey}`);
 }
 
 const dbConfig = {
   region: 'us-east-2',
   credentials: {
-    accessKeyId: process.env.NEXT_PUBLIC_AWS_ACCESS_KEY || '',
-    secretAccessKey: process.env.NEXT_PUBLIC_AWS_SECRET_KEY || ''
+    accessKeyId: accessKey,
+    secretAccessKey: secretKey
   }
 };
-
-console.log('[DEBUG] 环境变量检查:', {
-  accessKey: process.env.NEXT_PUBLIC_AWS_ACCESS_KEY?.substring(0, 5),
-  secretKey: process.env.NEXT_PUBLIC_AWS_SECRET_KEY ? '存在' : '不存在',
-  region: dbConfig.region
-});
 
 const client = new DynamoDBClient(dbConfig);
 const docClient = DynamoDBDocumentClient.from(client);
