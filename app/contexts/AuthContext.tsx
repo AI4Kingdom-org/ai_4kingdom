@@ -39,12 +39,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const checkMembership = async () => {
     try {
+      // 先获取 nonce
+      const nonceResponse = await fetch('https://ai4kingdom.com/wp-json/custom/v1/get-nonce', {
+        credentials: 'include',
+        headers: {
+          'Accept': 'application/json',
+        }
+      });
+
+      if (!nonceResponse.ok) {
+        console.error('获取nonce失败');
+        setUserData(null);
+        setLoading(false);
+        return;
+      }
+
+      const { nonce } = await nonceResponse.json();
+      console.log('获取到nonce:', nonce);
+
+      // 使用 nonce 请求会员信息
       const response = await fetch('https://ai4kingdom.com/wp-json/custom/v1/check-membership', {
         method: 'GET',
         credentials: 'include',
         headers: {
           'Accept': 'application/json',
           'Content-Type': 'application/json',
+          'X-WP-Nonce': nonce
         },
         mode: 'cors'
       });
@@ -53,7 +73,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       console.log('API Response:', responseText);
       
       if (response.status === 401) {
-        console.log('用户未登录:', responseText);
+        console.log('认证失败:', responseText);
         setUserData(null);
         setLoading(false);
         return;
