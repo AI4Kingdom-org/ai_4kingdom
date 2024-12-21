@@ -4,6 +4,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 
 interface UserData {
   ID: string;
+  membershipType: 'free' | 'pro' | 'ultimate';
   user_email: string;
   display_name: string;
 }

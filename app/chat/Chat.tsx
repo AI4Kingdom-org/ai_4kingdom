@@ -10,11 +10,24 @@ interface ChatItem {
     UserId: string;
 }
 
+interface UsageLimit {
+    free: number;
+    pro: number;
+    ultimate: number;
+}
+
+const WEEKLY_LIMITS: UsageLimit = {
+    free: 10,
+    pro: 100,
+    ultimate: Infinity
+};
+
 const Chat = () => {
     const { userData, loading } = useAuth();
     const [messages, setMessages] = useState<{ sender: string; text: string }[]>([]);
     const [input, setInput] = useState('');
     const [error, setError] = useState('');
+    const [weeklyUsage, setWeeklyUsage] = useState(0);
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const [isLoading, setIsLoading] = useState(false);
 
@@ -66,65 +79,90 @@ const Chat = () => {
         }
     }, [userData]);
 
-    const sendMessage = async () => {
-        if (!input.trim() || !userData) return;
-        setIsLoading(true);
-        const currentInput = input;
-        setInput('');
-        
-        // 添加重试逻辑
-        const maxRetries = 2;
-        let retryCount = 0;
-
-        while (retryCount <= maxRetries) {
+    useEffect(() => {
+        async function fetchWeeklyUsage() {
+            if (!userData) return;
             try {
-                const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), 30000); // 30秒超时
-
-                const response = await fetch('/api/chat', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ 
-                        userId: userData.ID,
-                        message: currentInput 
-                    }),
-                    signal: controller.signal
-                });
-
-                clearTimeout(timeoutId);
-
-                if (!response.ok) {
-                    if (response.status === 504 && retryCount < maxRetries) {
-                        console.log(`[DEBUG] 重试 ${retryCount + 1}/${maxRetries}`);
-                        retryCount++;
-                        await new Promise(resolve => setTimeout(resolve, 1000 * retryCount));
-                        continue;
-                    }
-                    throw new Error(await response.text() || '发送失败');
-                }
-
+                const response = await fetch(`/api/usage?userId=${userData.ID}`);
                 const data = await response.json();
-                setMessages(prev => [...prev, 
-                    { sender: 'user', text: currentInput },
-                    { sender: 'bot', text: data.reply }
-                ]);
-                break;
-
+                setWeeklyUsage(data.weeklyCount || 0);
             } catch (err) {
-                console.error('[ERROR]:', err);
-                if (retryCount === maxRetries) {
-                    setError(err instanceof Error ? err.message : '发送失败');
-                    setInput(currentInput); // 恢复输入
-                } else {
-                    retryCount++;
-                    await new Promise(resolve => setTimeout(resolve, 1000 * retryCount));
-                    continue;
-                }
+                console.error('获取使用次数失败:', err);
             }
         }
 
-        setIsLoading(false);
-        scrollToBottom();
+        fetchWeeklyUsage();
+    }, [userData]);
+
+    const checkUsageLimit = () => {
+        const membershipType = userData?.membershipType || 'free';
+        const limit = WEEKLY_LIMITS[membershipType];
+        
+        if (weeklyUsage >= limit) {
+            setError(`本周使用次数已达上限 (${limit}次)。请升级会员以获取更多使用次数。`);
+            return false;
+        }
+        return true;
+    };
+
+    const sendMessage = async () => {
+        if (!input.trim() || !userData) return;
+        
+        if (!checkUsageLimit()) return;
+        
+        setIsLoading(true);
+        const currentInput = input;
+        setInput('');
+
+        try {
+            const response = await fetch('/api/chat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    userId: userData.ID,
+                    message: currentInput 
+                })
+            });
+
+            if (!response.ok) {
+                throw new Error(await response.text() || '发送失败');
+            }
+
+            const data = await response.json();
+            setMessages(prev => [...prev, 
+                { sender: 'user', text: currentInput },
+                { sender: 'bot', text: data.reply }
+            ]);
+            
+            setWeeklyUsage(prev => prev + 1);
+
+        } catch (err) {
+            console.error('[ERROR]:', err);
+            setError(err instanceof Error ? err.message : '发送失败');
+            setInput(currentInput);
+        } finally {
+            setIsLoading(false);
+            scrollToBottom();
+        }
+    };
+
+    const renderMembershipStatus = () => {
+        const membershipType = userData?.membershipType || 'free';
+        const limit = WEEKLY_LIMITS[membershipType];
+        return (
+            <div className={styles.membershipStatus}>
+                <p>会员等级: {membershipType.toUpperCase()}</p>
+                <p>本周已使用: {weeklyUsage} / {limit === Infinity ? '无限制' : limit}</p>
+                {membershipType === 'free' && (
+                    <button 
+                        className={styles.upgradeButton}
+                        onClick={() => window.location.href = '/upgrade'}
+                    >
+                        升级会员
+                    </button>
+                )}
+            </div>
+        );
     };
 
     if (loading) return <div>加载中...</div>;
@@ -132,6 +170,7 @@ const Chat = () => {
 
     return (
         <div className={styles.chatWindow}>
+            {renderMembershipStatus()}
             <div className={styles.messages}>
                 {messages.map((msg, index) => (
                     <div
