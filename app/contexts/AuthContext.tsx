@@ -45,20 +45,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           headers: {
             'Accept': 'application/json',
             'Content-Type': 'application/json',
+            'Origin': 'https://main.d3ts7h8kta7yzt.amplifyapp.com'
           },
           mode: 'cors'
         });
         
         if (response.status === 401) {
-          console.log('需要重新登录 WordPress');
-          window.location.href = 'https://ai4kingdom.com/login';
+          console.error('认证失败:', await response.text());
+          // 不要立即重定向，而是先检查 cookie
+          const cookies = document.cookie;
+          if (!cookies.includes('wordpress_logged_in_')) {
+            console.log('WordPress cookie 未找到，需要登录');
+            window.location.href = 'https://ai4kingdom.com/login';
+            return;
+          }
+          // 如果有 cookie 但认证失败，可能是其他问题
+          console.log('有 WordPress cookie 但认证失败');
           return;
         }
         
         if (response.ok) {
           const data: WordPressMembership = await response.json();
+          console.log('会员状态:', data);
           
-          // 根据会员状态设置用户数据
           if (data.has_active_membership && data.membership_status.ultimate?.is_active) {
             setUserData(prevData => ({
               ...prevData,
