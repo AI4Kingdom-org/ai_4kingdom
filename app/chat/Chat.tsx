@@ -17,19 +17,10 @@ const Chat = () => {
     const [error, setError] = useState('');
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
-    if (loading) {
-        return <div>加载中...</div>;
-    }
-
-    if (!userData) {
-        return <div>请登录后使用</div>;
-    }
-
     const scrollToBottom = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     };
 
-    // 解析消息
     const parseHistoryMessage = (messageStr: string) => {
         try {
             const parsed = JSON.parse(messageStr);
@@ -42,52 +33,34 @@ const Chat = () => {
         }
     };
 
-    // 获取聊天历史记录
-    async function fetchHistory() {
-        if (!userData) return;
-        
-        try {
-            console.log('开始获取历史记录，userId:', userData.ID);
-            const response = await fetch(`/api/chat?userId=${userData.ID}`);
-            console.log('API 响应状态:', response.status);
-            
-            const responseText = await response.text();
-            console.log('API 原始响应:', responseText);
-            
-            let data;
-            try {
-                data = JSON.parse(responseText);
-            } catch (e) {
-                console.error('JSON 解析错误:', e);
-                throw new Error(`响应解析失败: ${responseText}`);
-            }
-
-            if (!response.ok) {
-                throw new Error(`获取聊天历史失败: ${response.status} - ${data.details || data.error}`);
-            }
-            
-            // 处理历史消息
-            const allMessages = data.flatMap((item: ChatItem) => parseHistoryMessage(item.Message));
-            setMessages(allMessages);
-            setError('');
-            scrollToBottom();
-        } catch (err) {
-            console.error('获取历史记录完整错误:', {
-                error: err,
-                message: err instanceof Error ? err.message : '未知错误',
-                stack: err instanceof Error ? err.stack : undefined
-            });
-            setError(err instanceof Error ? err.message : '加载聊天历史失败，请稍重试');
-        }
-    }
-
     useEffect(() => {
+        async function fetchHistory() {
+            if (!userData) return;
+            
+            try {
+                const response = await fetch(`/api/chat?userId=${userData.ID}`);
+                const data = await response.json();
+                
+                if (!response.ok) {
+                    throw new Error(`获取聊天历史失败: ${response.status}`);
+                }
+                
+                const allMessages = data.flatMap((item: ChatItem) => 
+                    parseHistoryMessage(item.Message)
+                );
+                setMessages(allMessages);
+                scrollToBottom();
+            } catch (err) {
+                setError(err instanceof Error ? err.message : '加载失败');
+            }
+        }
+
         if (userData) {
             fetchHistory();
         }
     }, [userData]);
 
-    async function sendMessage() {
+    const sendMessage = async () => {
         if (!input.trim() || !userData) return;
 
         const newMessage = { sender: 'user', text: input };
@@ -105,17 +78,19 @@ const Chat = () => {
             const data = await response.json();
 
             if (!response.ok) {
-                throw new Error(data.details || data.error || `发送消息失败: ${response.status}`);
+                throw new Error(data.error || '发送失败');
             }
 
-            const botReply = { sender: 'bot', text: data.reply };
-            setMessages(prev => [...prev, botReply]);
+            setMessages(prev => [...prev, { sender: 'bot', text: data.reply }]);
+            scrollToBottom();
         } catch (err) {
-            console.error('发送消息错误:', err);
-            setError(err instanceof Error ? err.message : '发送消息失败，请重试');
+            setError(err instanceof Error ? err.message : '发送失败');
             setMessages(prev => prev.slice(0, -1));
         }
-    }
+    };
+
+    if (loading) return <div>加载中...</div>;
+    if (!userData) return <div>请登录后使用</div>;
 
     return (
         <div className={styles.chatWindow}>
