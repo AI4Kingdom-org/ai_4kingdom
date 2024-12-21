@@ -36,6 +36,11 @@ export async function GET(request: Request) {
 
     try {
         const dbConfig = await getDynamoDBConfig();
+        console.log('[DEBUG] DB Config:', { 
+            region: dbConfig.region,
+            hasCredentials: !!dbConfig.credentials 
+        });
+
         const client = new DynamoDBClient(dbConfig);
         const docClient = DynamoDBDocumentClient.from(client);
 
@@ -53,14 +58,19 @@ export async function GET(request: Request) {
             }
         });
 
+        console.log('[DEBUG] Query Command:', command);
         const response = await docClient.send(command);
-        const weeklyCount = response.Items?.length || 0;
+        console.log('[DEBUG] DynamoDB Response:', response);
 
-        return NextResponse.json({ weeklyCount });
+        return NextResponse.json({ weeklyCount: response.Items?.length || 0 });
     } catch (error) {
         console.error('[ERROR] 获取使用次数失败:', error);
         return NextResponse.json(
-            { error: "Failed to fetch usage count" }, 
+            { 
+                error: "Failed to fetch usage count",
+                details: error instanceof Error ? error.message : '未知错误',
+                stack: error instanceof Error ? error.stack : undefined
+            }, 
             { status: 500 }
         );
     }

@@ -41,8 +41,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const checkMembership = async () => {
       try {
         const response = await fetch('https://ai4kingdom.com/wp-json/custom/v1/check-membership', {
-          credentials: 'include'
+          credentials: 'include',
+          headers: {
+            'Accept': 'application/json',
+            'Content-Type': 'application/json',
+          },
+          mode: 'cors'
         });
+        
+        if (response.status === 401) {
+          console.log('需要重新登录 WordPress');
+          window.location.href = 'https://ai4kingdom.com/login';
+          return;
+        }
         
         if (response.ok) {
           const data: WordPressMembership = await response.json();
