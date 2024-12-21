@@ -53,7 +53,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       console.log('API Response:', responseText);
       
       if (response.status === 401) {
-        console.log('认证失败，响应内容:', responseText);
+        console.log('用户未登录:', responseText);
         setUserData(null);
         setLoading(false);
         return;
@@ -61,7 +61,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       
       try {
         const data = JSON.parse(responseText) as WordPressMembership;
-        console.log('解析后的会员数据:', data);
+        console.log('会员数据:', data);
         
         if (data.has_active_membership && data.membership_status.ultimate?.is_active) {
           setUserData({
