@@ -16,6 +16,7 @@ const Chat = () => {
     const [input, setInput] = useState('');
     const [error, setError] = useState('');
     const messagesEndRef = useRef<HTMLDivElement>(null);
+    const [isLoading, setIsLoading] = useState(false);
 
     const scrollToBottom = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -24,11 +25,16 @@ const Chat = () => {
     const parseHistoryMessage = (messageStr: string) => {
         try {
             const parsed = JSON.parse(messageStr);
+            if (!parsed.userMessage || !parsed.botReply) {
+                console.error('Invalid message format:', messageStr);
+                return [];
+            }
             return [
                 { sender: 'user', text: parsed.userMessage },
                 { sender: 'bot', text: parsed.botReply }
             ];
         } catch (e) {
+            console.error('Failed to parse message:', e);
             return [];
         }
     };
@@ -62,6 +68,7 @@ const Chat = () => {
 
     const sendMessage = async () => {
         if (!input.trim() || !userData) return;
+        setIsLoading(true);
 
         const newMessage = { sender: 'user', text: input };
         setMessages(prev => [...prev, newMessage]);
@@ -72,20 +79,25 @@ const Chat = () => {
             const response = await fetch('/api/chat', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ userId: userData.ID, message: input }),
+                body: JSON.stringify({ 
+                    userId: userData.ID,
+                    message: input 
+                }),
             });
 
-            const data = await response.json();
-
             if (!response.ok) {
-                throw new Error(data.error || '发送失败');
+                const errorData = await response.json();
+                throw new Error(errorData.error || '发送失败');
             }
 
+            const data = await response.json();
             setMessages(prev => [...prev, { sender: 'bot', text: data.reply }]);
-            scrollToBottom();
         } catch (err) {
             setError(err instanceof Error ? err.message : '发送失败');
             setMessages(prev => prev.slice(0, -1));
+        } finally {
+            setIsLoading(false);
+            scrollToBottom();
         }
     };
 
@@ -122,17 +134,17 @@ const Chat = () => {
                     type="text"
                     value={input}
                     onChange={(e) => setInput(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && sendMessage()}
+                    onKeyDown={(e) => e.key === 'Enter' && !isLoading && sendMessage()}
                     placeholder="输入消息..."
                     className={styles.inputField}
+                    disabled={isLoading}
                 />
-
                 <button
                     onClick={sendMessage}
-                    disabled={!input.trim()}
+                    disabled={!input.trim() || isLoading}
                     className={styles.sendButton}
                 >
-                    发送
+                    {isLoading ? '发送中...' : '发送'}
                 </button>
             </div>
         </div>
