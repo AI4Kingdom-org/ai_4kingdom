@@ -4,12 +4,12 @@ import OpenAI from 'openai';
 import { promises as fs } from 'fs';
 
 const dbConfig = {
-  region: process.env.NEXT_PUBLIC_REGION || "us-east-2",
+  region: process.env.NEXT_PUBLIC_AWS_REGION!,
   credentials: {
     accessKeyId: process.env.NEXT_PUBLIC_AWS_ACCESS_KEY!,
     secretAccessKey: process.env.NEXT_PUBLIC_AWS_SECRET_KEY!
   }
-};
+} as const;
 
 console.log('[DEBUG] AWS Config:', {
   region: dbConfig.region,
