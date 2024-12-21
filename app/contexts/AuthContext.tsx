@@ -36,14 +36,14 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [userData, setUserData] = useState<UserData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [retryCount, setRetryCount] = useState(0);
+  const MAX_RETRIES = 3;
 
-  const checkMembership = async () => {
+  const checkMembership = async (isRetry = false) => {
     try {
-      // 检查当前的 cookie
-      console.log('当前文档 cookie:', document.cookie);
+      console.log('检查会员状态，重试次数:', retryCount);
       
       // 获取 nonce
-      console.log('开始获取 nonce...');
       const nonceResponse = await fetch('https://ai4kingdom.com/wp-json/custom/v1/get-nonce', {
         credentials: 'include',
         headers: {
@@ -52,48 +52,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         mode: 'cors'
       });
 
-      console.log('nonce 请求完整响应:', nonceResponse);
-      console.log('nonce 响应头:', Object.fromEntries(nonceResponse.headers));
-      
       if (!nonceResponse.ok) {
-        console.error('获取nonce失败');
-        const errorText = await nonceResponse.text();
-        console.error('nonce错误详情:', errorText);
-        setUserData(null);
-        setLoading(false);
-        return;
+        throw new Error('获取 nonce 失败');
       }
 
-      const nonceData = await nonceResponse.json();
-      console.log('nonce响应数据:', nonceData);
-      const { nonce } = nonceData;
+      const { nonce } = await nonceResponse.json();
 
-      // 检查会员状态
-      console.log('开始检查会员状态...');
       const response = await fetch('https://ai4kingdom.com/wp-json/custom/v1/check-membership', {
         method: 'GET',
         credentials: 'include',
         headers: {
           'Accept': 'application/json',
           'Content-Type': 'application/json',
-          'X-WP-Nonce': nonce,
-          'Cookie': document.cookie
+          'X-WP-Nonce': nonce
         },
         mode: 'cors'
       });
-      
-      console.log('会员检查完整响应:', response);
-      console.log('会员检查所有响应头:', Object.fromEntries(response.headers));
-      
+
+      if (response.status === 401 && !isRetry && retryCount < MAX_RETRIES) {
+        console.log('认证失败，尝试重试...');
+        setRetryCount(prev => prev + 1);
+        // 等待1秒后重试
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        return checkMembership(true);
+      }
+
       const responseText = await response.text();
       console.log('会员检查原始响应:', responseText);
-      
-      if (response.status === 401) {
-        console.log('认证失败:', responseText);
-        setUserData(null);
-        setLoading(false);
-        return;
-      }
       
       try {
         const data = JSON.parse(responseText) as WordPressMembership;
@@ -119,14 +104,38 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     } catch (error) {
       console.error('获取会员信息失败:', error);
+      
+      if (!isRetry && retryCount < MAX_RETRIES) {
+        setRetryCount(prev => prev + 1);
+        // 等待1秒后重试
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        return checkMembership(true);
+      }
+      
       setUserData(null);
     } finally {
-      setLoading(false);
+      if (isRetry || retryCount >= MAX_RETRIES) {
+        setLoading(false);
+      }
     }
   };
 
+  // 添加路由变化监听
   useEffect(() => {
+    const handleRouteChange = () => {
+      setRetryCount(0); // 重置重试次数
+      checkMembership();
+    };
+
+    // 监听路由变化
+    window.addEventListener('popstate', handleRouteChange);
+    
+    // 初始检查
     checkMembership();
+
+    return () => {
+      window.removeEventListener('popstate', handleRouteChange);
+    };
   }, []);
 
   return (
