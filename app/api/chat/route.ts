@@ -164,12 +164,12 @@ export async function POST(request: Request) {
     // 9. 储存对话记录
     const timestamp = new Date().toISOString();
     const chatItem = {
-      UserId: userId,
+      UserId: String(userId),
       Timestamp: timestamp,
       Message: JSON.stringify({
         userMessage: message,
         botReply: botReply.trim(),
-        threadId: thread.id, // 保存线程 ID 以便后续对话
+        threadId: thread.id,
         assistantId: assistant.id
       })
     };
@@ -222,7 +222,7 @@ export async function GET(request: Request) {
       TableName: "ChatHistory",
       KeyConditionExpression: "UserId = :userId",
       ExpressionAttributeValues: {
-        ":userId": userId
+        ":userId": String(userId)
       }
     });
 
