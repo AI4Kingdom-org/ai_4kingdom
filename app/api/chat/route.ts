@@ -6,10 +6,16 @@ import { promises as fs } from 'fs';
 const dbConfig = {
   region: process.env.NEXT_PUBLIC_REGION || "us-east-2",
   credentials: {
-    accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
-    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!
+    accessKeyId: process.env.NEXT_PUBLIC_AWS_ACCESS_KEY!,
+    secretAccessKey: process.env.NEXT_PUBLIC_AWS_SECRET_KEY!
   }
 };
+
+console.log('[DEBUG] AWS Config:', {
+  region: dbConfig.region,
+  hasAccessKey: !!dbConfig.credentials.accessKeyId,
+  hasSecretKey: !!dbConfig.credentials.secretAccessKey
+});
 
 const client = new DynamoDBClient(dbConfig);
 const docClient = DynamoDBDocumentClient.from(client);
