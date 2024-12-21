@@ -44,18 +44,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         credentials: 'include',
         headers: {
           'Accept': 'application/json',
-        }
+        },
+        mode: 'cors'
       });
+
+      console.log('nonce响应状态:', nonceResponse.status);
+      console.log('nonce响应头:', Object.fromEntries(nonceResponse.headers));
 
       if (!nonceResponse.ok) {
         console.error('获取nonce失败');
+        const errorText = await nonceResponse.text();
+        console.error('nonce错误详情:', errorText);
         setUserData(null);
         setLoading(false);
         return;
       }
 
-      const { nonce } = await nonceResponse.json();
-      console.log('获取到nonce:', nonce);
+      const nonceData = await nonceResponse.json();
+      console.log('nonce响应数据:', nonceData);
+      const { nonce } = nonceData;
 
       // 使用 nonce 请求会员信息
       const response = await fetch('https://ai4kingdom.com/wp-json/custom/v1/check-membership', {
@@ -69,8 +76,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         mode: 'cors'
       });
       
+      console.log('会员检查响应状态:', response.status);
+      console.log('会员检查响应头:', Object.fromEntries(response.headers));
+      
       const responseText = await response.text();
-      console.log('API Response:', responseText);
+      console.log('会员检查原始响应:', responseText);
       
       if (response.status === 401) {
         console.log('认证失败:', responseText);
