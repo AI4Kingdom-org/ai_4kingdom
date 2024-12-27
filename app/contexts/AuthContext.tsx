@@ -110,17 +110,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const refreshAuth = async () => {
     try {
-        console.log('当前域名:', window.location.hostname);
-        console.log('当前协议:', window.location.protocol);
-        console.log('完整 URL:', window.location.href);
-        
+        const formData = new URLSearchParams();
+        formData.append('action', 'validate_session');
+
         const response = await fetch('https://ai4kingdom.com/wp-json/custom/v1/login', {
             method: 'POST',
             credentials: 'include',
             headers: {
                 'Content-Type': 'application/x-www-form-urlencoded',
-                'Accept': 'application/json'
-            }
+                'Accept': 'application/json',
+                'Origin': 'https://main.d3ts7h8kta7yzt.amplifyapp.com'
+            },
+            body: formData.toString()
         });
 
         console.log('认证请求状态:', response.status);
