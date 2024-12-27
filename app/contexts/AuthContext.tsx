@@ -12,7 +12,12 @@ interface Subscription {
 interface MembershipStatus {
   status: string;
   message: string;
-  subscription: Subscription;
+  subscription: {
+    id: string;
+    name: string;
+    start_date: string;
+    expiration_date: string;
+  }
 }
 
 interface LoginResponse {
@@ -115,36 +120,39 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             credentials: 'include',
             headers: {
                 'Content-Type': 'application/x-www-form-urlencoded',
-                'Accept': 'application/json'
             },
             body: new URLSearchParams({
                 'action': 'validate_session'
             }).toString()
         });
 
-        const cookies = response.headers.get('set-cookie');
-        if (cookies) {
-            document.cookie = cookies;
-        }
-        
         const data = await response.json();
-
+        
         if (data.success) {
-            setUserData({
+            const userData: UserData = {
                 ID: data.user_id,
                 email: data.email,
                 display_name: data.display_name,
-                subscription: data.membership
-            });
+                subscription: {
+                    level: data.membership.subscription.name,
+                    status: data.membership.status,
+                    api_calls: {
+                        today: 0,
+                        limit: data.membership.subscription.name === 'free' ? 10 : 100,
+                        remaining: data.membership.subscription.name === 'free' ? 10 : 100
+                    }
+                }
+            };
+            setUserData(userData);
             setError(null);
         } else {
             setUserData(null);
-            setError(data.message || '未找到用户信息');
+            setError('会话验证失败');
         }
     } catch (err) {
         console.error('认证刷新失败:', err);
-        setError(err instanceof Error ? err.message : '刷新认证状态失败');
         setUserData(null);
+        setError(err instanceof Error ? err.message : '认证刷新失败');
     } finally {
         setLoading(false);
     }

@@ -126,7 +126,7 @@ const Chat = () => {
         const limit = WEEKLY_LIMITS[membershipType.toLowerCase()];
         
         if (weeklyUsage >= limit) {
-            setError(`本周使用次数已达上限 (${limit}次)。请升级会员以获取更多使用次���。`);
+            setError(`本周使用次数已达上限 (${limit}次)。请升级会员以获取更多使用次数。`);
             return false;
         }
         return true;
@@ -188,24 +188,19 @@ const Chat = () => {
     const renderSubscriptionStatus = () => {
         if (!userData?.subscription) return null;
         
-        const { level, api_calls } = userData.subscription;
-        const { today, limit, remaining } = api_calls;
+        const { level, status } = userData.subscription;
+        const isActive = status === 'active';
         
         return (
             <div className={styles.subscriptionStatus}>
-                <p>订阅等级: {level.toUpperCase()}</p>
-                <p>今日已用: {today} / {limit === -1 ? '无限制' : limit}</p>
-                {remaining !== -1 && remaining <= 5 && (
-                    <div className={styles.warning}>
-                        剩余调用次数不多了！仅剩 {remaining} 次
-                    </div>
-                )}
+                <p>会员等级: {level.toUpperCase()}</p>
+                <p>状态: {isActive ? '有效' : '已过期'}</p>
                 {level === 'free' && (
                     <button 
                         className={styles.upgradeButton}
-                        onClick={() => window.location.href = 'https://your-wordpress-site.com/pricing'}
+                        onClick={() => window.location.href = 'https://ai4kingdom.com/pricing'}
                     >
-                        升级订阅
+                        升级会员
                     </button>
                 )}
             </div>
