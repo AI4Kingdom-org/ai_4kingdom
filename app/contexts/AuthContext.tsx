@@ -120,6 +120,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             credentials: 'include',
             headers: {
                 'Content-Type': 'application/x-www-form-urlencoded',
+                'Origin': 'https://main.d3ts7h8kta7yzt.amplifyapp.com'
             },
             body: new URLSearchParams({
                 'action': 'validate_session'
@@ -159,7 +160,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   useEffect(() => {
-    console.log('初始化认证状态检查');
+    console.log('初��化认证状态检查');
     console.log('原始 cookie:', document.cookie);
     console.log('解码后的 cookie:', decodeURIComponent(document.cookie));
     refreshAuth();
