@@ -126,7 +126,7 @@ const Chat = () => {
         const limit = WEEKLY_LIMITS[membershipType.toLowerCase()];
         
         if (weeklyUsage >= limit) {
-            setError(`本周使用次数已达上限 (${limit}次)。请升级会员以获取更多使用次数。`);
+            setError(`本周使用次数已达上限 (${limit}次)。请升级会员以获取更多使用次���。`);
             return false;
         }
         return true;
@@ -211,6 +211,12 @@ const Chat = () => {
             </div>
         );
     };
+
+    useEffect(() => {
+        console.log('Chat 组件加载');
+        console.log('用户数据:', userData);
+        console.log('认证状态:', { loading, error: authError });
+    }, [userData, loading, authError]);
 
     if (loading) return <div>加载中...</div>;
     if (!userData) return (

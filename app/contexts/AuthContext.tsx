@@ -110,48 +110,68 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const refreshAuth = async () => {
     try {
-      const response = await fetch('https://ai4kingdom.com/wp-json/custom/v1/login', {
-        method: 'POST',
-        credentials: 'include',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded'
+        // 从 cookie 中获取用户名
+        const cookies = document.cookie.split(';');
+        const usernameCookie = cookies.find(c => c.trim().startsWith('wordpress_logged_in_'));
+        if (!usernameCookie) {
+            setUserData(null);
+            setError('未找到登录信息');
+            return;
         }
-      });
 
-      if (!response.ok) {
-        throw new Error('刷新认证状态失败');
-      }
+        const username = usernameCookie.split('|')[0].split('=')[1];
+        
+        // 构建表单数据
+        const formData = new URLSearchParams();
+        formData.append('username', username);
+        formData.append('action', 'validate_session'); // 添加操作类型
 
-      const data: LoginResponse = await response.json();
-      if (data.success) {
-        setUserData({
-          ID: data.user_id,
-          email: data.email,
-          display_name: data.display_name,
-          subscription: {
-            level: data.membership.subscription.name,
-            status: data.membership.status,
-            api_calls: {
-              today: 0,
-              limit: data.membership.subscription.name === 'free' ? 10 : 100,
-              remaining: data.membership.subscription.name === 'free' ? 10 : 100
-            }
-          }
+        const response = await fetch('https://ai4kingdom.com/wp-json/custom/v1/login', {
+            method: 'POST',
+            credentials: 'include',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded'
+            },
+            body: formData.toString()
         });
-        setError(null);
-      } else {
-        setUserData(null);
-        setError('未找到用户信息');
-      }
+
+        if (!response.ok) {
+            throw new Error('刷新认证状态失败');
+        }
+
+        const data: LoginResponse = await response.json();
+        if (data.success) {
+            setUserData({
+                ID: data.user_id,
+                email: data.email,
+                display_name: data.display_name,
+                subscription: {
+                    level: data.membership.subscription.name,
+                    status: data.membership.status,
+                    api_calls: {
+                        today: 0,
+                        limit: data.membership.subscription.name === 'free' ? 10 : 100,
+                        remaining: data.membership.subscription.name === 'free' ? 10 : 100
+                    }
+                }
+            });
+            setError(null);
+        } else {
+            setUserData(null);
+            setError('未找到用户信息');
+        }
     } catch (err) {
-      setError(err instanceof Error ? err.message : '刷新认证状态失败');
-      setUserData(null);
+        console.error('认证刷新错误:', err);
+        setError(err instanceof Error ? err.message : '刷新认证状态失败');
+        setUserData(null);
     } finally {
-      setLoading(false);
+        setLoading(false);
     }
   };
 
   useEffect(() => {
+    console.log('初始化认证状态检查');
+    console.log('当前 cookie:', document.cookie);
     refreshAuth();
   }, []);
 
