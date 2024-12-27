@@ -110,38 +110,62 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const refreshAuth = async () => {
     try {
-        // 从 cookie 中获取用户名
-        const cookies = document.cookie.split(';');
-        const usernameCookie = cookies.find(c => c.trim().startsWith('wordpress_logged_in_'));
+        // 从 cookie 中获取用户名，需要处理 URL 编码的 cookie
+        const cookies = decodeURIComponent(document.cookie).split(';');
+        console.log('解码后的 cookies:', cookies);
+        
+        const usernameCookie = cookies.find(c => 
+            c.trim().startsWith('wordpress_logged_in_') || 
+            c.trim().includes('freeaccount|')
+        );
+        
+        console.log('找到的用户 cookie:', usernameCookie);
+        
         if (!usernameCookie) {
+            console.log('未找到用户 cookie');
             setUserData(null);
             setError('未找到登录信息');
             return;
         }
 
-        const username = usernameCookie.split('|')[0].split('=')[1];
+        // 提取用户名 - 处理两种可能的格式
+        let username;
+        if (usernameCookie.includes('=')) {
+            username = usernameCookie.split('|')[0].split('=')[1].trim();
+        } else {
+            username = usernameCookie.split('|')[0].trim();
+        }
         
+        console.log('提取的用户名:', username);
+
         // 构建表单数据
         const formData = new URLSearchParams();
         formData.append('username', username);
-        formData.append('action', 'validate_session'); // 添加操作类型
+        formData.append('action', 'validate_session');
+
+        console.log('发送请求的表单数据:', formData.toString());
 
         const response = await fetch('https://ai4kingdom.com/wp-json/custom/v1/login', {
             method: 'POST',
             credentials: 'include',
             headers: {
-                'Content-Type': 'application/x-www-form-urlencoded'
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'Accept': 'application/json'
             },
             body: formData.toString()
         });
 
+        console.log('响应状态:', response.status);
+        
         if (!response.ok) {
-            throw new Error('刷新认证状态失败');
+            throw new Error(`刷新认证状态失败: ${response.status}`);
         }
 
         const data: LoginResponse = await response.json();
+        console.log('响应数据:', data);
+
         if (data.success) {
-            setUserData({
+            const userData: UserData = {
                 ID: data.user_id,
                 email: data.email,
                 display_name: data.display_name,
@@ -154,7 +178,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                         remaining: data.membership.subscription.name === 'free' ? 10 : 100
                     }
                 }
-            });
+            };
+            setUserData(userData);
             setError(null);
         } else {
             setUserData(null);
@@ -171,7 +196,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     console.log('初始化认证状态检查');
-    console.log('当前 cookie:', document.cookie);
+    console.log('原始 cookie:', document.cookie);
+    console.log('解码后的 cookie:', decodeURIComponent(document.cookie));
     refreshAuth();
   }, []);
 
