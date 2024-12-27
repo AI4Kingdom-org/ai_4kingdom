@@ -54,40 +54,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const checkSubscription = async () => {
-    try {
-      const response = await fetch('https://ai4kingdom.com/wp-json/custom/v1/membership-status', {
-        credentials: 'include',
-        headers: {
-          'Content-Type': 'application/json'
-        }
-      });
-
-      if (!response.ok) {
-        throw new Error('获取会员状态失败');
-      }
-
-      const data = await response.json();
-      if (data.user_id) {
-        setUserData({
-          ID: data.user_id,
-          email: data.email,
-          display_name: data.display_name,
-          subscription: data.subscription
-        });
-        setError(null);
-      } else {
-        setUserData(null);
-        setError('未找到用户信息');
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : '获取会员状态失败');
-      setUserData(null);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const login = async (username: string, password: string) => {
     try {
       const response = await fetch('https://ai4kingdom.com/wp-json/custom/v1/login', {
@@ -122,10 +88,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       setUserData(userData);
       setError(null);
+      setLoading(false);
       
     } catch (err) {
       setError(err instanceof Error ? err.message : '登录失败');
       setUserData(null);
+      setLoading(false);
     }
   };
 
@@ -136,8 +104,50 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return remaining === -1 || remaining > 0;
   };
 
+  const refreshAuth = async () => {
+    try {
+      const response = await fetch('https://ai4kingdom.com/wp-json/custom/v1/login', {
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error('刷新认证状态失败');
+      }
+
+      const data: LoginResponse = await response.json();
+      if (data.success) {
+        setUserData({
+          ID: data.user_id,
+          email: data.email,
+          display_name: data.display_name,
+          subscription: {
+            level: data.membership.subscription.name,
+            status: data.membership.status,
+            api_calls: {
+              today: 0,
+              limit: data.membership.subscription.name === 'free' ? 10 : 100,
+              remaining: data.membership.subscription.name === 'free' ? 10 : 100
+            }
+          }
+        });
+        setError(null);
+      } else {
+        setUserData(null);
+        setError('未找到用户信息');
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '刷新认证状态失败');
+      setUserData(null);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    checkSubscription();
+    refreshAuth();
   }, []);
 
   return (
@@ -147,7 +157,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       error,
       login,
       canCallApi,
-      refreshAuth: checkSubscription 
+      refreshAuth
     }}>
       {children}
     </AuthContext.Provider>
