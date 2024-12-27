@@ -110,6 +110,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const refreshAuth = async () => {
     try {
+        console.log('开始刷新认证状态');
         const formData = new URLSearchParams();
         formData.append('action', 'validate_session');
 
@@ -127,29 +128,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         console.log('认证请求状态:', response.status);
         console.log('认证请求头:', Object.fromEntries(response.headers));
         
-        const data: LoginResponse = await response.json();
+        const data = await response.json();
         console.log('响应数据:', data);
 
         if (data.success) {
-            const userData: UserData = {
+            setUserData({
                 ID: data.user_id,
                 email: data.email,
                 display_name: data.display_name,
-                subscription: {
-                    level: data.membership.subscription.name,
-                    status: data.membership.status,
-                    api_calls: {
-                        today: 0,
-                        limit: data.membership.subscription.name === 'free' ? 10 : 100,
-                        remaining: data.membership.subscription.name === 'free' ? 10 : 100
-                    }
-                }
-            };
-            setUserData(userData);
+                subscription: data.membership
+            });
             setError(null);
         } else {
             setUserData(null);
-            setError('未找到用户信息');
+            setError(data.message || '未找到用户信息');
         }
     } catch (err) {
         console.error('认证请求错误:', err);
