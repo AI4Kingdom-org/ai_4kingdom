@@ -110,26 +110,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const refreshAuth = async () => {
     try {
-        console.log('开始刷新认证状态');
-        const formData = new URLSearchParams();
-        formData.append('action', 'validate_session');
-
         const response = await fetch('https://ai4kingdom.com/wp-json/custom/v1/login', {
             method: 'POST',
             credentials: 'include',
             headers: {
                 'Content-Type': 'application/x-www-form-urlencoded',
-                'Accept': 'application/json',
-                'Origin': 'https://main.d3ts7h8kta7yzt.amplifyapp.com'
+                'Accept': 'application/json'
             },
-            body: formData.toString()
+            body: new URLSearchParams({
+                'action': 'validate_session'
+            }).toString()
         });
 
-        console.log('认证请求状态:', response.status);
-        console.log('认证请求头:', Object.fromEntries(response.headers));
+        const cookies = response.headers.get('set-cookie');
+        if (cookies) {
+            document.cookie = cookies;
+        }
         
         const data = await response.json();
-        console.log('响应数据:', data);
 
         if (data.success) {
             setUserData({
@@ -144,7 +142,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             setError(data.message || '未找到用户信息');
         }
     } catch (err) {
-        console.error('认证请求错误:', err);
+        console.error('认证刷新失败:', err);
         setError(err instanceof Error ? err.message : '刷新认证状态失败');
         setUserData(null);
     } finally {
