@@ -23,6 +23,27 @@ const WEEKLY_LIMITS: UsageLimit = {
     ultimate: Infinity
 };
 
+interface Subscription {
+    id: string;
+    name: string;
+    start_date: string;
+    expiration_date: string;
+}
+
+interface MembershipStatus {
+    status: string;
+    message: string;
+    subscription: Subscription;
+}
+
+interface LoginResponse {
+    success: boolean;
+    user_id: number;
+    email: string;
+    display_name: string;
+    membership: MembershipStatus;
+}
+
 const Chat = () => {
     const { userData, loading, error: authError, canCallApi, refreshAuth } = useAuth();
     const [messages, setMessages] = useState<{ sender: string; text: string }[]>([]);
@@ -58,13 +79,18 @@ const Chat = () => {
             if (!userData) return;
             
             try {
-                const response = await fetch(`/api/chat?userId=${userData.ID}`);
-                const data = await response.json();
+                const response = await fetch(`/api/chat?userId=${userData.ID}`, {
+                    credentials: 'include',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
                 
                 if (!response.ok) {
                     throw new Error(`获取聊天历史失败: ${response.status}`);
                 }
                 
+                const data = await response.json();
                 const allMessages = data.flatMap((item: ChatItem) => 
                     parseHistoryMessage(item.Message)
                 );
@@ -129,7 +155,10 @@ const Chat = () => {
         try {
             const response = await fetch('/api/chat', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                headers: { 
+                    'Content-Type': 'application/json'
+                },
                 body: JSON.stringify({ 
                     userId: userData.ID,
                     message: currentInput 
@@ -147,7 +176,6 @@ const Chat = () => {
             ]);
             
             setWeeklyUsage(prev => prev + 1);
-
             await refreshAuth();
         } catch (err) {
             await handleSendError(err instanceof Error ? err : new Error('发送失败'));
