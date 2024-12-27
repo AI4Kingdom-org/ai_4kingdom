@@ -3,20 +3,39 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 
 interface Subscription {
-  level: string;
+  id: string;
+  name: string;
+  start_date: string;
+  expiration_date: string;
+}
+
+interface MembershipStatus {
   status: string;
-  expiration: string | null;
-  api_calls: {
-    today: number;
-    limit: number;
-    remaining: number;
-  };
+  message: string;
+  subscription: Subscription;
+}
+
+interface LoginResponse {
+  success: boolean;
+  user_id: number;
+  email: string;
+  display_name: string;
+  membership: MembershipStatus;
 }
 
 interface UserData {
-  ID: string;
-  user_email: string;
-  subscription: Subscription;
+  ID: number;
+  email: string;
+  display_name: string;
+  subscription: {
+    level: string;
+    status: string;
+    api_calls: {
+      today: number;
+      limit: number;
+      remaining: number;
+    }
+  }
 }
 
 interface AuthContextType {
@@ -37,58 +56,79 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const checkSubscription = async () => {
     try {
-      const response = await fetch('https://your-wordpress-site.com/wp-json/custom/v1/user-subscription', {
+      const response = await fetch('https://ai4kingdom.com/wp-json/custom/v1/membership-status', {
         credentials: 'include',
         headers: {
-          'Accept': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('jwt_token')}`
+          'Content-Type': 'application/json'
         }
       });
 
       if (!response.ok) {
-        throw new Error('Subscription check failed');
+        throw new Error('获取会员状态失败');
       }
 
       const data = await response.json();
-      setUserData(data);
-      
-      // 检查订阅是否过期
-      if (data.subscription.status === 'expired') {
-        setError('您的订阅已过期，请续订以继续使用服务');
+      if (data.user_id) {
+        setUserData({
+          ID: data.user_id,
+          email: data.email,
+          display_name: data.display_name,
+          subscription: data.subscription
+        });
+        setError(null);
+      } else {
+        setUserData(null);
+        setError('未找到用户信息');
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : '获取订阅信息失败');
+      setError(err instanceof Error ? err.message : '获取会员状态失败');
       setUserData(null);
     } finally {
       setLoading(false);
     }
   };
 
-  // 登录函数
   const login = async (username: string, password: string) => {
     try {
-      const response = await fetch('https://your-wordpress-site.com/wp-json/jwt-auth/v1/token', {
+      const response = await fetch('https://ai4kingdom.com/wp-json/custom/v1/login', {
         method: 'POST',
+        credentials: 'include',
         headers: {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({ username, password })
       });
 
-      const data = await response.json();
+      const data: LoginResponse = await response.json();
       
-      if (!response.ok) {
-        throw new Error(data.message);
+      if (!data.success) {
+        throw new Error('登录失败');
       }
 
-      localStorage.setItem('jwt_token', data.token);
-      await checkSubscription();
+      const userData: UserData = {
+        ID: data.user_id,
+        email: data.email,
+        display_name: data.display_name,
+        subscription: {
+          level: data.membership.subscription.name,
+          status: data.membership.status,
+          api_calls: {
+            today: 0,
+            limit: data.membership.subscription.name === 'free' ? 10 : 100,
+            remaining: data.membership.subscription.name === 'free' ? 10 : 100
+          }
+        }
+      };
+
+      setUserData(userData);
+      setError(null);
+      
     } catch (err) {
       setError(err instanceof Error ? err.message : '登录失败');
+      setUserData(null);
     }
   };
 
-  // 检查是否可以调用 API
   const canCallApi = () => {
     if (!userData?.subscription) return false;
     
@@ -97,12 +137,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   useEffect(() => {
-    const token = localStorage.getItem('jwt_token');
-    if (token) {
-      checkSubscription();
-    } else {
-      setLoading(false);
-    }
+    checkSubscription();
   }, []);
 
   return (
