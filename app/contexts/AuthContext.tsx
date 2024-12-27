@@ -135,12 +135,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 email: data.email,
                 display_name: data.display_name,
                 subscription: {
-                    level: data.membership.subscription.name,
+                    level: data.membership.subscription.name.toLowerCase(),
                     status: data.membership.status,
                     api_calls: {
                         today: 0,
-                        limit: data.membership.subscription.name === 'free' ? 10 : 100,
-                        remaining: data.membership.subscription.name === 'free' ? 10 : 100
+                        limit: data.membership.subscription.name.toLowerCase() === 'free' ? 10 : 
+                               data.membership.subscription.name.toLowerCase() === 'pro' ? 100 : 
+                               data.membership.subscription.name.toLowerCase() === 'ultimate' ? -1 : 10,
+                        remaining: data.membership.subscription.name.toLowerCase() === 'free' ? 10 : 
+                                 data.membership.subscription.name.toLowerCase() === 'pro' ? 100 : 
+                                 data.membership.subscription.name.toLowerCase() === 'ultimate' ? -1 : 10
                     }
                 }
             };
@@ -160,7 +164,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   useEffect(() => {
-    console.log('初��化认证状态检查');
+    console.log('初始化认证状态检查');
     console.log('原始 cookie:', document.cookie);
     console.log('解码后的 cookie:', decodeURIComponent(document.cookie));
     refreshAuth();
