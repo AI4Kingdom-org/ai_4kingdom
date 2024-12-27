@@ -56,13 +56,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const login = async (username: string, password: string) => {
     try {
+      const formData = new URLSearchParams();
+      formData.append('username', username);
+      formData.append('password', password);
+
       const response = await fetch('https://ai4kingdom.com/wp-json/custom/v1/login', {
         method: 'POST',
         credentials: 'include',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/x-www-form-urlencoded'
         },
-        body: JSON.stringify({ username, password })
+        body: formData.toString()
       });
 
       const data: LoginResponse = await response.json();
@@ -107,9 +111,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const refreshAuth = async () => {
     try {
       const response = await fetch('https://ai4kingdom.com/wp-json/custom/v1/login', {
+        method: 'POST',
         credentials: 'include',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/x-www-form-urlencoded'
         }
       });
 
