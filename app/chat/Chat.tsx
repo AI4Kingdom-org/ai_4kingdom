@@ -230,7 +230,7 @@ const Chat = () => {
 
     return (
         <div className={styles.chatWindow}>
-            {renderSubscriptionStatus()}
+            {/* {renderSubscriptionStatus()} */}
             <div className={styles.messages}>
                 {messages.map((msg, index) => (
                     <div
