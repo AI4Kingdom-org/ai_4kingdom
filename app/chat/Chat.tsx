@@ -190,17 +190,19 @@ const Chat = () => {
         
         const { level, status } = userData.subscription;
         const isActive = status === 'active';
+        const weeklyLimit = WEEKLY_LIMITS[level.toLowerCase()] || WEEKLY_LIMITS.free;
         
         return (
             <div className={styles.subscriptionStatus}>
                 <p>会员等级: {level.toUpperCase()}</p>
                 <p>状态: {isActive ? '有效' : '已过期'}</p>
-                {level === 'free' && (
+                <p>本周剩余使用次数: {weeklyLimit === Infinity ? '无限制' : `${weeklyLimit - weeklyUsage}`}</p>
+                {(level === 'free' || !isActive) && (
                     <button 
                         className={styles.upgradeButton}
                         onClick={() => window.location.href = 'https://ai4kingdom.com/pricing'}
                     >
-                        升级会员
+                        {level === 'free' ? '升级会员' : '续费会员'}
                     </button>
                 )}
             </div>
