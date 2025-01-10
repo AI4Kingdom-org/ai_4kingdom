@@ -6,12 +6,12 @@
     'Fira Mono', 'Droid Sans Mono', 'Courier New', monospace;
 
   --foreground-rgb: 0, 0, 0;
-  --background-start-rgb: #CBBEFF;
+  --background-start-rgb: #ecf0f1;
   --background-end-rgb: 255, 255, 255;
 
   --callout-rgb: 238, 240, 241;
   --callout-border-rgb: 172, 175, 176;
-  --card-rgb: #6649AE;
+  --card-rgb: #ecf0f1;
   --card-border-rgb: 131, 134, 135;
 }
 
