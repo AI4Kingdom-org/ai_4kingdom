@@ -10,7 +10,6 @@ export default function Page() {
     <AuthProvider>
       <main>
         <div className="chat-container">
-          <h1>国度AI</h1>
           <Chat />
         </div>
       </main>
