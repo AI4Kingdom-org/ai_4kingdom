@@ -11,7 +11,7 @@ interface VectorFile {
 
 const TestModule = () => {
   const [files, setFiles] = useState<VectorFile[]>([]);
-  const [newFile, setNewFile] = useState<File | null>(null);
+  const [newFiles, setNewFiles] = useState<FileList | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
@@ -35,12 +35,14 @@ const TestModule = () => {
 
   // 处理文件上传
   const handleUpload = async () => {
-    if (!newFile) return;
+    if (!newFiles?.length) return;
     setLoading(true);
     setError(null);
 
     const formData = new FormData();
-    formData.append('file', newFile);
+    Array.from(newFiles).forEach(file => {
+      formData.append('files', file);
+    });
 
     try {
       const response = await fetch('/api/vector-store/upload', {
@@ -48,10 +50,18 @@ const TestModule = () => {
         body: formData,
       });
 
-      if (!response.ok) throw new Error('文件上传失败');
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.error || '上传失败');
+      }
+      
+      if (response.status === 207) {
+        setError(`部分文件上传失败: ${data.failedCount} 个文件未能上传`);
+      }
       
       await fetchFiles();
-      setNewFile(null);
+      setNewFiles(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : '上传失败');
     } finally {
@@ -135,12 +145,13 @@ const TestModule = () => {
         <div className={styles.fileUpload}>
           <input
             type="file"
-            onChange={(e) => setNewFile(e.target.files?.[0] || null)}
+            multiple
+            onChange={(e) => setNewFiles(e.target.files)}
             className={styles.fileInput}
           />
           <button 
             onClick={handleUpload}
-            disabled={loading || !newFile}
+            disabled={loading || !newFiles?.length}
             className={styles.button}
           >
             {loading ? '上传中...' : '上传文件'}

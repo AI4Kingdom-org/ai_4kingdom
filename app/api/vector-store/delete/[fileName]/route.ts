@@ -12,16 +12,13 @@ export async function DELETE(
   { params }: { params: { fileName: string } }
 ) {
   try {
-    // 获取 Vector Store 中的文件列表
-    const vectorStoreFiles = await openai.beta.vectorStores.files.list(VECTOR_STORE_ID);
+    // 获取所有文件列表
+    const files = await openai.files.list();
     
     // 找到匹配的文件
-    const targetFile = await Promise.all(
-      vectorStoreFiles.data.map(async (file) => {
-        const fileInfo = await openai.files.retrieve(file.id);
-        return fileInfo.filename === params.fileName ? file : null;
-      })
-    ).then(files => files.find(f => f !== null));
+    const targetFile = files.data.find(file => 
+      file.filename === params.fileName && file.purpose === 'assistants'
+    );
 
     if (!targetFile) {
       return NextResponse.json(
