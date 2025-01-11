@@ -9,8 +9,17 @@ export default function Page() {
   return (
     <AuthProvider>
       <main>
-        <div className="chat-container">
-          <Chat />
+        <div style={{ 
+          width: '100%',
+          height: '100%',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          overflow: 'hidden'
+        }}>
+          <div className="chat-container">
+            <Chat />
+          </div>
         </div>
       </main>
     </AuthProvider>
