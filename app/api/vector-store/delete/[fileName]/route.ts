@@ -5,16 +5,24 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
 });
 
+const VECTOR_STORE_ID = 'vs_AMJIJ1zfGnzHpI1msv4T8Ww3';
+
 export async function DELETE(
   request: Request,
   { params }: { params: { fileName: string } }
 ) {
   try {
-    const files = await openai.files.list();
-    const targetFile = files.data.find(file => 
-      file.filename === params.fileName && file.purpose === 'assistants'
-    );
+    // 获取 Vector Store 中的文件列表
+    const vectorStoreFiles = await openai.beta.vectorStores.files.list(VECTOR_STORE_ID);
     
+    // 找到匹配的文件
+    const targetFile = await Promise.all(
+      vectorStoreFiles.data.map(async (file) => {
+        const fileInfo = await openai.files.retrieve(file.id);
+        return fileInfo.filename === params.fileName ? file : null;
+      })
+    ).then(files => files.find(f => f !== null));
+
     if (!targetFile) {
       return NextResponse.json(
         { error: '文件不存在' },
@@ -22,6 +30,7 @@ export async function DELETE(
       );
     }
 
+    // 直接删除底层文件对象
     await openai.files.del(targetFile.id);
     
     return NextResponse.json({ 

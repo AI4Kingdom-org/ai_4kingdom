@@ -1,160 +1,113 @@
 .container {
-  padding: 2rem;
-  max-width: 1600px;
+  padding: 20px;
+  max-width: 1200px;
   margin: 0 auto;
 }
 
-.container h1 {
-  color: #000000;
-}
-
-.gridContainer {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 2rem;
-  margin-top: 2rem;
-}
-
 .section {
-  background: #f5f5f5;
+  background: white;
   border-radius: 8px;
-  padding: 1.5rem;
-  height: fit-content;
-}
-
-/* 响应式布局 */
-@media (max-width: 1024px) {
-  .gridContainer {
-    grid-template-columns: 1fr;
-  }
+  padding: 20px;
+  margin-bottom: 20px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
 }
 
 .error {
-  background-color: #ffebee;
-  color: #c62828;
-  padding: 1rem;
-  margin-bottom: 1rem;
+  background-color: #fee;
+  color: #c00;
+  padding: 10px;
   border-radius: 4px;
-  border: 1px solid #ef9a9a;
+  margin-bottom: 20px;
 }
 
 .fileUpload {
   display: flex;
-  gap: 1rem;
-  margin-bottom: 1rem;
+  gap: 10px;
+  margin-bottom: 20px;
+  align-items: center;
 }
 
 .fileInput {
   flex: 1;
-  padding: 0.5rem;
+  padding: 8px;
   border: 1px solid #ddd;
   border-radius: 4px;
 }
 
 .button {
-  padding: 0.5rem 1rem;
-  background-color: #1976d2;
-  color: white;
+  padding: 8px 16px;
   border: none;
   border-radius: 4px;
+  background-color: #0070f3;
+  color: white;
   cursor: pointer;
   transition: background-color 0.2s;
-}
-
-.button:hover {
-  background-color: #1565c0;
 }
 
 .button:disabled {
-  background-color: #bdbdbd;
+  background-color: #ccc;
   cursor: not-allowed;
 }
 
+.deleteButton {
+  background-color: #dc3545;
+}
+
+.deleteButton:hover:not(:disabled) {
+  background-color: #c82333;
+}
+
 .fileList {
+  border: 1px solid #ddd;
+  border-radius: 4px;
+}
+
+.fileListHeader {
+  padding: 10px;
+  background-color: #f8f9fa;
+  border-bottom: 1px solid #ddd;
+}
+
+.selectAllLabel {
   display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
 }
 
 .fileItem {
-  display: grid;
-  grid-template-columns: 1fr auto auto;
-  align-items: center;
-  padding: 0.5rem 1rem;
-  background: white;
-  border-radius: 4px;
-  gap: 1rem;
-  cursor: pointer;
+  padding: 10px;
+  border-bottom: 1px solid #eee;
   transition: background-color 0.2s;
 }
 
-.fileItem:hover {
-  background-color: #f5f5f5;
+.fileItem:last-child {
+  border-bottom: none;
 }
 
-.fileItem.selected {
-  background-color: #e3f2fd;
+.fileLabel {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  width: 100%;
+}
+
+.checkbox {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
 }
 
 .fileName {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  flex: 1;
 }
 
 .uploadDate {
   color: #666;
-  font-size: 0.9rem;
-  text-align: right;
-  white-space: nowrap;
+  font-size: 0.9em;
 }
 
-.checkbox {
-  width: 20px;
-  height: 20px;
-  border: 2px solid #1976d2;
-  border-radius: 4px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #1976d2;
-  font-weight: bold;
-}
-
-.deleteButton {
-  background-color: #f44336;
-}
-
-.deleteButton:hover {
-  background-color: #d32f2f;
-}
-
-.deleteButton:disabled {
-  background-color: #ffcdd2;
-}
-
-.promptContainer {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-}
-
-.promptInput {
-  width: 100%;
-  padding: 0.5rem;
-  border: 1px solid #ddd;
-  border-radius: 4px;
-  font-family: monospace;
-  resize: vertical;
-}
-
-.promptActions {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.lastUpdated {
-  color: #666;
-  font-size: 0.9rem;
+.selected {
+  background-color: #f0f7ff;
 }

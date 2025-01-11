@@ -5,6 +5,8 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
 });
 
+const VECTOR_STORE_ID = 'vs_AMJIJ1zfGnzHpI1msv4T8Ww3';
+
 export async function POST(request: Request) {
   try {
     const formData = await request.formData();
@@ -17,17 +19,22 @@ export async function POST(request: Request) {
       );
     }
 
-    // 将文件转换为Buffer并上传到OpenAI
+    // 将文件转换为Buffer并上传
     const buffer = await file.arrayBuffer();
     const blob = new Blob([buffer]);
     
-    // 上传文件到OpenAI并创建vector store
+    // 上传文件到OpenAI
     const uploadedFile = await openai.files.create({
       file: new File([blob], file.name, { type: file.type }),
       purpose: 'assistants'
     });
 
-    // 不需要创建vector store，直接返回文件信息
+    // 将文件添加到Vector Store
+    await openai.beta.vectorStores.files.create(
+      VECTOR_STORE_ID,
+      { file_id: uploadedFile.id }
+    );
+
     return NextResponse.json({ 
       message: '文件上传成功',
       fileId: uploadedFile.id,
