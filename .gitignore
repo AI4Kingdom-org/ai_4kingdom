@@ -17,6 +17,7 @@
 /build
 
 /wordpress
+/kubio_theme
 
 # misc
 .DS_Store
