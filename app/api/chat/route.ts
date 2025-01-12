@@ -1,5 +1,5 @@
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
-import { DynamoDBDocumentClient, PutCommand, QueryCommand } from "@aws-sdk/lib-dynamodb";
+import { DynamoDBDocumentClient, PutCommand, QueryCommand, GetCommand } from "@aws-sdk/lib-dynamodb";
 import { fromCognitoIdentityPool } from "@aws-sdk/credential-providers";
 import OpenAI from 'openai';
 
@@ -109,6 +109,23 @@ const withErrorHandler = (handler: Function) => async (request: Request) => {
   }
 };
 
+// 添加获取 Prompt 的函数
+async function getPromptFromDB(vectorStoreId: string) {
+  try {
+    const command = new GetCommand({
+      TableName: "AIPrompts",
+      Key: { id: vectorStoreId }
+    });
+
+    const response = await docClient.send(command);
+    return response.Item?.content || "You are an AI assistant specializing in home schooling...";
+  } catch (error) {
+    console.error('[ERROR] 获取Prompt失败:', error);
+    // 如果获取失败，返回默认 prompt
+    return "You are an AI assistant specializing in home schooling...";
+  }
+}
+
 // POST 处理函数
 export const POST = withErrorHandler(async (request: Request) => {
   try {
@@ -120,20 +137,24 @@ export const POST = withErrorHandler(async (request: Request) => {
     console.log('[DEBUG] OpenAI 客户端初始化成功');
 
     // 2. 获取 vector store ID
-    const vector_store_id = process.env.NEXT_PUBLIC_VECTOR_STORE_ID;
+    const vector_store_id = process.env.NEXT_PUBLIC_VECTOR_STORE_ID || 'vs_AMJIJ1zfGnzHpI1msv4T8Ww3';
     if (!vector_store_id) {
       throw new Error('Vector store ID 配置缺失');
     }
 
-    // 3. 创建或获取 assistant
+    // 3. 获取存储的 prompt
+    const promptContent = await getPromptFromDB(vector_store_id);
+    console.log('[DEBUG] 获取到的 Prompt:', promptContent);
+
+    // 4. 创建或获取 assistant，使用获取到的 prompt
     const assistant = await openai.beta.assistants.create({
       name: "Research Assistant",
-      instructions: "You are an AI Agent specializing in home schooling...", // 使用你的完整指令
+      instructions: promptContent, // 使用从数据库获取的 prompt
       model: "gpt-4-turbo",
       tools: [{ type: "file_search" }]
     });
 
-    // 4. 更新 assistant 的 tool resources
+    // 5. 更新 assistant 的 tool resources
     await openai.beta.assistants.update(
       assistant.id,
       {
@@ -145,18 +166,18 @@ export const POST = withErrorHandler(async (request: Request) => {
       }
     );
 
-    // 5. 创建对话线程
+    // 6. 创建对话线程
     const thread = await openai.beta.threads.create({
       messages: [{ role: "user", content: message }]
     });
 
-    // 6. 运行助手
+    // 7. 运行助手
     const run = await openai.beta.threads.runs.create(
       thread.id,
       { assistant_id: assistant.id }
     );
 
-    // 7. 等待运行完成
+    // 8. 等待运行完成
     let runStatus = await openai.beta.threads.runs.retrieve(
       thread.id,
       run.id
@@ -173,7 +194,7 @@ export const POST = withErrorHandler(async (request: Request) => {
       );
     }
 
-    // 8. 获取助手回复
+    // 9. 获取助手回复
     const messages = await openai.beta.threads.messages.list(thread.id);
     const lastMessage = messages.data.find(msg => msg.role === 'assistant');
     const botReply = lastMessage?.content
@@ -181,7 +202,7 @@ export const POST = withErrorHandler(async (request: Request) => {
       .map(content => (content.type === 'text' ? content.text.value : ''))
       .join('\n') || '抱歉，我现在无法回答。';
 
-    // 9. 储存对话记录
+    // 10. 储存对话记录
     const timestamp = new Date().toISOString();
     const chatItem = {
       UserId: String(userId),
@@ -203,7 +224,7 @@ export const POST = withErrorHandler(async (request: Request) => {
       Item: chatItem
     }));
 
-    // 10. 返回响应
+    // 11. 返回响应
     return new Response(JSON.stringify({ 
       reply: botReply.trim(),
       threadId: thread.id

@@ -216,21 +216,9 @@ const Chat = () => {
     }, [userData, loading, authError]);
 
     if (loading) return <div>加载中...</div>;
-    if (!userData) return (
-        <div className={styles.loginPrompt}>
-            <p>请先登录后使用</p>
-            <button 
-                className={styles.loginButton}
-                onClick={() => window.open('https://ai4kingdom.com/login', '_blank')}
-            >
-                去登录
-            </button>
-        </div>
-    );
-
+    
     return (
         <div className={styles.chatWindow}>
-            {/* {renderSubscriptionStatus()} */}
             <div className={styles.messages}>
                 {messages.map((msg, index) => (
                     <div
