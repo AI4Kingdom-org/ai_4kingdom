@@ -26,6 +26,7 @@ const TestModule = () => {
   const [promptLoading, setPromptLoading] = useState(false);
   const [promptError, setPromptError] = useState<string | null>(null);
   const VECTOR_STORE_ID = 'vs_AMJIJ1zfGnzHpI1msv4T8Ww3'; // 您的 vector store ID
+  const [isInitialized, setIsInitialized] = useState(false);
 
   // 获取文件列表
   const fetchFiles = async () => {
@@ -80,9 +81,12 @@ const TestModule = () => {
   };
 
   useEffect(() => {
-    fetchFiles();
-    fetchPrompt();
-  }, []);
+    if (!isInitialized) {
+      fetchFiles();
+      fetchPrompt();
+      setIsInitialized(true);
+    }
+  }, [isInitialized]);
 
   // 处理文件上传
   const handleUpload = async () => {
