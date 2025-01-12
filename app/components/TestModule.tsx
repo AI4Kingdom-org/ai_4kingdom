@@ -9,6 +9,12 @@ interface VectorFile {
   fileId: string;
 }
 
+interface Prompt {
+  id: string;
+  content: string;
+  lastUpdated: string;
+}
+
 const TestModule = () => {
   const [files, setFiles] = useState<VectorFile[]>([]);
   const [newFiles, setNewFiles] = useState<FileList | null>(null);
@@ -16,6 +22,10 @@ const TestModule = () => {
   const [error, setError] = useState<string | null>(null);
   const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
   const [isAllSelected, setIsAllSelected] = useState(false);
+  const [prompt, setPrompt] = useState<string>('');
+  const [promptLoading, setPromptLoading] = useState(false);
+  const [promptError, setPromptError] = useState<string | null>(null);
+  const VECTOR_STORE_ID = 'vs_AMJIJ1zfGnzHpI1msv4T8Ww3'; // 您的 vector store ID
 
   // 获取文件列表
   const fetchFiles = async () => {
@@ -29,8 +39,49 @@ const TestModule = () => {
     }
   };
 
+  // 获取 Prompt
+  const fetchPrompt = async () => {
+    try {
+      setPromptLoading(true);
+      const response = await fetch(`/api/prompt?vectorStoreId=${VECTOR_STORE_ID}`);
+      if (!response.ok) throw new Error('获取Prompt失败');
+      const data: Prompt = await response.json();
+      setPrompt(data.content);
+    } catch (err) {
+      setPromptError(err instanceof Error ? err.message : '获取Prompt失败');
+    } finally {
+      setPromptLoading(false);
+    }
+  };
+
+  // 更新 Prompt
+  const updatePrompt = async () => {
+    try {
+      setPromptLoading(true);
+      const response = await fetch('/api/prompt', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ 
+          content: prompt,
+          vectorStoreId: VECTOR_STORE_ID 
+        }),
+      });
+
+      if (!response.ok) throw new Error('更新Prompt失败');
+      await fetchPrompt(); // 刷新显示
+      setPromptError(null);
+    } catch (err) {
+      setPromptError(err instanceof Error ? err.message : '更新Prompt失败');
+    } finally {
+      setPromptLoading(false);
+    }
+  };
+
   useEffect(() => {
     fetchFiles();
+    fetchPrompt();
   }, []);
 
   // 处理文件上传
@@ -138,67 +189,91 @@ const TestModule = () => {
 
   return (
     <div className={styles.container}>
-      {error && <div className={styles.error}>{error}</div>}
-
-      <section className={styles.section}>
-        <h2>Vector Store 文件管理</h2>
-        <div className={styles.fileUpload}>
-          <input
-            type="file"
-            multiple
-            onChange={(e) => setNewFiles(e.target.files)}
-            className={styles.fileInput}
-          />
-          <button 
-            onClick={handleUpload}
-            disabled={loading || !newFiles?.length}
-            className={styles.button}
-          >
-            {loading ? '上传中...' : '上传文件'}
-          </button>
-          <button
-            onClick={handleDelete}
-            disabled={loading || selectedFiles.size === 0}
-            className={`${styles.button} ${styles.deleteButton}`}
-          >
-            删除所选 ({selectedFiles.size})
-          </button>
-        </div>
-
-        <div className={styles.fileList}>
-          <div className={styles.fileListHeader}>
-            <label className={styles.selectAllLabel}>
-              <input
-                type="checkbox"
-                checked={isAllSelected}
-                onChange={handleSelectAll}
-                className={styles.checkbox}
-              />
-              全选
-            </label>
-          </div>
-          
-          {files.map((file) => (
-            <div 
-              key={file.fileId}
-              className={`${styles.fileItem} ${selectedFiles.has(file.fileName) ? styles.selected : ''}`}
+      <div className={styles.splitLayout}>
+        {/* 左侧文件管理部分 */}
+        <section className={styles.section}>
+          <h2>Vector Store 文件管理</h2>
+          {error && <div className={styles.error}>{error}</div>}
+          <div className={styles.fileUpload}>
+            <input
+              type="file"
+              multiple
+              onChange={(e) => setNewFiles(e.target.files)}
+              className={styles.fileInput}
+            />
+            <button 
+              onClick={handleUpload}
+              disabled={loading || !newFiles?.length}
+              className={styles.button}
             >
-              <label className={styles.fileLabel}>
+              {loading ? '上传中...' : '上传文件'}
+            </button>
+            <button
+              onClick={handleDelete}
+              disabled={loading || selectedFiles.size === 0}
+              className={`${styles.button} ${styles.deleteButton}`}
+            >
+              删除所选 ({selectedFiles.size})
+            </button>
+          </div>
+
+          <div className={styles.fileList}>
+            <div className={styles.fileListHeader}>
+              <label className={styles.selectAllLabel}>
                 <input
                   type="checkbox"
-                  checked={selectedFiles.has(file.fileName)}
-                  onChange={() => handleFileSelect(file.fileName)}
+                  checked={isAllSelected}
+                  onChange={handleSelectAll}
                   className={styles.checkbox}
                 />
-                <span className={styles.fileName}>{file.fileName}</span>
-                <span className={styles.uploadDate}>
-                  {new Date(file.uploadDate).toLocaleString()}
-                </span>
+                全选
               </label>
             </div>
-          ))}
-        </div>
-      </section>
+            
+            {files.map((file) => (
+              <div 
+                key={file.fileId}
+                className={`${styles.fileItem} ${selectedFiles.has(file.fileName) ? styles.selected : ''}`}
+              >
+                <label className={styles.fileLabel}>
+                  <input
+                    type="checkbox"
+                    checked={selectedFiles.has(file.fileName)}
+                    onChange={() => handleFileSelect(file.fileName)}
+                    className={styles.checkbox}
+                  />
+                  <span className={styles.fileName}>{file.fileName}</span>
+                  <span className={styles.uploadDate}>
+                    {new Date(file.uploadDate).toLocaleString()}
+                  </span>
+                </label>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        {/* 右侧 Prompt 管理部分 */}
+        <section className={styles.section}>
+          <h2>Prompt 管理</h2>
+          {promptError && <div className={styles.error}>{promptError}</div>}
+          <div className={styles.promptContainer}>
+            <textarea
+              value={prompt}
+              onChange={(e) => setPrompt(e.target.value)}
+              className={styles.promptTextarea}
+              placeholder="输入 Prompt..."
+              disabled={promptLoading}
+            />
+            <button
+              onClick={updatePrompt}
+              disabled={promptLoading}
+              className={styles.button}
+            >
+              {promptLoading ? '更新中...' : '更新 Prompt'}
+            </button>
+          </div>
+        </section>
+      </div>
     </div>
   );
 };

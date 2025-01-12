@@ -111,3 +111,31 @@
 .selected {
   background-color: #f0f7ff;
 }
+
+.splitLayout {
+  display: flex;
+  gap: 2rem;
+}
+
+.section {
+  flex: 1;
+}
+
+.promptContainer {
+  margin-top: 1rem;
+}
+
+.promptTextarea {
+  width: 95%;
+  min-height: 500px;
+  max-height: 800px;
+  height: 600px;
+  padding: 1rem;
+  margin-bottom: 1rem;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  resize: vertical;
+  font-size: 14px;
+  line-height: 1.5;
+  font-family: monospace;
+}
