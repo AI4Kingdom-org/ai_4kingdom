@@ -1,10 +1,10 @@
-interface Subscription {
+export interface Subscription {
   status: 'active' | 'inactive' | 'expired';
   type: 'free' | 'ultimate' | 'pro';
   expiry: string | null;
 }
 
-interface UserData {
+export interface UserData {
   success: boolean;
   user_id: number;
   username: string;

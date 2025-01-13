@@ -5,71 +5,10 @@ import "./app.css";
 import Chat from "./chat/Chat";
 import { AuthProvider } from "./contexts/AuthContext";
 
-async function validateSession(): Promise<UserData> {
-  try {
-    console.log('Attempting session validation...');
-    const response = await fetch('https://ai4kingdom.com/wp-json/custom/v1/validate_session', {
-      method: 'POST',
-      credentials: 'include',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-      body: 'action=validate_session'
-    });
-
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-
-    const data = await response.json();
-    
-    if (!data) {
-        throw new Error('响应数据为空');
-    }
-
-    if (typeof data.success === 'undefined') {
-        throw new Error('响应数据格式错误');
-    }
-
-    if (!data.success) {
-        throw new Error(data.message || '认证失败');
-    }
-
-    if (!data.subscription || typeof data.subscription !== 'object') {
-        data.subscription = {
-            status: 'active',
-            type: 'free',
-            expiry: null
-        };
-    }
-    
-    // 验证subscription type
-    if (!['free', 'ultimate', 'pro'].includes(data.subscription.type)) {
-      data.subscription.type = 'free';
-    }
-
-    return data as UserData;
-  } catch (error) {
-    console.error('Session Validation Error:', error);
-    throw error;
-  }
-}
-
 export default function Page() {
   useEffect(() => {
-    // 防止滚动行为影响父窗口
     window.scrollTo = () => {};
     document.body.style.overflow = 'hidden';
-    
-    // 在组件加载时验证会话
-    validateSession();
-    
-    // 定期检查会话状态
-    const sessionCheckInterval = setInterval(validateSession, 5 * 60 * 1000); // 每5分钟检查一次
-    
-    return () => {
-      clearInterval(sessionCheckInterval);
-    };
   }, []);
 
   return (
