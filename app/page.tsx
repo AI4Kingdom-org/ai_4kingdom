@@ -30,10 +30,15 @@ async function validateSession(): Promise<UserData> {
     // 使用默认值处理可能缺失的subscription字段
     if (!data.subscription) {
       data.subscription = {
-        status: 'free',
+        status: 'active',
         type: 'free',
         expiry: null
       };
+    }
+    
+    // 验证subscription type
+    if (!['free', 'ultimate', 'pro'].includes(data.subscription.type)) {
+      data.subscription.type = 'free';
     }
 
     return data as UserData;

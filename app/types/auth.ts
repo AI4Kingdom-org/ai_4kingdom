@@ -1,6 +1,6 @@
 interface Subscription {
   status: 'active' | 'inactive' | 'expired';
-  type: 'free' | 'premium' | 'enterprise';
+  type: 'free' | 'ultimate' | 'pro';
   expiry: string | null;
 }
 
