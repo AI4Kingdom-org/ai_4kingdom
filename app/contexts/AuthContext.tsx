@@ -21,6 +21,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    console.log('AuthContext useEffect 触发');
     const validateSession = async () => {
       const timeoutPromise = new Promise((_, reject) => {
         setTimeout(() => reject(new Error('请求超时')), 10000);
