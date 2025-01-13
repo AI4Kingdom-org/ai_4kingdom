@@ -4,10 +4,15 @@ import { useAuth } from '../contexts/AuthContext';
 import { useState, useEffect, useRef } from 'react';
 import styles from './Chat.module.css';
 
-interface ChatItem {
-    Message: string;
-    Timestamp: string;
-    UserId: string;
+export interface ChatMessage {
+  Message: string;
+  Timestamp: string;
+  UserId: string;
+}
+
+export interface ParsedMessage {
+  userMessage: string;
+  botReply: string;
 }
 
 interface UsageLimit {
@@ -70,7 +75,7 @@ export default function Chat() {
         }
         
         const data = await response.json();
-        const allMessages = data.flatMap((item: ChatItem) => 
+        const allMessages = data.flatMap((item: ChatMessage) => 
           parseHistoryMessage(item.Message)
         );
         setMessages(allMessages);
