@@ -25,9 +25,14 @@ export default function Chat() {
   }
 
   return (
-    <div>
-      {/* Chat UI */}
+    <div className="chat-container">
       <div>欢迎, {user.display_name}</div>
+      <pre>
+        {JSON.stringify({
+          user: user,
+          timestamp: new Date().toISOString()
+        }, null, 2)}
+      </pre>
     </div>
   );
 }

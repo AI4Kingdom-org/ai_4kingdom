@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import "./app.css";
 import Chat from "./chat/Chat";
 import { AuthProvider } from "./contexts/AuthContext";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 
 export default function Page() {
   useEffect(() => {
@@ -12,32 +13,35 @@ export default function Page() {
   }, []);
 
   return (
-    <AuthProvider>
-      <main style={{ 
-        position: 'fixed',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        overflow: 'hidden'
-      }}>
-        <div style={{ 
-          width: '100%',
-          height: '100%',
-          display: 'flex',
-          justifyContent: 'center',
-          alignItems: 'center',
-          overflow: 'hidden'
+    <ErrorBoundary>
+      <AuthProvider>
+        <main style={{ 
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          overflow: 'hidden',
+          zIndex: 1000
         }}>
-          <div className="chat-container" style={{
+          <div style={{ 
+            width: '100%',
             height: '100%',
-            maxHeight: '100vh',
-            overflow: 'auto'
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            overflow: 'hidden'
           }}>
-            <Chat />
+            <div className="chat-container" style={{
+              height: '100%',
+              maxHeight: '100vh',
+              overflow: 'auto'
+            }}>
+              <Chat />
+            </div>
           </div>
-        </div>
-      </main>
-    </AuthProvider>
+        </main>
+      </AuthProvider>
+    </ErrorBoundary>
   );
 }
