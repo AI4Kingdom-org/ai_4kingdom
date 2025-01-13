@@ -81,9 +81,20 @@ const TestModule = () => {
   };
 
   useEffect(() => {
+    console.log('TestModule mounted');
+    
+    const initializeModule = async () => {
+      try {
+        console.log('开始初始化 TestModule');
+        await Promise.all([fetchFiles(), fetchPrompt()]);
+        console.log('TestModule 初始化完成');
+      } catch (err) {
+        console.error('TestModule 初始化失败:', err);
+      }
+    };
+
     if (!isInitialized) {
-      fetchFiles();
-      fetchPrompt();
+      initializeModule();
       setIsInitialized(true);
     }
   }, [isInitialized]);

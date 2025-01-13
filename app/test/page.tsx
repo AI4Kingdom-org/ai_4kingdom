@@ -7,6 +7,13 @@ import { useState, useEffect } from 'react';
 
 export default function TestPage() {
   const { user, loading, error } = useAuth();
+  console.log('TestPage 渲染状态:', { user, loading, error });
+
+  useEffect(() => {
+    console.log('TestPage mounted');
+    return () => console.log('TestPage unmounted');
+  }, []);
+
   const [timeoutError, setTimeoutError] = useState<string | null>(null);
 
   useEffect(() => {
