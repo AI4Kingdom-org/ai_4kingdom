@@ -23,6 +23,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     async function validateSession() {
       try {
+        console.log('开始验证会话...');
         setLoading(true);
         setError(null);
         
@@ -35,11 +36,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           body: 'action=validate_session'
         });
 
+        console.log('Response status:', response.status);
+        
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
         }
 
         const data = await response.json();
+        console.log('Response data:', data);
         
         // 添加数据验证
         if (!data) {
@@ -71,11 +75,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUser(data);
         setError(null);
       } catch (err) {
-        console.error('认证刷新失败:', err);
+        console.error('认证详细错误:', err);
         setUser(null);
         setError(err instanceof Error ? err.message : '认证失败');
       } finally {
         setLoading(false);
+        console.log('验证流程结束');
       }
     }
 
@@ -86,6 +91,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => clearInterval(interval);
   }, []);
 
+  console.log('AuthProvider 渲染状态:', { user, loading, error });
   return (
     <AuthContext.Provider value={{ user, loading, error }}>
       {children}

@@ -5,9 +5,12 @@ import { useAuth } from '../contexts/AuthContext';
 export default function Chat() {
   const { user, loading, error } = useAuth();
 
-  console.log('Chat 组件加载');
-  console.log('用户数据:', user);
-  console.log('认证状态:', { loading, error });
+  console.log('Chat 组件状态:', {
+    isLoading: loading,
+    hasError: !!error,
+    hasUser: !!user,
+    error: error
+  });
 
   if (loading) {
     return <div>加载中...</div>;
@@ -24,6 +27,7 @@ export default function Chat() {
   return (
     <div>
       {/* Chat UI */}
+      <div>欢迎, {user.display_name}</div>
     </div>
   );
 }
