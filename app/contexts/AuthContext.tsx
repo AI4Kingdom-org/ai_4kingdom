@@ -22,23 +22,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const validateSession = async () => {
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('请求超时')), 10000);
+      });
+
       try {
         setLoading(true);
         console.log('开始验证会话...');
         
-        const response = await fetch('https://ai4kingdom.com/wp-json/custom/v1/validate_session', {
-          method: 'POST',
-          credentials: 'include',
-          headers: {
-            'Content-Type': 'application/x-www-form-urlencoded',
-          },
-          body: 'action=validate_session'
-        });
+        const response = await Promise.race([
+          fetch('https://ai4kingdom.com/wp-json/custom/v1/validate_session', {
+            method: 'POST',
+            credentials: 'include',
+            headers: {
+              'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: 'action=validate_session'
+          }),
+          timeoutPromise
+        ]) as Response;
 
         console.log('验证响应状态:', response.status);
+        console.log('验证响应头:', Object.fromEntries(response.headers.entries()));
         
         if (!response.ok) {
-          throw new Error('认证失败');
+          throw new Error(`HTTP error! status: ${response.status}`);
         }
 
         const data = await response.json();
@@ -46,9 +54,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         
         setUser(data);
       } catch (err) {
-        console.error('验证错误:', err);
+        console.error('验证错误:', {
+          message: err instanceof Error ? err.message : '未知错误',
+          type: err instanceof Error ? err.name : typeof err,
+          stack: err instanceof Error ? err.stack : undefined
+        });
         setError(err instanceof Error ? err.message : '认证失败');
       } finally {
+        console.log('验证流程结束');
         setLoading(false);
       }
     };
