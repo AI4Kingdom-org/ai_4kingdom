@@ -27,28 +27,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setLoading(true);
         console.log('开始验证会话...');
         
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 10000);
-
         const response = await fetch('https://ai4kingdom.com/wp-json/custom/v1/validate_session', {
           method: 'POST',
           credentials: 'include',
-          signal: controller.signal,
           headers: {
-            'Content-Type': 'application/x-www-form-urlencoded',
-            'X-Requested-With': 'XMLHttpRequest',
-            'Origin': 'https://ai4kingdom.com'
-          },
-          body: 'action=validate_session'
-        });
-
-        clearTimeout(timeoutId);
-
-        console.log('验证请求完成:', {
-          status: response.status,
-          statusText: response.statusText,
-          headers: Object.fromEntries(response.headers.entries()),
-          url: response.url
+            'Content-Type': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest'
+          }
         });
 
         if (!response.ok) {
@@ -56,17 +41,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
 
         const data = await response.json();
-        console.log('验证响应数据:', data);
+        console.log('验证响应:', data);
         
-        setUser(data);
-        setLoading(false);
-      } catch (err: unknown) {
-        console.error('验证错误:', {
-          name: err instanceof Error ? err.name : 'UnknownError',
-          message: err instanceof Error ? err.message : String(err),
-          stack: err instanceof Error ? err.stack : 'No stack trace'
-        });
+        if (data.success) {
+          setUser(data);
+        } else {
+          throw new Error(data.message || '验证失败');
+        }
+      } catch (err) {
+        console.error('验证错误:', err);
         setError(err instanceof Error ? err.message : '认证失败');
+      } finally {
         setLoading(false);
       }
     };
