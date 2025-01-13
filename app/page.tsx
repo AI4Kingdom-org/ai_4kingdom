@@ -5,7 +5,7 @@ import "./app.css";
 import Chat from "./chat/Chat";
 import { AuthProvider } from "./contexts/AuthContext";
 
-async function validateSession() {
+async function validateSession(): Promise<UserData> {
   try {
     console.log('Attempting session validation...');
     const response = await fetch('https://ai4kingdom.com/wp-json/custom/v1/validate_session', {
@@ -17,20 +17,29 @@ async function validateSession() {
       body: 'action=validate_session'
     });
 
-    console.log('Response Status:', response.status);
-    console.log('Response Headers:', Object.fromEntries(response.headers));
-    
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
     const data = await response.json();
-    console.log('Response Data:', data);
     
-    // 检查cookie
-    console.log('Current Cookies:', document.cookie);
+    if (!data.success) {
+      throw new Error(data.message || '认证失败');
+    }
     
-    // 检查localStorage和sessionStorage
-    console.log('localStorage:', localStorage);
-    console.log('sessionStorage:', sessionStorage);
+    // 使用默认值处理可能缺失的subscription字段
+    if (!data.subscription) {
+      data.subscription = {
+        status: 'free',
+        type: 'free',
+        expiry: null
+      };
+    }
+
+    return data as UserData;
   } catch (error) {
     console.error('Session Validation Error:', error);
+    throw error;
   }
 }
 
