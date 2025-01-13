@@ -36,6 +36,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             credentials: 'include',
             headers: {
               'Content-Type': 'application/x-www-form-urlencoded',
+              'Origin': 'https://ai4kingdom.com',
+              'Referer': 'https://ai4kingdom.com'
             },
             body: 'action=validate_session'
           }),
