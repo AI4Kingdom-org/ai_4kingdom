@@ -1,33 +1,35 @@
+'use client';
+
+import { useAuth } from '../contexts/AuthContext';
 import TestModule from '../components/TestModule';
-
-async function validateSession() {
-  try {
-    const response = await fetch('https://ai4kingdom.com/wp-json/custom/v1/validate_session', {
-      method: 'POST',
-      credentials: 'include',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-      body: 'action=validate_session'
-    });
-
-    console.log('Response Status:', response.status);
-    console.log('Response Headers:', Object.fromEntries(response.headers));
-    
-    const data = await response.json();
-    console.log('Response Data:', data);
-    
-    // 检查cookie
-    console.log('Current Cookies:', document.cookie);
-  } catch (error) {
-    console.error('Validation Error:', error);
-  }
-}
+import styles from './test.module.css';
 
 export default function TestPage() {
-  return (
-    <div>
-      <TestModule />
-    </div>
-  );
+  const { user, loading, error } = useAuth();
+
+  if (loading) {
+    return <div>加载中...</div>;
+  }
+
+  if (error) {
+    return <div>认证错误: {error}</div>;
+  }
+
+  // 检查用户是否是管理员
+  if (!user?.roles?.includes('administrator')) {
+    return (
+      <div className={styles.unauthorized}>
+        <h1>访问被拒绝</h1>
+        <p>您没有权限访问此页面</p>
+        <button 
+          onClick={() => window.location.href = '/'}
+          className={styles.backButton}
+        >
+          返回首页
+        </button>
+      </div>
+    );
+  }
+
+  return <TestModule />;
 } 

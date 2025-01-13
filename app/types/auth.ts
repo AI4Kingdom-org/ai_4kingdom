@@ -12,4 +12,5 @@ export interface UserData {
   display_name: string;
   nonce: string;
   subscription: Subscription;
+  roles?: string[];
 } 
