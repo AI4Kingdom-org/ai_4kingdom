@@ -23,17 +23,24 @@ async function validateSession(): Promise<UserData> {
 
     const data = await response.json();
     
-    if (!data.success) {
-      throw new Error(data.message || '认证失败');
+    if (!data) {
+        throw new Error('响应数据为空');
     }
-    
-    // 使用默认值处理可能缺失的subscription字段
-    if (!data.subscription) {
-      data.subscription = {
-        status: 'active',
-        type: 'free',
-        expiry: null
-      };
+
+    if (typeof data.success === 'undefined') {
+        throw new Error('响应数据格式错误');
+    }
+
+    if (!data.success) {
+        throw new Error(data.message || '认证失败');
+    }
+
+    if (!data.subscription || typeof data.subscription !== 'object') {
+        data.subscription = {
+            status: 'active',
+            type: 'free',
+            expiry: null
+        };
     }
     
     // 验证subscription type
