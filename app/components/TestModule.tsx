@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import styles from './TestModule.module.css';
+import { useAuth } from '../contexts/AuthContext';
 
 interface VectorFile {
   fileName: string;
@@ -15,7 +16,10 @@ interface Prompt {
   lastUpdated: string;
 }
 
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || '/api';
+
 const TestModule = () => {
+  const { user, loading: authLoading } = useAuth();
   const [files, setFiles] = useState<VectorFile[]>([]);
   const [newFiles, setNewFiles] = useState<FileList | null>(null);
   const [loading, setLoading] = useState(false);
@@ -44,11 +48,23 @@ const TestModule = () => {
   const fetchPrompt = async () => {
     try {
       setPromptLoading(true);
-      const response = await fetch(`/api/prompt?vectorStoreId=${VECTOR_STORE_ID}`);
-      if (!response.ok) throw new Error('获取Prompt失败');
+      const response = await fetch(`${API_BASE_URL}/prompt?vectorStoreId=${VECTOR_STORE_ID}`, {
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Requested-With': 'XMLHttpRequest'
+        }
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || '获取Prompt失败');
+      }
+      
       const data: Prompt = await response.json();
       setPrompt(data.content);
     } catch (err) {
+      console.error('Prompt获取错误:', err);
       setPromptError(err instanceof Error ? err.message : '获取Prompt失败');
     } finally {
       setPromptLoading(false);
@@ -98,6 +114,13 @@ const TestModule = () => {
       setIsInitialized(true);
     }
   }, [isInitialized]);
+
+  useEffect(() => {
+    if (!authLoading && !user) {
+      setPromptError('请先登录');
+      return;
+    }
+  }, [user, authLoading]);
 
   // 处理文件上传
   const handleUpload = async () => {
