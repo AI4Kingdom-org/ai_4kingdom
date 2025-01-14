@@ -32,12 +32,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           credentials: 'include',
           headers: {
             'Content-Type': 'application/json',
-            'X-Requested-With': 'XMLHttpRequest'
-          }
+            'X-Requested-With': 'XMLHttpRequest',
+            'Accept': 'application/json'
+          },
+          mode: 'cors'
         });
 
         if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
         }
 
         const data = await response.json();
@@ -51,6 +54,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } catch (err) {
         console.error('验证错误:', err);
         setError(err instanceof Error ? err.message : '认证失败');
+        setUser(null);
       } finally {
         setLoading(false);
       }

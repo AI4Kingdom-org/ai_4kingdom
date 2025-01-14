@@ -3,76 +3,94 @@ import { DynamoDBDocumentClient, PutCommand, QueryCommand, GetCommand } from "@a
 import { fromCognitoIdentityPool } from "@aws-sdk/credential-providers";
 import OpenAI from 'openai';
 
-const REGION = process.env.NEXT_PUBLIC_REGION || "us-east-2";
-const IDENTITY_POOL_ID = process.env.NEXT_PUBLIC_IDENTITY_POOL_ID!;
-const isDev = process.env.NODE_ENV === 'development';
+// 统一环境变量配置
+const CONFIG = {
+  region: process.env.NEXT_PUBLIC_AWS_REGION || process.env.NEXT_PUBLIC_REGION || "us-east-2",
+  identityPoolId: process.env.NEXT_PUBLIC_IDENTITY_POOL_ID!,
+  userPoolId: process.env.NEXT_PUBLIC_USER_POOL_ID!,
+  userPoolClientId: process.env.NEXT_PUBLIC_USER_POOL_CLIENT_ID!,
+  tableName: process.env.NEXT_PUBLIC_DYNAMODB_TABLE_NAME || "ChatHistory",
+  isDev: process.env.NODE_ENV === 'development'
+};
 
-// 添加在文件顶部其他导入语句下方
+// 添加调试日志
+console.log('[DEBUG] AWS 配置:', {
+  region: CONFIG.region,
+  identityPoolId: CONFIG.identityPoolId,
+  userPoolId: CONFIG.userPoolId,
+  tableName: CONFIG.tableName,
+  isDev: CONFIG.isDev,
+  hasAccessKey: !!process.env.NEXT_PUBLIC_ACCESS_KEY_ID,
+  hasSecretKey: !!process.env.NEXT_PUBLIC_SECRET_ACCESS_KEY
+});
+
 async function getDynamoDBConfig() {
-  if (isDev) {
+  if (CONFIG.isDev) {
     return {
-      region: REGION,
+      region: CONFIG.region,
       credentials: {
         accessKeyId: process.env.NEXT_PUBLIC_AWS_ACCESS_KEY!,
         secretAccessKey: process.env.NEXT_PUBLIC_AWS_SECRET_KEY!
       }
     };
   }
-  
-  const credentials = await fromCognitoIdentityPool({
-    clientConfig: { region: REGION },
-    identityPoolId: IDENTITY_POOL_ID
-  })();
 
-  return {
-    region: REGION,
-    credentials
-  };
-}
+  try {
+    const credentials = await fromCognitoIdentityPool({
+      clientConfig: { region: CONFIG.region },
+      identityPoolId: CONFIG.identityPoolId
+    })();
 
-// 先打印所有环境变量（仅开发调试用）
-console.log('[DEBUG] 所有环境变量:', {
-  ...process.env,
-  NEXT_PUBLIC_AWS_SECRET_KEY: '已设置'  // 不打印实际值
-});
-
-// 详细的环境变量检查
-const envCheck = {
-  accessKey: process.env.NEXT_PUBLIC_ACCESS_KEY_ID,
-  secretKey: process.env.NEXT_PUBLIC_SECRET_ACCESS_KEY,
-  region: process.env.NEXT_PUBLIC_REGION || 'us-east-2',
-  allEnvs: Object.keys(process.env)
-};
-
-console.log('[DEBUG] 详细环境变量检查:', {
-  ...envCheck,
-  secretKey: envCheck.secretKey ? '已设置' : undefined,
-  accessKey: envCheck.accessKey ? '已设置' : undefined
-});
-
-if (!envCheck.accessKey || !envCheck.secretKey) {
-  console.error('[ERROR] AWS 凭证缺失:', {
-    accessKeyExists: !!envCheck.accessKey,
-    secretKeyExists: !!envCheck.secretKey
-  });
-  throw new Error('AWS credentials missing');
-}
-
-const dbConfig = {
-  region: envCheck.region,
-  credentials: {
-    accessKeyId: envCheck.accessKey,
-    secretAccessKey: envCheck.secretKey
+    return {
+      region: CONFIG.region,
+      credentials
+    };
+  } catch (error) {
+    console.error('[ERROR] Cognito 凭证获取失败:', error);
+    throw error;
   }
-};
+}
 
-console.log('[DEBUG] DynamoDB 配置:', {
-  region: dbConfig.region,
-  hasCredentials: !!dbConfig.credentials
-});
+// 创建 DynamoDB 客户端
+async function createDynamoDBClient() {
+  try {
+    const config = await getDynamoDBConfig();
+    console.log('[DEBUG] DynamoDB 配置:', {
+      region: config.region,
+      hasCredentials: !!config.credentials
+    });
+    
+    const client = new DynamoDBClient(config);
+    return DynamoDBDocumentClient.from(client);
+  } catch (error) {
+    console.error('[ERROR] DynamoDB 客户端创建失败:', error);
+    throw error;
+  }
+}
 
-const client = new DynamoDBClient(dbConfig);
-const docClient = DynamoDBDocumentClient.from(client);
+// CORS 配置
+const ALLOWED_ORIGINS = [
+  'https://main.d3ts7h8kta7yzt.amplifyapp.com',
+  'https://ai4kingdom.com',
+  'http://localhost:3000'
+];
+
+function setCORSHeaders(origin: string | null) {
+  const headers = new Headers({
+    'Content-Type': 'application/json',
+    'Access-Control-Allow-Credentials': 'true',
+    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-WP-Nonce, X-Requested-With, Accept',
+  });
+
+  if (origin && ALLOWED_ORIGINS.includes(origin)) {
+    headers.set('Access-Control-Allow-Origin', origin);
+    // 添加 Vary 头以支持多源
+    headers.set('Vary', 'Origin');
+  }
+
+  return headers;
+}
 
 // OpenAI 配置和客户端创建
 function createOpenAIClient() {
@@ -112,6 +130,7 @@ const withErrorHandler = (handler: Function) => async (request: Request) => {
 // 添加获取 Prompt 的函数
 async function getPromptFromDB(vectorStoreId: string) {
   try {
+    const docClient = await createDynamoDBClient();
     const command = new GetCommand({
       TableName: "AIPrompts",
       Key: { id: vectorStoreId }
@@ -126,28 +145,6 @@ async function getPromptFromDB(vectorStoreId: string) {
   }
 }
 
-// 添加 CORS 配置
-const ALLOWED_ORIGINS = [
-  'https://main.d3ts7h8kta7yzt.amplifyapp.com',
-  'https://ai4kingdom.com'
-];
-
-function setCORSHeaders(origin: string | null) {
-  if (!origin || !ALLOWED_ORIGINS.includes(origin)) {
-    return new Headers({
-      'Content-Type': 'application/json'
-    });
-  }
-  
-  return new Headers({
-    'Content-Type': 'application/json',
-    'Access-Control-Allow-Origin': origin,
-    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-    'Access-Control-Allow-Credentials': 'true'
-  });
-}
-
 // POST 处理函数
 export const POST = withErrorHandler(async (request: Request) => {
   const origin = request.headers.get('origin');
@@ -155,8 +152,8 @@ export const POST = withErrorHandler(async (request: Request) => {
   
   try {
     const { userId, message } = await request.json();
-    console.log('[DEBUG] 收到用户消息:', { userId, message });
-
+    const docClient = await createDynamoDBClient();
+    
     // 1. 初始化 OpenAI 客户端
     const openai = createOpenAIClient();
     console.log('[DEBUG] OpenAI 客户端初始化成功');
@@ -228,35 +225,26 @@ export const POST = withErrorHandler(async (request: Request) => {
       .join('\n') || '抱歉，我现在无法回答。';
 
     // 10. 储存对话记录
-    const timestamp = new Date().toISOString();
-    const chatItem = {
-      UserId: String(userId),
-      Timestamp: timestamp,
-      Message: JSON.stringify({
-        userMessage: message,
-        botReply: botReply.trim(),
-        threadId: thread.id,
-        assistantId: assistant.id
-      })
-    };
-
-    const dbConfig = await getDynamoDBConfig();
-    const client = new DynamoDBClient(dbConfig);
-    const docClient = DynamoDBDocumentClient.from(client);
-
     await docClient.send(new PutCommand({
-      TableName: "ChatHistory",
-      Item: chatItem
+      TableName: CONFIG.tableName,
+      Item: {
+        UserId: String(userId),
+        Timestamp: new Date().toISOString(),
+        Message: JSON.stringify({
+          userMessage: message,
+          botReply: botReply.trim(),
+          threadId: thread.id
+        })
+      }
     }));
 
-    // 11. 返回响应
     return new Response(JSON.stringify({ 
       reply: botReply.trim(),
       threadId: thread.id
     }), { headers });
-
+    
   } catch (error) {
-    console.error('[ERROR]:', error);
+    console.error('[ERROR] 处理请求失败:', error);
     return new Response(JSON.stringify({
       error: '处理失败',
       details: error instanceof Error ? error.message : '未知错误'
@@ -267,7 +255,7 @@ export const POST = withErrorHandler(async (request: Request) => {
   }
 });
 
-// 添加 GET 方法处理历史记录查询
+// GET 处理函数
 export async function GET(request: Request) {
   const origin = request.headers.get('origin');
   const headers = setCORSHeaders(origin);
@@ -278,40 +266,40 @@ export async function GET(request: Request) {
   if (!userId) {
     return new Response(JSON.stringify({ error: "UserId is required" }), {
       status: 400,
-      headers: { 'Content-Type': 'application/json' }
+      headers
     });
   }
 
   try {
-    console.log('[DEBUG] GET 请求开始, 参数:', { userId });
-    
-    const command = new QueryCommand({
-      TableName: "ChatHistory",
+    const docClient = await createDynamoDBClient();
+    const response = await docClient.send(new QueryCommand({
+      TableName: CONFIG.tableName,
       KeyConditionExpression: "UserId = :userId",
       ExpressionAttributeValues: {
         ":userId": String(userId)
       }
-    });
+    }));
 
-    const response = await docClient.send(command);
-    console.log('[DEBUG] DynamoDB 应:', JSON.stringify(response, null, 2));
-
-    const items = response.Items?.map(item => ({
-      UserId: item.UserId,
-      Timestamp: item.Timestamp,
-      Message: item.Message
-    })) || [];
-
-    return new Response(JSON.stringify(items), { headers });
-
+    return new Response(JSON.stringify(response.Items), { headers });
   } catch (error) {
     console.error('[ERROR] 获取聊天历史失败:', error);
     return new Response(JSON.stringify({
-      error: "Failed to fetch chat history",
+      error: "获取聊天历史失败",
       details: error instanceof Error ? error.message : '未知错误'
     }), {
       status: 500,
-      headers: { 'Content-Type': 'application/json' }
+      headers
     });
   }
+}
+
+// 添加 OPTIONS 处理
+export async function OPTIONS(request: Request) {
+  const origin = request.headers.get('origin');
+  const headers = setCORSHeaders(origin);
+  
+  return new Response(null, {
+    status: 204,
+    headers
+  });
 }

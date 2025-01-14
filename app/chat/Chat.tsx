@@ -96,49 +96,40 @@ export default function Chat() {
     setIsLoading(true);
     const currentInput = input;
     setInput('');
-    let retries = 3;
 
-    while (retries > 0) {
-      try {
-        const response = await fetch('/api/chat', {
-          method: 'POST',
-          credentials: 'include',
-          headers: { 
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({ 
-            userId: user.user_id,
-            message: currentInput 
-          })
-        });
+    try {
+      const response = await fetch('/api/chat', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${user.nonce}`,
+          'X-WP-Nonce': user.nonce
+        },
+        body: JSON.stringify({ 
+          userId: user.user_id,
+          message: currentInput 
+        })
+      });
 
-        if (!response.ok) {
-          const errorText = await response.text();
-          throw new Error(errorText || '发送失败');
-        }
-
-        const data = await response.json();
-        setMessages(prev => [...prev, 
-          { sender: 'user', text: currentInput },
-          { sender: 'bot', text: data.reply }
-        ]);
-        
-        setWeeklyUsage(prev => prev + 1);
-        break; // 成功后跳出重试循环
-        
-      } catch (err) {
-        retries--;
-        if (retries === 0) {
-          setError(err instanceof Error ? err.message : '发送失败');
-        } else {
-          console.log(`重试剩余次数: ${retries}`);
-          await new Promise(resolve => setTimeout(resolve, 1000)); // 重试前等待1秒
-        }
+      if (!response.ok) {
+        throw new Error(await response.text() || '发送失败');
       }
+
+      const data = await response.json();
+      setMessages(prev => [...prev, 
+        { sender: 'user', text: currentInput },
+        { sender: 'bot', text: data.reply }
+      ]);
+      
+      setWeeklyUsage(prev => prev + 1);
+      
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '发送失败');
+    } finally {
+      setIsLoading(false);
+      scrollToBottom();
     }
-    
-    setIsLoading(false);
-    scrollToBottom();
   };
 
   if (loading) return <div>加载中...</div>;
