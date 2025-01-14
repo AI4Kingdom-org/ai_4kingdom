@@ -31,6 +31,7 @@ const TestModule = () => {
   const [promptError, setPromptError] = useState<string | null>(null);
   const VECTOR_STORE_ID = 'vs_AMJIJ1zfGnzHpI1msv4T8Ww3'; // 您的 vector store ID
   const [isInitialized, setIsInitialized] = useState(false);
+  const [wpNonce, setWpNonce] = useState<string>('');
 
   // 获取文件列表
   const fetchFiles = async () => {
@@ -52,6 +53,7 @@ const TestModule = () => {
         credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
+          'X-WP-Nonce': wpNonce,
           'X-Requested-With': 'XMLHttpRequest'
         }
       });
@@ -119,6 +121,9 @@ const TestModule = () => {
     if (!authLoading && !user) {
       setPromptError('请先登录');
       return;
+    }
+    if (user?.nonce) {
+      setWpNonce(user.nonce);
     }
   }, [user, authLoading]);
 

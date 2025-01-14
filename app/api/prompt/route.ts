@@ -34,10 +34,10 @@ const createDynamoDBClient = () => {
     validateEnvVars();
     
     return new DynamoDBClient({
-      region: process.env.NEXT_PUBLIC_REGION,
+      region: process.env.NEXT_PUBLIC_AWS_REGION,
       credentials: {
-        accessKeyId: process.env.NEXT_PUBLIC_ACCESS_KEY_ID!,     // 更新变量名
-        secretAccessKey: process.env.NEXT_PUBLIC_SECRET_ACCESS_KEY! // 更新变量名
+        accessKeyId: process.env.NEXT_PUBLIC_AWS_ACCESS_KEY!,
+        secretAccessKey: process.env.NEXT_PUBLIC_AWS_SECRET_KEY!
       }
     });
   } catch (error) {
@@ -105,8 +105,8 @@ export async function GET(request: Request) {
         type: error instanceof Error ? error.name : typeof error,
         envCheck: {
           hasRegion: !!process.env.NEXT_PUBLIC_REGION,
-          hasAccessKey: !!process.env.NEXT_PUBLIC_ACCESS_KEY_ID,     // 更新变量名
-          hasSecretKey: !!process.env.NEXT_PUBLIC_SECRET_ACCESS_KEY  // 更新变量名
+          hasAccessKey: !!process.env.NEXT_PUBLIC_AWS_ACCESS_KEY,     // 更新变量名
+          hasSecretKey: !!process.env.NEXT_PUBLIC_AWS_SECRET_KEY  // 更新变量名
         }
       },
       { status: 500 }
