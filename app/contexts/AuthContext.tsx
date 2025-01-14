@@ -32,15 +32,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           credentials: 'include',
           headers: {
             'Content-Type': 'application/json',
-            'X-Requested-With': 'XMLHttpRequest',
-            'Accept': 'application/json'
-          },
-          mode: 'cors'
+            'X-Requested-With': 'XMLHttpRequest'
+          }
         });
 
         if (!response.ok) {
-          const errorData = await response.json().catch(() => ({}));
-          throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
+          throw new Error(`HTTP error! status: ${response.status}`);
         }
 
         const data = await response.json();
