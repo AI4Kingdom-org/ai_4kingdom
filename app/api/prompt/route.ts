@@ -17,43 +17,42 @@ console.log('[DEBUG] AWS 环境变量:', {
 // 检查环境变量
 const validateEnvVars = () => {
   const requiredVars = [
-    'NEXT_PUBLIC_ACCESS_KEY_ID',     // 服务器上的变量名
-    'NEXT_PUBLIC_SECRET_ACCESS_KEY', // 服务器上的变量名
     'NEXT_PUBLIC_REGION'
   ];
   
-  const missingVars = requiredVars.filter(varName => !process.env[varName]);
-  
-  if (missingVars.length > 0) {
-    console.error('环境变量检查失败:', {
-      required: requiredVars,
+  // 检查AWS凭证
+  const credentials = {
+    accessKeyId: process.env.NEXT_PUBLIC_ACCESS_KEY_ID,
+    secretAccessKey: process.env.NEXT_PUBLIC_SECRET_ACCESS_KEY,
+    region: process.env.NEXT_PUBLIC_AWS_REGION || process.env.NEXT_PUBLIC_REGION
+  };
+
+  if (!credentials.accessKeyId || !credentials.secretAccessKey) {
+    console.error('AWS凭证检查失败:', {
       available: Object.keys(process.env).filter(key => key.startsWith('NEXT_PUBLIC_')),
-      missing: missingVars
+      hasAccessKey: !!credentials.accessKeyId,
+      hasSecretKey: !!credentials.secretAccessKey
     });
-    throw new Error(`Missing required environment variables: ${missingVars.join(', ')}`);
+    throw new Error('AWS credentials not found');
   }
+
+  return credentials;
 };
 
 // 创建 DynamoDB 客户端
 const createDynamoDBClient = () => {
   try {
-    validateEnvVars();
+    const credentials = validateEnvVars();
     
     return new DynamoDBClient({
-      region: process.env.NEXT_PUBLIC_AWS_REGION || process.env.NEXT_PUBLIC_REGION,
+      region: credentials.region,
       credentials: {
-        accessKeyId: process.env.NEXT_PUBLIC_ACCESS_KEY_ID!,
-        secretAccessKey: process.env.NEXT_PUBLIC_SECRET_ACCESS_KEY!
+        accessKeyId: credentials.accessKeyId!,
+        secretAccessKey: credentials.secretAccessKey!
       }
     });
   } catch (error) {
     console.error('[ERROR] DynamoDB 客户端创建失败:', error);
-    console.error('[DEBUG] 环境变量状态:', {
-      region: process.env.NEXT_PUBLIC_AWS_REGION || process.env.NEXT_PUBLIC_REGION,
-      hasAccessKey: !!process.env.NEXT_PUBLIC_ACCESS_KEY_ID,
-      hasSecretKey: !!process.env.NEXT_PUBLIC_SECRET_ACCESS_KEY,
-      availableEnvVars: Object.keys(process.env).filter(key => key.startsWith('NEXT_PUBLIC_'))
-    });
     throw error;
   }
 };
@@ -116,9 +115,10 @@ export async function GET(request: Request) {
         details: error instanceof Error ? error.message : '未知错误',
         type: error instanceof Error ? error.name : typeof error,
         envCheck: {
-          hasRegion: !!process.env.NEXT_PUBLIC_REGION,
-          hasAccessKey: !!process.env.NEXT_PUBLIC_AWS_ACCESS_KEY,     // 更新变量名
-          hasSecretKey: !!process.env.NEXT_PUBLIC_AWS_SECRET_KEY  // 更新变量名
+          hasRegion: !!process.env.NEXT_PUBLIC_AWS_REGION || !!process.env.NEXT_PUBLIC_REGION,
+          hasAccessKey: !!process.env.NEXT_PUBLIC_ACCESS_KEY_ID,
+          hasSecretKey: !!process.env.NEXT_PUBLIC_SECRET_ACCESS_KEY,
+          availableEnvVars: Object.keys(process.env).filter(key => key.startsWith('NEXT_PUBLIC_'))
         }
       },
       { status: 500 }
