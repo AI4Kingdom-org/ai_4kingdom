@@ -126,8 +126,33 @@ async function getPromptFromDB(vectorStoreId: string) {
   }
 }
 
+// 添加 CORS 配置
+const ALLOWED_ORIGINS = [
+  'https://main.d3ts7h8kta7yzt.amplifyapp.com',
+  'https://ai4kingdom.com'
+];
+
+function setCORSHeaders(origin: string | null) {
+  if (!origin || !ALLOWED_ORIGINS.includes(origin)) {
+    return new Headers({
+      'Content-Type': 'application/json'
+    });
+  }
+  
+  return new Headers({
+    'Content-Type': 'application/json',
+    'Access-Control-Allow-Origin': origin,
+    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    'Access-Control-Allow-Credentials': 'true'
+  });
+}
+
 // POST 处理函数
 export const POST = withErrorHandler(async (request: Request) => {
+  const origin = request.headers.get('origin');
+  const headers = setCORSHeaders(origin);
+  
   try {
     const { userId, message } = await request.json();
     console.log('[DEBUG] 收到用户消息:', { userId, message });
@@ -228,24 +253,25 @@ export const POST = withErrorHandler(async (request: Request) => {
     return new Response(JSON.stringify({ 
       reply: botReply.trim(),
       threadId: thread.id
-    }), {
-      headers: { 'Content-Type': 'application/json' }
-    });
+    }), { headers });
 
   } catch (error) {
     console.error('[ERROR]:', error);
     return new Response(JSON.stringify({
       error: '处理失败',
       details: error instanceof Error ? error.message : '未知错误'
-    }), {
-      status: 500,
-      headers: { 'Content-Type': 'application/json' }
+    }), { 
+      status: 500, 
+      headers 
     });
   }
 });
 
 // 添加 GET 方法处理历史记录查询
 export async function GET(request: Request) {
+  const origin = request.headers.get('origin');
+  const headers = setCORSHeaders(origin);
+  
   const { searchParams } = new URL(request.url);
   const userId = searchParams.get("userId");
 
@@ -276,9 +302,7 @@ export async function GET(request: Request) {
       Message: item.Message
     })) || [];
 
-    return new Response(JSON.stringify(items), {
-      headers: { 'Content-Type': 'application/json' }
-    });
+    return new Response(JSON.stringify(items), { headers });
 
   } catch (error) {
     console.error('[ERROR] 获取聊天历史失败:', error);

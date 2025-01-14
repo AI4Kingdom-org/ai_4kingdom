@@ -13,13 +13,40 @@ console.log('[DEBUG] AWS 环境变量:', {
   hasSecretKey: !!process.env.NEXT_PUBLIC_AWS_SECRET_KEY
 });
 
-const client = new DynamoDBClient({
-  region: process.env.NEXT_PUBLIC_REGION || "us-east-2",
-  credentials: {
-    accessKeyId: process.env.NEXT_PUBLIC_AWS_ACCESS_KEY!,
-    secretAccessKey: process.env.NEXT_PUBLIC_AWS_SECRET_KEY!
+// 检查环境变量
+const validateEnvVars = () => {
+  const requiredVars = [
+    'NEXT_PUBLIC_ACCESS_KEY_ID',     // 更新变量名
+    'NEXT_PUBLIC_SECRET_ACCESS_KEY', // 更新变量名
+    'NEXT_PUBLIC_REGION'
+  ];
+  
+  const missingVars = requiredVars.filter(varName => !process.env[varName]);
+  
+  if (missingVars.length > 0) {
+    throw new Error(`Missing required environment variables: ${missingVars.join(', ')}`);
   }
-});
+};
+
+// 创建 DynamoDB 客户端
+const createDynamoDBClient = () => {
+  try {
+    validateEnvVars();
+    
+    return new DynamoDBClient({
+      region: process.env.NEXT_PUBLIC_REGION,
+      credentials: {
+        accessKeyId: process.env.NEXT_PUBLIC_ACCESS_KEY_ID!,     // 更新变量名
+        secretAccessKey: process.env.NEXT_PUBLIC_SECRET_ACCESS_KEY! // 更新变量名
+      }
+    });
+  } catch (error) {
+    console.error('[ERROR] DynamoDB 客户端创建失败:', error);
+    throw error;
+  }
+};
+
+const client = createDynamoDBClient();
 
 // 添加调试日志查看凭证是否正确加载
 console.log('[DEBUG] AWS Config:', {
@@ -75,7 +102,12 @@ export async function GET(request: Request) {
       { 
         error: '获取Prompt失败',
         details: error instanceof Error ? error.message : '未知错误',
-        type: error instanceof Error ? error.name : typeof error
+        type: error instanceof Error ? error.name : typeof error,
+        envCheck: {
+          hasRegion: !!process.env.NEXT_PUBLIC_REGION,
+          hasAccessKey: !!process.env.NEXT_PUBLIC_ACCESS_KEY_ID,     // 更新变量名
+          hasSecretKey: !!process.env.NEXT_PUBLIC_SECRET_ACCESS_KEY  // 更新变量名
+        }
       },
       { status: 500 }
     );

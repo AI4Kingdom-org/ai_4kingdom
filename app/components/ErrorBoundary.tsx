@@ -1,29 +1,40 @@
-import React, { ErrorInfo } from 'react';
+import React, { Component, ErrorInfo, ReactNode } from 'react';
 
-interface ErrorBoundaryState {
+interface Props {
+  children: ReactNode;
+}
+
+interface State {
   hasError: boolean;
-  error: Error | null;
+  error?: Error;
 }
 
-interface ErrorBoundaryProps {
-  children: React.ReactNode;
-}
+export class ErrorBoundary extends Component<Props, State> {
+  public state: State = {
+    hasError: false
+  };
 
-export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
-  state: ErrorBoundaryState = { hasError: false, error: null };
-
-  static getDerivedStateFromError(error: Error): ErrorBoundaryState {
+  public static getDerivedStateFromError(error: Error): State {
     return { hasError: true, error };
   }
 
-  componentDidCatch(error: Error, errorInfo: ErrorInfo): void {
-    console.error('渲染错误:', error, errorInfo);
+  public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+    console.error('错误详情:', error, errorInfo);
   }
 
-  render() {
+  public render() {
     if (this.state.hasError) {
-      return <div>渲染错误: {this.state.error?.message}</div>;
+      return (
+        <div style={{ padding: '20px', textAlign: 'center' }}>
+          <h2>出错了</h2>
+          <p>{this.state.error?.message}</p>
+          <button onClick={() => window.location.reload()}>
+            刷新页面
+          </button>
+        </div>
+      );
     }
+
     return this.props.children;
   }
 } 
