@@ -150,7 +150,9 @@ async function getUserActiveThread(userId: string) {
   const docClient = await createDynamoDBClient();
   const command = new GetCommand({
     TableName: "UserThreads",
-    Key: { UserId: userId }
+    Key: { 
+      "UserId": String(userId)
+    }
   });
   const response = await docClient.send(command);
   return response.Item?.activeThreadId;
@@ -161,8 +163,8 @@ async function updateUserActiveThread(userId: string, threadId: string) {
   const command = new PutCommand({
     TableName: "UserThreads",
     Item: {
-      UserId: userId,
-      activeThreadId: threadId
+      "UserId": String(userId),
+      "activeThreadId": threadId
     }
   });
   return docClient.send(command);
