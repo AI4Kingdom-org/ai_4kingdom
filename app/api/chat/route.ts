@@ -170,6 +170,33 @@ async function updateUserActiveThread(userId: string, threadId: string) {
   return docClient.send(command);
 }
 
+async function waitForCompletion(openai: OpenAI, threadId: string, runId: string, maxAttempts = 20) {
+  let attempts = 0;
+  let runStatus = await openai.beta.threads.runs.retrieve(threadId, runId);
+  
+  while (runStatus.status !== 'completed' && attempts < maxAttempts) {
+    if (runStatus.status === 'failed') {
+      throw new Error('Assistant run failed');
+    }
+    
+    // 使用指数退避策略
+    const delay = Math.min(1000 * Math.pow(1.5, attempts), 5000);
+    await new Promise(resolve => setTimeout(resolve, delay));
+    
+    attempts++;
+    runStatus = await openai.beta.threads.runs.retrieve(threadId, runId);
+    
+    // 记录状态变化
+    console.log(`[DEBUG] Run status: ${runStatus.status}, attempt: ${attempts}`);
+  }
+  
+  if (attempts >= maxAttempts) {
+    throw new Error('Operation timed out');
+  }
+  
+  return runStatus;
+}
+
 // 修改 POST 处理函数
 export const POST = withErrorHandler(async (request: Request) => {
   const origin = request.headers.get('origin');
@@ -235,20 +262,20 @@ export const POST = withErrorHandler(async (request: Request) => {
     );
 
     // 7. 等待运行完成
-    let runStatus = await openai.beta.threads.runs.retrieve(
-      threadId,
-      run.id
-    );
-
-    while (runStatus.status !== 'completed') {
-      if (runStatus.status === 'failed') {
-        throw new Error('Assistant run failed');
+    try {
+      const runStatus = await waitForCompletion(openai, threadId, run.id);
+      // 处理响应...
+    } catch (error: unknown) {
+      if (error instanceof Error && error.message === 'Operation timed out') {
+        return new Response(JSON.stringify({ 
+          error: '请求超时',
+          details: '服务器响应时间过长，请稍后重试'
+        }), { 
+          status: 504,
+          headers 
+        });
       }
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      runStatus = await openai.beta.threads.runs.retrieve(
-        threadId,
-        run.id
-      );
+      throw error;
     }
 
     // 8. 获取助手回复
