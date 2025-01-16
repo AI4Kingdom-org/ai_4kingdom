@@ -204,37 +204,28 @@ export const POST = withErrorHandler(async (request: Request) => {
   try {
     const { userId, message } = await request.json();
     const docClient = await createDynamoDBClient();
-    
-    // 1. 初始化 OpenAI 客户端
     const openai = createOpenAIClient();
     
-    // 2. 获取或创建 thread
     let threadId = await getUserActiveThread(userId);
     let thread;
     
     if (threadId) {
-      // 使用现有 thread
       thread = await openai.beta.threads.retrieve(threadId);
-      // 添加新消息到现有 thread
       await openai.beta.threads.messages.create(threadId, {
         role: "user",
         content: message
       });
     } else {
-      // 创建新的 thread
       thread = await openai.beta.threads.create({
         messages: [{ role: "user", content: message }]
       });
-      // 保存新的 threadId
       await updateUserActiveThread(userId, thread.id);
       threadId = thread.id;
     }
 
-    // 3. 获取 vector store ID 和 prompt
     const vector_store_id = process.env.NEXT_PUBLIC_VECTOR_STORE_ID || 'vs_AMJIJ1zfGnzHpI1msv4T8Ww3';
     const promptContent = await getPromptFromDB(vector_store_id);
 
-    // 4. 创建 assistant
     const assistant = await openai.beta.assistants.create({
       name: "Research Assistant",
       instructions: promptContent,
@@ -242,7 +233,6 @@ export const POST = withErrorHandler(async (request: Request) => {
       tools: [{ type: "file_search" }]
     });
 
-    // 5. 更新 assistant 的 tool resources
     await openai.beta.assistants.update(
       assistant.id,
       {
@@ -254,45 +244,70 @@ export const POST = withErrorHandler(async (request: Request) => {
       }
     );
 
-    // 6. 运行助手
     const run = await openai.beta.threads.runs.create(
       threadId,
       { assistant_id: assistant.id }
     );
 
-    // 设置更长的超时时间
-    const timeoutPromise = new Promise((_, reject) => {
-      setTimeout(() => reject(new Error('请求超时')), 55000); // 55秒超时
-    });
-
-    const responsePromise = (async () => {
-      try {
-        const runStatus = await waitForCompletion(openai, threadId, run.id);
-        // 处理响应...
-      } catch (error) {
-        if (error instanceof Error && error.message.includes('超时')) {
-          return new Response(JSON.stringify({ 
-            error: '请求超时',
-            details: '服务器响应时间过长，请稍后重试'
-          }), { 
-            status: 504,
-            headers 
-          });
-        }
-        throw error;
+    try {
+      const runStatus = await waitForCompletion(openai, threadId, run.id);
+      
+      // 获取最新的消息
+      const messages = await openai.beta.threads.messages.list(threadId);
+      const lastMessage = messages.data[0];
+      
+      // 确保有消息内容
+      if (!lastMessage || !lastMessage.content || lastMessage.content.length === 0) {
+        throw new Error('无法获取助手回复');
       }
-    })();
 
-    return await Promise.race([responsePromise, timeoutPromise]);
+      // 获取文本内容
+      const botReply = lastMessage.content[0].type === 'text' 
+        ? lastMessage.content[0].text.value 
+        : '无法解析助手回复';
+
+      // 保存到 DynamoDB
+      await docClient.send(new PutCommand({
+        TableName: "ChatHistory",
+        Item: {
+          UserId: String(userId),
+          Timestamp: new Date().toISOString(),
+          Message: JSON.stringify({
+            userMessage: message,
+            botReply: botReply
+          })
+        }
+      }));
+
+      // 返回响应
+      return new Response(JSON.stringify({
+        reply: botReply,
+        threadId: threadId
+      }), { 
+        status: 200,
+        headers 
+      });
+
+    } catch (error) {
+      if (error instanceof Error && error.message.includes('超时')) {
+        return new Response(JSON.stringify({ 
+          error: '请求超时',
+          details: '服务器响应时间过长，请稍后重试'
+        }), { 
+          status: 504,
+          headers 
+        });
+      }
+      throw error;
+    }
     
   } catch (error) {
     console.error('[ERROR] 处理请求失败:', error);
-    const status = error instanceof Error && error.message.includes('超时') ? 504 : 500;
     return new Response(JSON.stringify({
       error: '处理失败',
       details: error instanceof Error ? error.message : '未知错误'
     }), { 
-      status, 
+      status: error instanceof Error && error.message.includes('超时') ? 504 : 500,
       headers 
     });
   }
