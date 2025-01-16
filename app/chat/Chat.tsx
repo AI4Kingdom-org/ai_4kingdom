@@ -103,8 +103,8 @@ export default function Chat() {
         credentials: 'include',
         headers: { 
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${user.nonce}`,
-          'X-WP-Nonce': user.nonce
+          'X-WP-Nonce': user.nonce,
+          'X-Requested-With': 'XMLHttpRequest'
         },
         body: JSON.stringify({ 
           userId: user.user_id,
@@ -113,18 +113,26 @@ export default function Chat() {
       });
 
       if (!response.ok) {
-        throw new Error(await response.text() || '发送失败');
+        const errorText = await response.text();
+        throw new Error(errorText || '发送失败');
       }
 
       const data = await response.json();
+      const botReply = data.reply || data.botReply || data.message;
+      
+      if (!botReply) {
+        throw new Error('服务器响应格式错误');
+      }
+
       setMessages(prev => [...prev, 
         { sender: 'user', text: currentInput },
-        { sender: 'bot', text: data.reply }
+        { sender: 'bot', text: botReply }
       ]);
       
       setWeeklyUsage(prev => prev + 1);
       
     } catch (err) {
+      console.error('发送消息错误:', err);
       setError(err instanceof Error ? err.message : '发送失败');
     } finally {
       setIsLoading(false);
