@@ -200,22 +200,34 @@ async function waitForCompletion(openai: OpenAI, threadId: string, runId: string
 export const POST = withErrorHandler(async (request: Request) => {
   const origin = request.headers.get('origin');
   const headers = setCORSHeaders(origin);
+  console.log('[DEBUG] 开始处理POST请求');
   
   try {
-    const { userId, message } = await request.json();
+    const requestData = await request.json();
+    console.log('[DEBUG] 请求数据:', {
+      userId: requestData.userId,
+      messageLength: requestData.message?.length,
+      headers: Object.fromEntries(request.headers.entries())
+    });
+
+    const { userId, message } = requestData;
     const docClient = await createDynamoDBClient();
     const openai = createOpenAIClient();
     
+    console.log('[DEBUG] 获取用户线程');
     let threadId = await getUserActiveThread(userId);
-    let thread;
+    console.log('[DEBUG] 当前线程ID:', threadId);
     
+    let thread;
     if (threadId) {
+      console.log('[DEBUG] 使用现有线程');
       thread = await openai.beta.threads.retrieve(threadId);
       await openai.beta.threads.messages.create(threadId, {
         role: "user",
         content: message
       });
     } else {
+      console.log('[DEBUG] 创建新线程');
       thread = await openai.beta.threads.create({
         messages: [{ role: "user", content: message }]
       });
@@ -223,9 +235,11 @@ export const POST = withErrorHandler(async (request: Request) => {
       threadId = thread.id;
     }
 
+    console.log('[DEBUG] 获取 Prompt');
     const vector_store_id = process.env.NEXT_PUBLIC_VECTOR_STORE_ID || 'vs_AMJIJ1zfGnzHpI1msv4T8Ww3';
     const promptContent = await getPromptFromDB(vector_store_id);
 
+    console.log('[DEBUG] 创建 Assistant');
     const assistant = await openai.beta.assistants.create({
       name: "Research Assistant",
       instructions: promptContent,
@@ -233,6 +247,7 @@ export const POST = withErrorHandler(async (request: Request) => {
       tools: [{ type: "file_search" }]
     });
 
+    console.log('[DEBUG] 更新 Assistant');
     await openai.beta.assistants.update(
       assistant.id,
       {
@@ -244,29 +259,31 @@ export const POST = withErrorHandler(async (request: Request) => {
       }
     );
 
+    console.log('[DEBUG] 创建运行');
     const run = await openai.beta.threads.runs.create(
       threadId,
       { assistant_id: assistant.id }
     );
 
     try {
+      console.log('[DEBUG] 等待运行完成');
       const runStatus = await waitForCompletion(openai, threadId, run.id);
+      console.log('[DEBUG] 运行完成状态:', runStatus.status);
       
-      // 获取最新的消息
+      console.log('[DEBUG] 获取消息');
       const messages = await openai.beta.threads.messages.list(threadId);
       const lastMessage = messages.data[0];
       
-      // 确保有消息内容
       if (!lastMessage || !lastMessage.content || lastMessage.content.length === 0) {
+        console.error('[ERROR] 无消息内容');
         throw new Error('无法获取助手回复');
       }
 
-      // 获取文本内容
       const botReply = lastMessage.content[0].type === 'text' 
         ? lastMessage.content[0].text.value 
         : '无法解析助手回复';
-
-      // 保存到 DynamoDB
+      
+      console.log('[DEBUG] 保存到DynamoDB');
       await docClient.send(new PutCommand({
         TableName: "ChatHistory",
         Item: {
@@ -279,7 +296,7 @@ export const POST = withErrorHandler(async (request: Request) => {
         }
       }));
 
-      // 返回响应
+      console.log('[DEBUG] 准备返回响应');
       return new Response(JSON.stringify({
         reply: botReply,
         threadId: threadId
@@ -289,6 +306,7 @@ export const POST = withErrorHandler(async (request: Request) => {
       });
 
     } catch (error) {
+      console.error('[ERROR] 运行过程错误:', error);
       if (error instanceof Error && error.message.includes('超时')) {
         return new Response(JSON.stringify({ 
           error: '请求超时',
@@ -302,10 +320,19 @@ export const POST = withErrorHandler(async (request: Request) => {
     }
     
   } catch (error) {
-    console.error('[ERROR] 处理请求失败:', error);
+    console.error('[ERROR] 处理请求失败:', {
+      error: error instanceof Error ? error.message : '未知错误',
+      stack: error instanceof Error ? error.stack : undefined,
+      type: error instanceof Error ? error.name : typeof error
+    });
+    
     return new Response(JSON.stringify({
       error: '处理失败',
-      details: error instanceof Error ? error.message : '未知错误'
+      details: error instanceof Error ? error.message : '未知错误',
+      debug: {
+        timestamp: new Date().toISOString(),
+        errorType: error instanceof Error ? error.name : typeof error
+      }
     }), { 
       status: error instanceof Error && error.message.includes('超时') ? 504 : 500,
       headers 
