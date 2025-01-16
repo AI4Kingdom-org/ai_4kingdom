@@ -145,17 +145,105 @@ async function getPromptFromDB(vectorStoreId: string) {
   }
 }
 
-// 添加新的函数来处理 UserThreads 表操作
-async function getUserActiveThread(userId: string) {
-  const docClient = await createDynamoDBClient();
-  const command = new GetCommand({
-    TableName: "UserThreads",
-    Key: { 
-      "UserId": String(userId)
+const MAX_MESSAGES_PER_THREAD = 10;  // 每个线程最多保留10条消息
+const THREAD_MAX_AGE = 30 * 60 * 1000;  // 线程最大存活时间30分钟
+
+async function shouldCreateNewThread(threadId: string, userId: string, openai: OpenAI) {
+  try {
+    const docClient = await createDynamoDBClient();
+    
+    // 获取当前线程的消息数量
+    const messages = await openai.beta.threads.messages.list(threadId);
+    const messageCount = messages.data.length;
+    
+    console.log('[DEBUG] 当前线程状态:', {
+      threadId,
+      messageCount,
+      maxMessages: MAX_MESSAGES_PER_THREAD
+    });
+
+    // 如果消息数量超过限制，返回true以创建新线程
+    if (messageCount >= MAX_MESSAGES_PER_THREAD) {
+      console.log('[DEBUG] 消息数量超过限制，将创建新线程');
+      return true;
     }
-  });
-  const response = await docClient.send(command);
-  return response.Item?.activeThreadId;
+
+    // 获取线程创建时间
+    const thread = await openai.beta.threads.retrieve(threadId);
+    const threadAge = Date.now() - new Date(thread.created_at * 1000).getTime();
+    
+    // 如果线程时间过长，返回true以创建新线程
+    if (threadAge > THREAD_MAX_AGE) {
+      console.log('[DEBUG] 线程时间超过限制，将创建新线程');
+      return true;
+    }
+
+    return false;
+  } catch (error) {
+    console.error('[ERROR] 检查线程状态失败:', error);
+    return true;  // 出错时创建新线程
+  }
+}
+
+// 修改现有的 getUserActiveThread 函数
+async function getUserActiveThread(userId: string, openai: OpenAI): Promise<string> {
+  try {
+    const docClient = await createDynamoDBClient();
+    const response = await docClient.send(new GetCommand({
+      TableName: CONFIG.tableName,
+      Key: {
+        UserId: String(userId),
+        Type: 'thread'
+      }
+    }));
+
+    const threadId = response.Item?.threadId;
+    
+    if (threadId && await shouldCreateNewThread(threadId, userId, openai)) {
+      // 创建新线程
+      const newThread = await openai.beta.threads.create();
+      
+      // 保存新线程ID
+      await docClient.send(new PutCommand({
+        TableName: CONFIG.tableName,
+        Item: {
+          UserId: String(userId),
+          Type: 'thread',
+          threadId: newThread.id,
+          createdAt: new Date().toISOString()
+        }
+      }));
+      
+      console.log('[DEBUG] 已创建新线程:', newThread.id);
+      return newThread.id;
+    }
+
+    if (!threadId) {
+      // 如果没有现有线程，创建新线程
+      const newThread = await openai.beta.threads.create();
+      
+      await docClient.send(new PutCommand({
+        TableName: CONFIG.tableName,
+        Item: {
+          UserId: String(userId),
+          Type: 'thread',
+          threadId: newThread.id,
+          createdAt: new Date().toISOString()
+        }
+      }));
+      
+      console.log('[DEBUG] 创建首个线程:', newThread.id);
+      return newThread.id;
+    }
+
+    return threadId;
+  } catch (error) {
+    console.error('[ERROR] 获取用户线程失败:', error);
+    // 出错时创建新线程
+    const newThread = await openai.beta.threads.create();
+    console.log('[DEBUG] 错误恢复：创建新线程:', newThread.id);
+    return newThread.id;
+  }
 }
 
 async function updateUserActiveThread(userId: string, threadId: string) {
@@ -218,7 +306,7 @@ export const POST = withErrorHandler(async (request: Request) => {
     const openai = createOpenAIClient();
     
     console.log('[DEBUG] 获取用户线程');
-    let threadId = await getUserActiveThread(userId);
+    let threadId = await getUserActiveThread(userId, openai);
     console.log('[DEBUG] 当前线程状态:', {
       hasThread: !!threadId,
       threadId

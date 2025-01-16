@@ -2,6 +2,8 @@
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import type { UserData } from '../types/auth';
+import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
+import { getDynamoDBConfig } from '../utils/dynamodb';
 
 interface AuthContextType {
   user: UserData | null;
@@ -14,6 +16,17 @@ const AuthContext = createContext<AuthContextType>({
   loading: true,
   error: null
 });
+
+// 缓存 DynamoDB 客户端
+let dynamoDBClient: DynamoDBClient | null = null;
+
+async function getDynamoDBClient() {
+  if (!dynamoDBClient) {
+    const config = await getDynamoDBConfig();
+    dynamoDBClient = new DynamoDBClient(config);
+  }
+  return dynamoDBClient;
+}
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<UserData | null>(null);
