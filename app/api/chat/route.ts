@@ -170,7 +170,8 @@ async function updateUserActiveThread(userId: string, threadId: string) {
   return docClient.send(command);
 }
 
-async function waitForCompletion(openai: OpenAI, threadId: string, runId: string, maxAttempts = 20) {
+// 修改等待完成函数的超时策略
+async function waitForCompletion(openai: OpenAI, threadId: string, runId: string, maxAttempts = 30) {
   let attempts = 0;
   let runStatus = await openai.beta.threads.runs.retrieve(threadId, runId);
   
@@ -179,19 +180,17 @@ async function waitForCompletion(openai: OpenAI, threadId: string, runId: string
       throw new Error('Assistant run failed');
     }
     
-    // 使用指数退避策略
-    const delay = Math.min(1000 * Math.pow(1.5, attempts), 5000);
+    // 使用渐进式延迟策略
+    const delay = Math.min(1000 * Math.pow(1.2, attempts), 3000);
     await new Promise(resolve => setTimeout(resolve, delay));
     
     attempts++;
     runStatus = await openai.beta.threads.runs.retrieve(threadId, runId);
-    
-    // 记录状态变化
     console.log(`[DEBUG] Run status: ${runStatus.status}, attempt: ${attempts}`);
   }
   
   if (attempts >= maxAttempts) {
-    throw new Error('Operation timed out');
+    throw new Error('请求处理超时，请稍后重试');
   }
   
   return runStatus;
@@ -261,57 +260,39 @@ export const POST = withErrorHandler(async (request: Request) => {
       { assistant_id: assistant.id }
     );
 
-    // 7. 等待运行完成
-    try {
-      const runStatus = await waitForCompletion(openai, threadId, run.id);
-      // 处理响应...
-    } catch (error: unknown) {
-      if (error instanceof Error && error.message === 'Operation timed out') {
-        return new Response(JSON.stringify({ 
-          error: '请求超时',
-          details: '服务器响应时间过长，请稍后重试'
-        }), { 
-          status: 504,
-          headers 
-        });
+    // 设置更长的超时时间
+    const timeoutPromise = new Promise((_, reject) => {
+      setTimeout(() => reject(new Error('请求超时')), 55000); // 55秒超时
+    });
+
+    const responsePromise = (async () => {
+      try {
+        const runStatus = await waitForCompletion(openai, threadId, run.id);
+        // 处理响应...
+      } catch (error) {
+        if (error instanceof Error && error.message.includes('超时')) {
+          return new Response(JSON.stringify({ 
+            error: '请求超时',
+            details: '服务器响应时间过长，请稍后重试'
+          }), { 
+            status: 504,
+            headers 
+          });
+        }
+        throw error;
       }
-      throw error;
-    }
+    })();
 
-    // 8. 获取助手回复
-    const messages = await openai.beta.threads.messages.list(threadId);
-    const lastMessage = messages.data.find(msg => msg.role === 'assistant');
-    const botReply = lastMessage?.content
-      .filter(content => content.type === 'text')
-      .map(content => (content.type === 'text' ? content.text.value : ''))
-      .join('\n') || '抱歉，我现在无法回答。';
-
-    // 9. 储存对话记录
-    await docClient.send(new PutCommand({
-      TableName: CONFIG.tableName,
-      Item: {
-        UserId: String(userId),
-        Timestamp: new Date().toISOString(),
-        Message: JSON.stringify({
-          userMessage: message,
-          botReply: botReply.trim(),
-          threadId: threadId
-        })
-      }
-    }));
-
-    return new Response(JSON.stringify({ 
-      reply: botReply.trim(),
-      threadId: threadId
-    }), { headers });
+    return await Promise.race([responsePromise, timeoutPromise]);
     
   } catch (error) {
     console.error('[ERROR] 处理请求失败:', error);
+    const status = error instanceof Error && error.message.includes('超时') ? 504 : 500;
     return new Response(JSON.stringify({
       error: '处理失败',
       details: error instanceof Error ? error.message : '未知错误'
     }), { 
-      status: 500, 
+      status, 
       headers 
     });
   }

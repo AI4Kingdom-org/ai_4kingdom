@@ -98,9 +98,13 @@ export default function Chat() {
     setInput('');
 
     try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 60000); // 60秒超时
+
       const response = await fetch('/api/chat', {
         method: 'POST',
         credentials: 'include',
+        signal: controller.signal,
         headers: { 
           'Content-Type': 'application/json',
           'X-WP-Nonce': user.nonce,
@@ -112,7 +116,12 @@ export default function Chat() {
         })
       });
 
+      clearTimeout(timeoutId);
+
       if (!response.ok) {
+        if (response.status === 504) {
+          throw new Error('请求超时，请稍后重试');
+        }
         const errorText = await response.text();
         throw new Error(errorText || '发送失败');
       }
@@ -129,11 +138,21 @@ export default function Chat() {
         { sender: 'bot', text: botReply }
       ]);
       
+      setError(''); // 清除之前的错误
       setWeeklyUsage(prev => prev + 1);
       
     } catch (err) {
       console.error('发送消息错误:', err);
-      setError(err instanceof Error ? err.message : '发送失败');
+      // 恢复用户输入
+      setInput(currentInput);
+      // 设置更友好的错误消息
+      setError(
+        err instanceof Error 
+          ? (err.name === 'AbortError' 
+            ? '请求超时，请稍后重试' 
+            : err.message)
+          : '发送失败'
+      );
     } finally {
       setIsLoading(false);
       scrollToBottom();
