@@ -62,6 +62,11 @@ export default function Chat() {
     async function fetchHistory() {
       if (!user) return;
       
+      console.log('[DEBUG] 开始获取历史记录:', {
+        userId: user.user_id,
+        userType: user.subscription?.type
+      });
+      
       try {
         const response = await fetch(`/api/chat?userId=${user.user_id}`, {
           credentials: 'include',
@@ -70,17 +75,31 @@ export default function Chat() {
           }
         });
         
+        console.log('[DEBUG] 历史记录响应状态:', {
+          status: response.status,
+          ok: response.ok
+        });
+        
         if (!response.ok) {
           throw new Error(`获取聊天历史失败: ${response.status}`);
         }
         
         const data = await response.json();
+        console.log('[DEBUG] 获取到的历史记录:', {
+          recordCount: data.length
+        });
+        
         const allMessages = data.flatMap((item: ChatMessage) => 
           parseHistoryMessage(item.Message)
         );
+        console.log('[DEBUG] 解析后的消息数量:', {
+          messageCount: allMessages.length
+        });
+        
         setMessages(allMessages);
         scrollToBottom();
       } catch (err) {
+        console.error('[ERROR] 获取历史记录失败:', err);
         setError(err instanceof Error ? err.message : '加载失败');
       }
     }
@@ -93,30 +112,39 @@ export default function Chat() {
   const sendMessage = async () => {
     if (!input.trim() || !user) return;
     
+    console.log('[DEBUG] 开始发送消息:', {
+      userId: user.user_id,
+      messageLength: input.length,
+      subscription: user.subscription?.type
+    });
+    
     setIsLoading(true);
     const currentInput = input;
     setInput('');
 
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 60000); // 60秒超时
+      const timeoutId = setTimeout(() => controller.abort(), 60000);
 
       const response = await fetch('/api/chat', {
         method: 'POST',
         credentials: 'include',
         signal: controller.signal,
-        headers: { 
-          'Content-Type': 'application/json',
-          'X-WP-Nonce': user.nonce,
-          'X-Requested-With': 'XMLHttpRequest'
+        headers: {
+          'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ 
+        body: JSON.stringify({
           userId: user.user_id,
-          message: currentInput 
+          message: currentInput
         })
       });
 
       clearTimeout(timeoutId);
+      
+      console.log('[DEBUG] 消息发送响应:', {
+        status: response.status,
+        ok: response.ok
+      });
 
       if (!response.ok) {
         if (response.status === 504) {
@@ -127,6 +155,12 @@ export default function Chat() {
       }
 
       const data = await response.json();
+      console.log('[DEBUG] 收到响应数据:', {
+        hasReply: !!data.reply,
+        hasBotReply: !!data.botReply,
+        hasMessage: !!data.message
+      });
+      
       const botReply = data.reply || data.botReply || data.message;
       
       if (!botReply) {
@@ -138,14 +172,15 @@ export default function Chat() {
         { sender: 'bot', text: botReply }
       ]);
       
-      setError(''); // 清除之前的错误
+      setError('');
       setWeeklyUsage(prev => prev + 1);
       
     } catch (err) {
-      console.error('发送消息错误:', err);
-      // 恢复用户输入
+      console.error('[ERROR] 发送消息失败:', {
+        error: err instanceof Error ? err.message : '未知错误',
+        type: err instanceof Error ? err.name : typeof err
+      });
       setInput(currentInput);
-      // 设置更友好的错误消息
       setError(
         err instanceof Error 
           ? (err.name === 'AbortError' 

@@ -200,23 +200,29 @@ async function waitForCompletion(openai: OpenAI, threadId: string, runId: string
 export const POST = withErrorHandler(async (request: Request) => {
   const origin = request.headers.get('origin');
   const headers = setCORSHeaders(origin);
-  console.log('[DEBUG] 开始处理POST请求');
+  
+  console.log('[DEBUG] 开始处理POST请求:', {
+    origin,
+    method: request.method,
+    headers: Object.fromEntries(request.headers.entries())
+  });
   
   try {
-    const requestData = await request.json();
-    console.log('[DEBUG] 请求数据:', {
-      userId: requestData.userId,
-      messageLength: requestData.message?.length,
-      headers: Object.fromEntries(request.headers.entries())
+    const { userId, message } = await request.json();
+    console.log('[DEBUG] 解析请求数据:', {
+      userId,
+      messageLength: message?.length
     });
 
-    const { userId, message } = requestData;
     const docClient = await createDynamoDBClient();
     const openai = createOpenAIClient();
     
     console.log('[DEBUG] 获取用户线程');
     let threadId = await getUserActiveThread(userId);
-    console.log('[DEBUG] 当前线程ID:', threadId);
+    console.log('[DEBUG] 当前线程状态:', {
+      hasThread: !!threadId,
+      threadId
+    });
     
     let thread;
     if (threadId) {
@@ -283,7 +289,13 @@ export const POST = withErrorHandler(async (request: Request) => {
         ? lastMessage.content[0].text.value 
         : '无法解析助手回复';
       
-      console.log('[DEBUG] 保存到DynamoDB');
+      console.log('[DEBUG] 保存到DynamoDB前:', {
+        userId,
+        timestamp: new Date().toISOString(),
+        messageLength: message?.length,
+        replyLength: botReply?.length
+      });
+
       await docClient.send(new PutCommand({
         TableName: "ChatHistory",
         Item: {
@@ -296,7 +308,7 @@ export const POST = withErrorHandler(async (request: Request) => {
         }
       }));
 
-      console.log('[DEBUG] 准备返回响应');
+      console.log('[DEBUG] 数据已保存，准备返回响应');
       return new Response(JSON.stringify({
         reply: botReply,
         threadId: threadId
@@ -345,8 +357,18 @@ export async function GET(request: Request) {
   const origin = request.headers.get('origin');
   const headers = setCORSHeaders(origin);
   
+  console.log('[DEBUG] 开始处理GET请求:', {
+    origin,
+    url: request.url,
+    headers: Object.fromEntries(request.headers.entries())
+  });
+  
   const { searchParams } = new URL(request.url);
   const userId = searchParams.get("userId");
+
+  console.log('[DEBUG] 获取历史记录参数:', {
+    userId
+  });
 
   if (!userId) {
     return new Response(JSON.stringify({ error: "UserId is required" }), {
@@ -365,9 +387,17 @@ export async function GET(request: Request) {
       }
     }));
 
+    console.log('[DEBUG] 查询结果:', {
+      itemCount: response.Items?.length,
+      scannedCount: response.ScannedCount
+    });
+
     return new Response(JSON.stringify(response.Items), { headers });
   } catch (error) {
-    console.error('[ERROR] 获取聊天历史失败:', error);
+    console.error('[ERROR] 获取聊天历史失败:', {
+      error: error instanceof Error ? error.message : '未知错误',
+      type: error instanceof Error ? error.name : typeof error
+    });
     return new Response(JSON.stringify({
       error: "获取聊天历史失败",
       details: error instanceof Error ? error.message : '未知错误'
