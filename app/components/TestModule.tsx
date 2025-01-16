@@ -81,17 +81,25 @@ const TestModule = () => {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
+          'X-WP-Nonce': wpNonce,
+          'X-Requested-With': 'XMLHttpRequest'
         },
         body: JSON.stringify({ 
           content: prompt,
-          vectorStoreId: VECTOR_STORE_ID 
+          vectorStoreId: VECTOR_STORE_ID,
+          format: 'json'
         }),
       });
 
-      if (!response.ok) throw new Error('更新Prompt失败');
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || '更新Prompt失败');
+      }
+      
       await fetchPrompt(); // 刷新显示
       setPromptError(null);
     } catch (err) {
+      console.error('更新Prompt错误:', err);
       setPromptError(err instanceof Error ? err.message : '更新Prompt失败');
     } finally {
       setPromptLoading(false);
