@@ -35,10 +35,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           'Content-Type': 'application/json',
           'X-Requested-With': 'XMLHttpRequest',
           'Accept': 'application/json',
-          'Origin': window.location.origin,
-          ...(state.user?.nonce && {
-            'X-WP-Nonce': state.user.nonce
-          })
+          'Origin': window.location.origin
         },
         body: JSON.stringify({})
       });
