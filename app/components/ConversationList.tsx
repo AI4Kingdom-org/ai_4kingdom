@@ -38,9 +38,11 @@ export default function ConversationList({
       }
       
       const data = await response.json();
-      setConversations(data);
+      setConversations(data || []);
+      setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : '加载失败');
+      setConversations([]);
     } finally {
       setLoading(false);
     }
@@ -103,34 +105,40 @@ export default function ConversationList({
       </div>
       
       <div className={styles.list}>
-        {conversations.map((conv) => (
-          <div 
-            key={conv.threadId}
-            className={`${styles.item} ${currentThreadId === conv.threadId ? styles.active : ''}`}
-            onClick={() => onSelectThread(conv.threadId)}
-          >
-            <span className={styles.title}>
-              <svg 
-                viewBox="0 0 24 24" 
-                className={styles.chatIcon}
-              >
-                <path fill="currentColor" d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/>
-              </svg>
-              对话 {conv.threadId.substring(0, 8)}
-            </span>
-            <button
-              className={styles.deleteButton}
-              onClick={(e) => handleDeleteThread(conv.threadId, e)}
-            >
-              <svg 
-                viewBox="0 0 24 24" 
-                className={styles.deleteIcon}
-              >
-                <path fill="currentColor" d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
-              </svg>
-            </button>
+        {conversations.length === 0 ? (
+          <div className={styles.emptyState}>
+            还没有对话记录，点击上方按钮开始新对话
           </div>
-        ))}
+        ) : (
+          conversations.map((conv) => (
+            <div 
+              key={conv.threadId}
+              className={`${styles.item} ${currentThreadId === conv.threadId ? styles.active : ''}`}
+              onClick={() => onSelectThread(conv.threadId)}
+            >
+              <span className={styles.title}>
+                <svg 
+                  viewBox="0 0 24 24" 
+                  className={styles.chatIcon}
+                >
+                  <path fill="currentColor" d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/>
+                </svg>
+                对话 {conv.threadId.substring(0, 8)}
+              </span>
+              <button
+                className={styles.deleteButton}
+                onClick={(e) => handleDeleteThread(conv.threadId, e)}
+              >
+                <svg 
+                  viewBox="0 0 24 24" 
+                  className={styles.deleteIcon}
+                >
+                  <path fill="currentColor" d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
+                </svg>
+              </button>
+            </div>
+          ))
+        )}
       </div>
     </div>
   );

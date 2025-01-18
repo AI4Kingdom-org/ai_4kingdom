@@ -116,4 +116,11 @@
 
 .error {
   color: #ff4d4f;
+}
+
+.emptyState {
+  text-align: center;
+  padding: 20px;
+  color: #666;
+  font-size: 14px;
 } 
