@@ -8,6 +8,12 @@
   padding: 8px;
 }
 
+.header {
+  padding: 8px;
+  border-bottom: 1px solid #4a4b4d;
+  margin-bottom: 8px;
+}
+
 .newChatButton {
   width: 100%;
   padding: 12px;
@@ -16,12 +22,23 @@
   border-radius: 6px;
   color: #fff;
   cursor: pointer;
-  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
   transition: background-color 0.2s;
 }
 
 .newChatButton:hover {
   background-color: #40414f;
+}
+
+.plusIcon {
+  width: 20px;
+  height: 20px;
+  stroke: currentColor;
+  stroke-width: 2;
+  fill: none;
 }
 
 .list {
@@ -51,20 +68,36 @@
 
 .title {
   flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+.chatIcon {
+  width: 16px;
+  height: 16px;
+}
+
 .deleteButton {
-  padding: 4px 8px;
+  padding: 4px;
   background-color: transparent;
-  border: 1px solid #565869;
+  border: none;
   border-radius: 4px;
   color: #fff;
   cursor: pointer;
   opacity: 0;
   transition: opacity 0.2s, background-color 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.deleteIcon {
+  width: 16px;
+  height: 16px;
 }
 
 .item:hover .deleteButton {

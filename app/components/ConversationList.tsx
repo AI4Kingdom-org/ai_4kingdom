@@ -87,12 +87,20 @@ export default function ConversationList({
 
   return (
     <div className={styles.container}>
-      <button 
-        className={styles.newChatButton}
-        onClick={onCreateNewThread}
-      >
-        新对话
-      </button>
+      <div className={styles.header}>
+        <button 
+          className={styles.newChatButton}
+          onClick={onCreateNewThread}
+        >
+          <svg 
+            viewBox="0 0 24 24" 
+            className={styles.plusIcon}
+          >
+            <path fill="currentColor" d="M12 4v16m-8-8h16"/>
+          </svg>
+          新对话
+        </button>
+      </div>
       
       <div className={styles.list}>
         {conversations.map((conv) => (
@@ -102,13 +110,24 @@ export default function ConversationList({
             onClick={() => onSelectThread(conv.threadId)}
           >
             <span className={styles.title}>
-              {conv.threadId.substring(0, 8)}...
+              <svg 
+                viewBox="0 0 24 24" 
+                className={styles.chatIcon}
+              >
+                <path fill="currentColor" d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/>
+              </svg>
+              对话 {conv.threadId.substring(0, 8)}
             </span>
             <button
               className={styles.deleteButton}
               onClick={(e) => handleDeleteThread(conv.threadId, e)}
             >
-              删除
+              <svg 
+                viewBox="0 0 24 24" 
+                className={styles.deleteIcon}
+              >
+                <path fill="currentColor" d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
+              </svg>
             </button>
           </div>
         ))}
