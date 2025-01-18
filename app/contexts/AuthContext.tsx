@@ -77,7 +77,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         
         if (data.success) {
           console.log('[DEBUG] 设置用户数据');
-          setUser(data);
+          setUser({
+            ...data,
+            user_id: String(data.user_id)
+          });
         } else {
           console.warn('[WARN] 验证成功但数据无效:', {
             message: data.message || '未知错误'

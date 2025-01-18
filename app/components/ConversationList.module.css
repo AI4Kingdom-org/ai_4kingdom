@@ -1,0 +1,86 @@
+.container {
+  width: 260px;
+  height: 100%;
+  background-color: #202123;
+  border-right: 1px solid #4a4b4d;
+  display: flex;
+  flex-direction: column;
+  padding: 8px;
+}
+
+.newChatButton {
+  width: 100%;
+  padding: 12px;
+  background-color: #343541;
+  border: 1px solid #565869;
+  border-radius: 6px;
+  color: #fff;
+  cursor: pointer;
+  margin-bottom: 16px;
+  transition: background-color 0.2s;
+}
+
+.newChatButton:hover {
+  background-color: #40414f;
+}
+
+.list {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px;
+  margin-bottom: 4px;
+  border-radius: 6px;
+  cursor: pointer;
+  color: #fff;
+  transition: background-color 0.2s;
+}
+
+.item:hover {
+  background-color: #2a2b32;
+}
+
+.active {
+  background-color: #343541;
+}
+
+.title {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.deleteButton {
+  padding: 4px 8px;
+  background-color: transparent;
+  border: 1px solid #565869;
+  border-radius: 4px;
+  color: #fff;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.2s, background-color 0.2s;
+}
+
+.item:hover .deleteButton {
+  opacity: 1;
+}
+
+.deleteButton:hover {
+  background-color: #40414f;
+}
+
+.loading, .error {
+  padding: 16px;
+  text-align: center;
+  color: #fff;
+}
+
+.error {
+  color: #ff4d4f;
+} 

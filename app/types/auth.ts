@@ -5,12 +5,10 @@ export interface Subscription {
 }
 
 export interface UserData {
+  user_id: string;
+  subscription?: {
+    type: string;
+  };
+  nonce?: string;
   success: boolean;
-  user_id: number;
-  username: string;
-  email: string;
-  display_name: string;
-  nonce: string;
-  subscription: Subscription;
-  roles?: string[];
 } 

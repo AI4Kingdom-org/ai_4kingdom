@@ -1,3 +1,6 @@
+import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
+import { DynamoDBDocumentClient, PutCommand } from "@aws-sdk/lib-dynamodb";
+
 export async function getDynamoDBConfig() {
   if (process.env.NODE_ENV === 'development') {
     return {
@@ -17,4 +20,40 @@ export async function getDynamoDBConfig() {
       identityPoolId: process.env.NEXT_PUBLIC_IDENTITY_POOL_ID!
     })()
   };
+}
+
+// 添加创建 DynamoDB 客户端的函数
+export async function createDynamoDBClient() {
+  try {
+    const config = await getDynamoDBConfig();
+    console.log('[DEBUG] DynamoDB 配置:', {
+      region: config.region,
+      hasCredentials: !!config.credentials
+    });
+    
+    const client = new DynamoDBClient(config);
+    return DynamoDBDocumentClient.from(client);
+  } catch (error) {
+    console.error('[ERROR] DynamoDB 客户端创建失败:', error);
+    throw error;
+  }
+}
+
+// 添加更新用户活动线程的函数
+export async function updateUserActiveThread(userId: string, threadId: string) {
+  try {
+    const docClient = await createDynamoDBClient();
+    await docClient.send(new PutCommand({
+      TableName: process.env.NEXT_PUBLIC_DYNAMODB_TABLE_NAME,
+      Item: {
+        UserId: String(userId),
+        Type: 'thread',
+        threadId: threadId,
+        createdAt: new Date().toISOString()
+      }
+    }));
+  } catch (error) {
+    console.error('[ERROR] 更新用户活动线程失败:', error);
+    throw error;
+  }
 } 

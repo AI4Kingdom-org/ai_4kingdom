@@ -3,6 +3,9 @@
 import { useAuth } from '../contexts/AuthContext';
 import { useState, useEffect, useRef } from 'react';
 import styles from './Chat.module.css';
+import ConversationList from '../components/ConversationList';
+import { createOpenAIClient } from '../utils/openai';
+import { updateUserActiveThread } from '../utils/dynamodb';
 
 export interface ChatMessage {
   Message: string;
@@ -36,6 +39,7 @@ export default function Chat() {
   const [weeklyUsage, setWeeklyUsage] = useState(0);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [currentThreadId, setCurrentThreadId] = useState<string | null>(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -57,6 +61,30 @@ export default function Chat() {
     } catch (e) {
       console.error('Failed to parse message:', e);
       return [];
+    }
+  };
+
+  const fetchHistory = async (threadId?: string) => {
+    if (!user) return;
+    
+    try {
+      const response = await fetch(`/api/chat?userId=${user.user_id}${threadId ? `&threadId=${threadId}` : ''}`, {
+        credentials: 'include'
+      });
+      
+      if (!response.ok) {
+        throw new Error(`获取聊天历史失败: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      const allMessages = data.flatMap((item: ChatMessage) => 
+        parseHistoryMessage(item.Message)
+      );
+      
+      setMessages(allMessages);
+      scrollToBottom();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '加载失败');
     }
   };
 
@@ -196,6 +224,25 @@ export default function Chat() {
     }
   };
 
+  // 处理选择对话
+  const handleSelectThread = async (threadId: string) => {
+    setCurrentThreadId(String(threadId));
+    await fetchHistory(String(threadId));
+  };
+
+  // 创建新对话
+  const handleCreateNewThread = async () => {
+    try {
+      const openai = createOpenAIClient();
+      const newThread = await openai.beta.threads.create();
+      setCurrentThreadId(String(newThread.id));
+      setMessages([]);
+      await updateUserActiveThread(user?.user_id!, String(newThread.id));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '创建新对话失败');
+    }
+  };
+
   if (loading) return <div>加载中...</div>;
   if (error) return <div>认证错误: {error}</div>;
   if (!user) return (
@@ -211,47 +258,57 @@ export default function Chat() {
   );
 
   return (
-    <div className={styles.chatWindow}>
-      <div className={styles.messages}>
-        {messages.map((msg, index) => (
-          <div
-            key={index}
-            className={`${styles.message} ${msg.sender === 'user' ? styles.user : styles.bot}`}
-          >
-            {msg.sender === 'bot' && (
-              <img 
-                src="https://logos-world.net/wp-content/uploads/2023/02/ChatGPT-Logo.png"
-                alt="AI Avatar" 
-                className={styles.avatar}
-              />
-            )}
-            <div className={styles.messageContent}>
-              {msg.text}
-            </div>
-          </div>
-        ))}
-        <div ref={messagesEndRef} />
-      </div>
-
-      {error && <div className={styles.error}>{error}</div>}
-
-      <div className={styles.inputArea}>
-        <input
-          type="text"
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && !isLoading && sendMessage()}
-          placeholder="输入消息..."
-          className={styles.inputField}
-          disabled={isLoading}
+    <div className={styles.container}>
+      {user && (
+        <ConversationList
+          userId={user.user_id}
+          currentThreadId={currentThreadId}
+          onSelectThread={handleSelectThread}
+          onCreateNewThread={handleCreateNewThread}
         />
-        <button
-          onClick={sendMessage}
-          disabled={!input.trim() || isLoading}
-          className={styles.sendButton}
-        >
-          {isLoading ? '发送中...' : '发送'}
-        </button>
+      )}
+      <div className={styles.chatWindow}>
+        <div className={styles.messages}>
+          {messages.map((msg, index) => (
+            <div
+              key={index}
+              className={`${styles.message} ${msg.sender === 'user' ? styles.user : styles.bot}`}
+            >
+              {msg.sender === 'bot' && (
+                <img 
+                  src="https://logos-world.net/wp-content/uploads/2023/02/ChatGPT-Logo.png"
+                  alt="AI Avatar" 
+                  className={styles.avatar}
+                />
+              )}
+              <div className={styles.messageContent}>
+                {msg.text}
+              </div>
+            </div>
+          ))}
+          <div ref={messagesEndRef} />
+        </div>
+
+        {error && <div className={styles.error}>{error}</div>}
+
+        <div className={styles.inputArea}>
+          <input
+            type="text"
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && !isLoading && sendMessage()}
+            placeholder="输入消息..."
+            className={styles.inputField}
+            disabled={isLoading}
+          />
+          <button
+            onClick={sendMessage}
+            disabled={!input.trim() || isLoading}
+            className={styles.sendButton}
+          >
+            {isLoading ? '发送中...' : '发送'}
+          </button>
+        </div>
       </div>
     </div>
   );
