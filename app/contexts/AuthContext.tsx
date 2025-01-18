@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { FEATURE_ACCESS } from '../types/auth';
-import type { UserData, AuthState, AuthContextType, FeatureKey } from '../types/auth';
+import type { UserData, AuthState, AuthContextType, FeatureKey, MemberRole } from '../types/auth';
 
 const AuthContext = createContext<AuthContextType>({
   user: null,
@@ -102,7 +102,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   // 新增：角色检查方法
-  const hasRole = (role: string) => {
+  const hasRole = (role: MemberRole) => {
     return state.user?.subscription?.roles?.includes(role) || false;
   };
 

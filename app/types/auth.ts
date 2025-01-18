@@ -3,7 +3,7 @@ export interface Subscription {
   type: 'free' | 'pro' | 'ultimate';
   expiry: string | null;
   plan_id: string | null;
-  roles: string[];
+  roles: MemberRole[];
 }
 
 export interface UserData {
