@@ -1,7 +1,8 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import type { UserData, AuthState, AuthContextType } from '../types/auth';
+import { FEATURE_ACCESS } from '../types/auth';
+import type { UserData, AuthState, AuthContextType, FeatureKey } from '../types/auth';
 
 const AuthContext = createContext<AuthContextType>({
   user: null,
@@ -10,7 +11,9 @@ const AuthContext = createContext<AuthContextType>({
   checkAuth: async () => {},
   getSubscriptionStatus: () => 'inactive',
   getSubscriptionType: () => 'free',
-  isSubscriptionValid: () => false
+  isSubscriptionValid: () => false,
+  hasRole: () => false,
+  canAccessFeature: () => false
 });
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -33,11 +36,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       });
 
-      console.log('[DEBUG] 验证响应状态:', {
-        status: response.status,
-        ok: response.ok
-      });
-
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
@@ -49,6 +47,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         hasSubscription: !!data.subscription,
         subscriptionType: data.subscription?.type,
         subscriptionStatus: data.subscription?.status,
+        roles: data.subscription?.roles,
         hasNonce: !!data.nonce
       });
       
@@ -102,14 +101,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return true;
   };
 
+  // 新增：角色检查方法
+  const hasRole = (role: string) => {
+    return state.user?.subscription?.roles?.includes(role) || false;
+  };
+
+  // 新增：功能访问检查方法
+  const canAccessFeature = (feature: FeatureKey) => {
+    const userRoles = state.user?.subscription?.roles || [];
+    const requiredRoles = FEATURE_ACCESS[feature];
+    return userRoles.some(role => requiredRoles.includes(role));
+  };
+
   useEffect(() => {
     checkAuth();
 
-    // 定期检查会话有效性
     const sessionCheckInterval = setInterval(() => {
       console.log('[DEBUG] 执行定期会话检查');
       checkAuth();
-    }, 5 * 60 * 1000); // 每5分钟检查一次
+    }, 5 * 60 * 1000);
 
     return () => {
       clearInterval(sessionCheckInterval);
@@ -121,7 +131,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     checkAuth,
     getSubscriptionStatus,
     getSubscriptionType,
-    isSubscriptionValid
+    isSubscriptionValid,
+    hasRole,
+    canAccessFeature
   };
 
   return (

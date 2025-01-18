@@ -92,8 +92,22 @@ export async function GET(request: Request) {
     const weeklyCount = response.Items?.length || 0;
 
     // 获取用户类型对应的使用限制
-    const subscriptionType = subscription.type.toLowerCase();
+    const subscriptionType = subscription?.type?.toLowerCase() || 'free';
     const weeklyLimit = WEEKLY_LIMITS[subscriptionType as keyof UsageLimit] || WEEKLY_LIMITS.free;
+
+    // 添加角色检查
+    const hasRequiredRole = subscription?.roles?.some(role => 
+      ['free_member', 'pro_member', 'ultimate_member'].includes(role)
+    );
+
+    if (!hasRequiredRole) {
+      return NextResponse.json({
+        error: "Insufficient permissions",
+        subscription,
+        weeklyLimit: WEEKLY_LIMITS.free,
+        weeklyCount: 0
+      }, { status: 403 });
+    }
 
     console.log('[DEBUG] Usage stats:', {
       weeklyCount,

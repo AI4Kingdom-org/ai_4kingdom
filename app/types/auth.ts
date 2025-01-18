@@ -1,7 +1,9 @@
 export interface Subscription {
   status: 'active' | 'inactive';
-  type: string;
+  type: 'free' | 'pro' | 'ultimate';
   expiry: string | null;
+  plan_id: string | null;
+  roles: string[];
 }
 
 export interface UserData {
@@ -20,9 +22,23 @@ export interface AuthState {
   error: string | null;
 }
 
+export type MemberRole = 'free_member' | 'pro_member' | 'ultimate_member';
+export type FeatureKey = 'chat' | 'history' | 'advanced_prompts' | 'custom_models';
+
+export const FEATURE_ACCESS: Record<FeatureKey, MemberRole[]> = {
+  chat: ['free_member', 'pro_member', 'ultimate_member'],
+  history: ['free_member', 'pro_member', 'ultimate_member'],
+  advanced_prompts: ['pro_member', 'ultimate_member'],
+  custom_models: ['ultimate_member']
+};
+
 export interface AuthContextType extends AuthState {
   checkAuth: () => Promise<void>;
   getSubscriptionStatus: () => 'active' | 'inactive';
-  getSubscriptionType: () => string;
+  getSubscriptionType: () => 'free' | 'pro' | 'ultimate';
   isSubscriptionValid: () => boolean;
-} 
+  hasRole: (role: MemberRole) => boolean;
+  canAccessFeature: (feature: FeatureKey) => boolean;
+}
+
+// ... 其他类型定义保持不变 ... 
