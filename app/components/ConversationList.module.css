@@ -119,8 +119,56 @@
 }
 
 .emptyState {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
   text-align: center;
-  padding: 20px;
-  color: #666;
+  height: 100%;
+  color: #8e8ea0;
+}
+
+.emptyIcon {
+  width: 48px;
+  height: 48px;
+  margin-bottom: 16px;
+  color: #8e8ea0;
+}
+
+.emptyTitle {
+  font-size: 18px;
+  font-weight: 600;
+  margin: 0 0 8px;
+  color: #c5c5d2;
+}
+
+.emptyText {
   font-size: 14px;
+  line-height: 1.5;
+  margin: 0 0 24px;
+}
+
+.emptyButton {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background-color: #343541;
+  border: 1px solid #565869;
+  border-radius: 6px;
+  color: #fff;
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.2s;
+}
+
+.emptyButton:hover {
+  background-color: #40414f;
+  transform: translateY(-1px);
+}
+
+.startIcon {
+  width: 16px;
+  height: 16px;
 } 

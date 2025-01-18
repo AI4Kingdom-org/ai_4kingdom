@@ -107,7 +107,28 @@ export default function ConversationList({
       <div className={styles.list}>
         {conversations.length === 0 ? (
           <div className={styles.emptyState}>
-            还没有对话记录，点击上方按钮开始新对话
+            <svg 
+              viewBox="0 0 24 24" 
+              className={styles.emptyIcon}
+            >
+              <path fill="currentColor" d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zM9 11H7V9h2v2zm4 0h-2V9h2v2zm4 0h-2V9h2v2z"/>
+            </svg>
+            <h3 className={styles.emptyTitle}>开始您的第一个对话</h3>
+            <p className={styles.emptyText}>
+              点击上方"新对话"按钮，开始与 AI 助手交流
+            </p>
+            <button 
+              className={styles.emptyButton}
+              onClick={onCreateNewThread}
+            >
+              <svg 
+                viewBox="0 0 24 24" 
+                className={styles.startIcon}
+              >
+                <path fill="currentColor" d="M8 5v14l11-7z"/>
+              </svg>
+              立即开始
+            </button>
           </div>
         ) : (
           conversations.map((conv) => (
