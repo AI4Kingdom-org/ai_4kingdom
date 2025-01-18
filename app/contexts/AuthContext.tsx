@@ -27,17 +27,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       console.log('[DEBUG] 开始验证会话');
       
-      const response = await fetch('https://ai4kingdom.com/wp-json/custom/v1/validate_session', {
+      const API_BASE = 'https://ai4kingdom.com';
+      const response = await fetch(`${API_BASE}/wp-json/custom/v1/validate_session`, {
         method: 'POST',
         credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
-          'X-Requested-With': 'XMLHttpRequest'
-        }
+          'X-Requested-With': 'XMLHttpRequest',
+          'Accept': 'application/json',
+          'Origin': window.location.origin,
+          ...(state.user?.nonce && {
+            'X-WP-Nonce': state.user.nonce
+          })
+        },
+        body: JSON.stringify({})
+      });
+
+      console.log('[DEBUG] 验证请求详情:', {
+        url: response.url,
+        status: response.status,
+        headers: Object.fromEntries(response.headers.entries()),
+        cookies: document.cookie
       });
 
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        const errorData = await response.json().catch(() => ({}));
+        console.error('[DEBUG] 验证失败详情:', errorData);
+        throw new Error(`认证失败: ${errorData.message || response.statusText}`);
       }
 
       const data = await response.json();
@@ -66,7 +82,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     } catch (err) {
       console.error('[ERROR] 验证过程错误:', {
-        message: err instanceof Error ? err.message : '未知错误'
+        message: err instanceof Error ? err.message : '未知错误',
+        cookies: document.cookie,
+        location: window.location.href,
+        origin: window.location.origin
       });
       
       setState(prev => ({
