@@ -1,119 +1,131 @@
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocumentClient, QueryCommand } from "@aws-sdk/lib-dynamodb";
 import { NextResponse } from "next/server";
+import type { Subscription } from '../../types/auth';
+import { getDynamoDBConfig } from "@/app/utils/dynamodb";
 
-// 复用 getDynamoDBConfig 函数
-async function getDynamoDBConfig() {
-    if (process.env.NODE_ENV === 'development') {
-        return {
-            region: process.env.NEXT_PUBLIC_REGION || "us-east-2",
-            credentials: {
-                accessKeyId: process.env.NEXT_PUBLIC_AWS_ACCESS_KEY!,
-                secretAccessKey: process.env.NEXT_PUBLIC_AWS_SECRET_KEY!
-            }
-        };
+// 定义使用限制
+interface UsageLimit {
+  [key: string]: number;
+  free: number;
+  pro: number;
+  ultimate: number;
+}
+
+const WEEKLY_LIMITS: UsageLimit = {
+  free: 10,
+  pro: 100,
+  ultimate: Infinity
+};
+
+// 获取用户订阅信息
+async function getUserSubscription(userId: string): Promise<Subscription | null> {
+  try {
+    const response = await fetch(
+      `https://ai4kingdom.com/wp-json/custom/v1/validate_session`,
+      {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ userId })
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error('Failed to fetch subscription info');
     }
-    
-    const { fromCognitoIdentityPool } = await import("@aws-sdk/credential-providers");
-    const credentials = await fromCognitoIdentityPool({
-        clientConfig: { region: process.env.NEXT_PUBLIC_REGION || "us-east-2" },
-        identityPoolId: process.env.NEXT_PUBLIC_IDENTITY_POOL_ID!
-    })();
 
-    return {
-        region: process.env.NEXT_PUBLIC_REGION || "us-east-2",
-        credentials
-    };
+    const data = await response.json();
+    return data.subscription || null;
+  } catch (error) {
+    console.error('[ERROR] 获取订阅信息失败:', error);
+    return null;
+  }
 }
 
 export async function GET(request: Request) {
-    const { searchParams } = new URL(request.url);
-    const userId = searchParams.get("userId");
+  const { searchParams } = new URL(request.url);
+  const userId = searchParams.get("userId");
 
-    if (!userId) {
-        return NextResponse.json({ error: "UserId is required" }, { status: 400 });
+  if (!userId) {
+    return NextResponse.json({ error: "UserId is required" }, { status: 400 });
+  }
+
+  try {
+    console.log('[DEBUG] Starting usage check for userId:', userId);
+
+    // 获取用户订阅信息
+    const subscription = await getUserSubscription(userId);
+    console.log('[DEBUG] User subscription:', subscription);
+
+    if (!subscription || subscription.status !== 'active') {
+      return NextResponse.json({
+        error: "Inactive subscription",
+        subscription,
+        weeklyLimit: WEEKLY_LIMITS.free,
+        weeklyCount: 0
+      }, { status: 403 });
     }
 
-    try {
-        // 添加更多调试日志
-        console.log('[DEBUG] Starting usage check for userId:', userId);
-        
-        const dbConfig = await getDynamoDBConfig();
-        console.log('[DEBUG] DB Config:', { 
-            region: dbConfig.region,
-            hasCredentials: !!dbConfig.credentials,
-            environment: process.env.NODE_ENV,
-            identityPoolId: process.env.NEXT_PUBLIC_IDENTITY_POOL_ID?.substring(0, 10) + '...'
-        });
+    // 获取本周使用次数
+    const dbConfig = await getDynamoDBConfig();
+    const client = new DynamoDBClient(dbConfig);
+    const docClient = DynamoDBDocumentClient.from(client);
 
-        const client = new DynamoDBClient(dbConfig);
-        const docClient = DynamoDBDocumentClient.from(client);
+    // 获取本周开始时间
+    const now = new Date();
+    const startOfWeek = new Date(now.setDate(now.getDate() - now.getDay()));
+    startOfWeek.setHours(0, 0, 0, 0);
 
-        // 获取本周开始时间
-        const now = new Date();
-        const startOfWeek = new Date(now.setDate(now.getDate() - now.getDay()));
-        startOfWeek.setHours(0, 0, 0, 0);
+    const command = new QueryCommand({
+      TableName: "ChatHistory",
+      KeyConditionExpression: "UserId = :userId AND Timestamp >= :startTime",
+      ExpressionAttributeValues: {
+        ":userId": String(userId),
+        ":startTime": startOfWeek.toISOString()
+      }
+    });
 
-        const command = new QueryCommand({
-            TableName: "ChatHistory",
-            KeyConditionExpression: "UserId = :userId AND Timestamp >= :startTime",
-            ExpressionAttributeValues: {
-                ":userId": String(userId),
-                ":startTime": startOfWeek.toISOString()
-            }
-        });
+    const response = await docClient.send(command);
+    const weeklyCount = response.Items?.length || 0;
 
-        console.log('[DEBUG] Query Command:', {
-            TableName: command.input.TableName,
-            KeyConditionExpression: command.input.KeyConditionExpression,
-            ExpressionAttributeValues: command.input.ExpressionAttributeValues
-        });
+    // 获取用户类型对应的使用限制
+    const subscriptionType = subscription.type.toLowerCase();
+    const weeklyLimit = WEEKLY_LIMITS[subscriptionType as keyof UsageLimit] || WEEKLY_LIMITS.free;
 
-        try {
-            const response = await docClient.send(command);
-            console.log('[DEBUG] DynamoDB Response:', {
-                Count: response.Count,
-                ScannedCount: response.ScannedCount,
-                Items: response.Items?.length
-            });
-            
-            return NextResponse.json({ 
-                weeklyCount: response.Items?.length || 0,
-                debug: {
-                    timestamp: new Date().toISOString(),
-                    startOfWeek: startOfWeek.toISOString()
-                }
-            });
-        } catch (dbError) {
-            console.error('[ERROR] DynamoDB Error:', {
-                message: dbError instanceof Error ? dbError.message : 'Unknown DB error',
-                name: dbError instanceof Error ? dbError.name : 'Unknown',
-                stack: dbError instanceof Error ? dbError.stack : undefined
-            });
-            
-            return NextResponse.json({
-                error: "Database operation failed",
-                details: dbError instanceof Error ? dbError.message : 'Unknown DB error',
-                debug: {
-                    timestamp: new Date().toISOString(),
-                    errorType: dbError instanceof Error ? dbError.name : 'Unknown'
-                }
-            }, { status: 500 });
-        }
-    } catch (error) {
-        console.error('[ERROR] General error:', {
-            message: error instanceof Error ? error.message : 'Unknown error',
-            name: error instanceof Error ? error.name : 'Unknown',
-            stack: error instanceof Error ? error.stack : undefined
-        });
-        
-        return NextResponse.json({ 
-            error: "Failed to fetch usage count",
-            details: error instanceof Error ? error.message : '未知错误',
-            debug: {
-                timestamp: new Date().toISOString(),
-                errorType: error instanceof Error ? error.name : 'Unknown'
-            }
-        }, { status: 500 });
-    }
+    console.log('[DEBUG] Usage stats:', {
+      weeklyCount,
+      weeklyLimit,
+      subscriptionType,
+      remaining: weeklyLimit - weeklyCount
+    });
+
+    return NextResponse.json({
+      weeklyCount,
+      weeklyLimit,
+      subscription,
+      remaining: weeklyLimit - weeklyCount,
+      debug: {
+        timestamp: new Date().toISOString(),
+        startOfWeek: startOfWeek.toISOString()
+      }
+    });
+
+  } catch (error) {
+    console.error('[ERROR] Usage check failed:', {
+      message: error instanceof Error ? error.message : 'Unknown error',
+      userId
+    });
+
+    return NextResponse.json({
+      error: "Failed to fetch usage count",
+      details: error instanceof Error ? error.message : '未知错误',
+      debug: {
+        timestamp: new Date().toISOString(),
+        errorType: error instanceof Error ? error.name : 'Unknown'
+      }
+    }, { status: 500 });
+  }
 } 
