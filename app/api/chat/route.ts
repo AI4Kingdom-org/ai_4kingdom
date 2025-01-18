@@ -440,23 +440,86 @@ export const POST = withErrorHandler(async (request: Request) => {
   }
 });
 
-// GET 处理函数
+// 添加新的消息获取函数
+async function getThreadMessages(threadId: string, openai: OpenAI) {
+  try {
+    console.log('[DEBUG] 开始获取OpenAI消息:', { threadId });
+    
+    const messages = await openai.beta.threads.messages.list(threadId);
+    
+    console.log('[DEBUG] 获取到原始消息:', { 
+      count: messages.data.length 
+    });
+    
+    const sortedMessages = messages.data.sort((a, b) => 
+      new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    );
+    
+    const formattedMessages = sortedMessages.map(msg => ({
+      role: msg.role,
+      content: msg.content[0].type === 'text' 
+        ? msg.content[0].text.value 
+        : '',
+      timestamp: new Date(msg.created_at * 1000).toISOString()
+    }));
+
+    console.log('[DEBUG] 消息格式化完成:', { 
+      formattedCount: formattedMessages.length 
+    });
+
+    return formattedMessages;
+  } catch (error) {
+    console.error('[ERROR] 获取Thread消息失败:', error);
+    throw error;
+  }
+}
+
+async function getOpenAIHistory(userId: string) {
+  try {
+    console.log('[DEBUG] 开始获取OpenAI历史记录:', { userId });
+    
+    const threadId = await getUserActiveThread(userId, createOpenAIClient());
+    if (!threadId) {
+      console.log('[DEBUG] 未找到活动线程');
+      return [];
+    }
+    
+    const openai = createOpenAIClient();
+    const messages = await getThreadMessages(threadId, openai);
+    
+    // 转换为应用程序使用的格式
+    const formattedMessages = messages.map(msg => ({
+      Message: JSON.stringify({
+        userMessage: msg.role === 'user' ? msg.content : '',
+        botReply: msg.role === 'assistant' ? msg.content : ''
+      }),
+      Timestamp: msg.timestamp,
+      UserId: userId
+    }));
+
+    console.log('[DEBUG] 历史记录格式化完成:', { 
+      count: formattedMessages.length 
+    });
+
+    return formattedMessages;
+  } catch (error) {
+    console.error('[ERROR] 获取OpenAI历史记录失败:', error);
+    throw error;
+  }
+}
+
+// 修改现有的 GET 处理函数
 export async function GET(request: Request) {
   const origin = request.headers.get('origin');
   const headers = setCORSHeaders(origin);
   
   console.log('[DEBUG] 开始处理GET请求:', {
     origin,
-    url: request.url,
-    headers: Object.fromEntries(request.headers.entries())
+    url: request.url
   });
   
   const { searchParams } = new URL(request.url);
   const userId = searchParams.get("userId");
-
-  console.log('[DEBUG] 获取历史记录参数:', {
-    userId
-  });
 
   if (!userId) {
     return new Response(JSON.stringify({ error: "UserId is required" }), {
@@ -466,26 +529,20 @@ export async function GET(request: Request) {
   }
 
   try {
-    const docClient = await createDynamoDBClient();
-    const response = await docClient.send(new QueryCommand({
-      TableName: CONFIG.tableName,
-      KeyConditionExpression: "UserId = :userId",
-      ExpressionAttributeValues: {
-        ":userId": String(userId)
-      }
-    }));
-
-    console.log('[DEBUG] 查询结果:', {
-      itemCount: response.Items?.length,
-      scannedCount: response.ScannedCount
+    // 从OpenAI获取历史记录
+    const messages = await getOpenAIHistory(userId);
+    
+    console.log('[DEBUG] 返回消息数量:', {
+      count: messages.length
     });
 
-    return new Response(JSON.stringify(response.Items), { headers });
+    return new Response(JSON.stringify(messages), { headers });
   } catch (error) {
     console.error('[ERROR] 获取聊天历史失败:', {
       error: error instanceof Error ? error.message : '未知错误',
       type: error instanceof Error ? error.name : typeof error
     });
+    
     return new Response(JSON.stringify({
       error: "获取聊天历史失败",
       details: error instanceof Error ? error.message : '未知错误'

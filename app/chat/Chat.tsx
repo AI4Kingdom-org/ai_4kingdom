@@ -44,14 +44,16 @@ export default function Chat() {
   const parseHistoryMessage = (messageStr: string) => {
     try {
       const parsed = JSON.parse(messageStr);
-      if (!parsed.userMessage || !parsed.botReply) {
-        console.error('Invalid message format:', messageStr);
-        return [];
+      const messages = [];
+      
+      if (parsed.userMessage) {
+        messages.push({ sender: 'user', text: parsed.userMessage });
       }
-      return [
-        { sender: 'user', text: parsed.userMessage },
-        { sender: 'bot', text: parsed.botReply }
-      ];
+      if (parsed.botReply) {
+        messages.push({ sender: 'bot', text: parsed.botReply });
+      }
+      
+      return messages;
     } catch (e) {
       console.error('Failed to parse message:', e);
       return [];
