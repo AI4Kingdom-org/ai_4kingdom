@@ -25,25 +25,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     error: null
   });
 
-  // 登录方法
   const login = async (username: string, password: string): Promise<boolean> => {
     try {
       console.log('[DEBUG] 开始登录');
       
       const API_BASE = 'https://ai4kingdom.com';
-      const response = await fetch(`${API_BASE}/wp-json/jwt-auth/v1/token`, {
+      const response = await fetch(`${API_BASE}/wp-json/custom/v1/login`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
+        credentials: 'include',
         body: JSON.stringify({ username, password })
       });
 
       const data = await response.json();
       
-      if (data.token) {
-        console.log('[DEBUG] 登录成功，获取到 Token');
-        localStorage.setItem('jwt_token', data.token);
+      if (data.success) {
+        console.log('[DEBUG] 登录成功');
         await checkAuth(); // 立即验证并获取用户信息
         return true;
       } else {
@@ -66,9 +65,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  // 登出方法
-  const logout = () => {
-    localStorage.removeItem('jwt_token');
+  const logout = async () => {
+    try {
+      const API_BASE = 'https://ai4kingdom.com';
+      await fetch(`${API_BASE}/wp-json/custom/v1/logout`, {
+        method: 'POST',
+        credentials: 'include'
+      });
+    } catch (err) {
+      console.error('[ERROR] 登出错误:', err);
+    }
+    
     setState({
       user: null,
       loading: false,
@@ -76,34 +83,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
   };
 
-  // 验证会话
   const checkAuth = async () => {
     try {
       console.log('[DEBUG] 开始验证会话');
       
-      const token = localStorage.getItem('jwt_token');
-      if (!token) {
-        console.log('[DEBUG] 未找到 Token');
-        setState(prev => ({
-          ...prev,
-          user: null,
-          loading: false
-        }));
-        return;
-      }
-
       const API_BASE = 'https://ai4kingdom.com';
       const response = await fetch(`${API_BASE}/wp-json/custom/v1/validate_session`, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-          'X-Requested-With': 'XMLHttpRequest',
-          'Accept': 'application/json'
+          'Content-Type': 'application/json'
         },
         credentials: 'include',
-        mode: 'cors',
-        body: JSON.stringify({})
+        mode: 'cors'
       });
 
       console.log('[DEBUG] 请求详情:', {
@@ -115,7 +106,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (response.status === 401) {
         console.log('[DEBUG] Token 已过期或无效');
-        localStorage.removeItem('jwt_token');
         setState(prev => ({
           ...prev,
           user: null,
