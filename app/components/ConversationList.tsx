@@ -85,7 +85,28 @@ export default function ConversationList({
   }, [userId]);
 
   if (loading) return <div className={styles.loading}>加载中...</div>;
-  if (error) return <div className={styles.error}>{error}</div>;
+  
+  if (error) {
+    return (
+      <div className={styles.container}>
+        <div className={styles.errorContainer}>
+          <div className={styles.error}>{error}</div>
+          <button 
+            className={styles.createFirstThreadButton}
+            onClick={onCreateNewThread}
+          >
+            <svg 
+              viewBox="0 0 24 24" 
+              className={styles.plusIcon}
+            >
+              <path fill="currentColor" d="M12 4v16m-8-8h16"/>
+            </svg>
+            创建第一个对话
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className={styles.container}>

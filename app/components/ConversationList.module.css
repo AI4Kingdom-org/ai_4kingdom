@@ -34,8 +34,8 @@
 }
 
 .plusIcon {
-  width: 20px;
-  height: 20px;
+  width: 1.25rem;
+  height: 1.25rem;
   stroke: currentColor;
   stroke-width: 2;
   fill: none;
@@ -171,4 +171,31 @@
 .startIcon {
   width: 16px;
   height: 16px;
+}
+
+.errorContainer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  padding: 2rem;
+  text-align: center;
+}
+
+.createFirstThreadButton {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1.5rem;
+  background-color: #2563eb;
+  color: white;
+  border: none;
+  border-radius: 0.5rem;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.createFirstThreadButton:hover {
+  background-color: #1d4ed8;
 } 
