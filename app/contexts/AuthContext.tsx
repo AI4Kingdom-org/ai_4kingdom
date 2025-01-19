@@ -38,15 +38,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       credentials: 'include'
     });
 
-    if (process.env.NODE_ENV === 'development') {
-      console.log('[DEBUG] API请求:', {
-        endpoint,
-        status: response.status,
-        headers: Object.fromEntries(response.headers.entries()),
-        cookies: document.cookie
-      });
-    }
-
     if (!response.ok) {
       throw new Error(`API请求失败: ${response.statusText}`);
     }
@@ -58,10 +49,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       console.log('[DEBUG] 开始登录');
       
-      const data = await makeRequest('login', {
+      const response = await fetch(`${API_BASE}/wp-json/custom/v1/login`, {
         method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        credentials: 'include',
         body: JSON.stringify({ username, password })
       });
+
+      console.log('[DEBUG] 登录响应头:', {
+        headers: Object.fromEntries(response.headers.entries()),
+        hasCookie: response.headers.get('set-cookie') !== null
+      });
+      
+      const data = await response.json();
       
       if (data.success) {
         console.log('[DEBUG] 登录成功，正在获取用户信息');
@@ -85,9 +88,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       console.log('[DEBUG] 开始验证会话');
       
-      const data = await makeRequest('validate_session', {
-        method: 'POST'
+      const response = await fetch(`${API_BASE}/wp-json/custom/v1/validate_session`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        credentials: 'include'
       });
+
+      const data = await response.json();
 
       if (data.success) {
         setState(prev => ({
