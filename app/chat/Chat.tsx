@@ -4,8 +4,8 @@ import { useAuth } from '../contexts/AuthContext';
 import { useState, useEffect, useRef } from 'react';
 import styles from './Chat.module.css';
 import ConversationList from '../components/ConversationList';
-import { createOpenAIClient } from '../utils/openai';
 import { updateUserActiveThread } from '../utils/dynamodb';
+import { getOpenAIResponse } from '../utils/openaiService';
 
 export interface ChatMessage {
   Message: string;
@@ -156,46 +156,14 @@ export default function Chat() {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 60000);
 
-      const response = await fetch('/api/chat', {
-        method: 'POST',
-        credentials: 'include',
-        signal: controller.signal,
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          userId: user.user_id,
-          message: currentInput
-        })
-      });
-
+      const response = await getOpenAIResponse(currentInput);
       clearTimeout(timeoutId);
-      
-      console.log('[DEBUG] 消息发送响应:', {
-        status: response.status,
-        ok: response.ok
-      });
 
-      if (!response.ok) {
-        if (response.status === 504) {
-          throw new Error('请求超时，请稍后重试');
-        }
-        const errorText = await response.text();
-        throw new Error(errorText || '发送失败');
-      }
-
-      const data = await response.json();
-      console.log('[DEBUG] 收到响应数据:', {
-        hasReply: !!data.reply,
-        hasBotReply: !!data.botReply,
-        hasMessage: !!data.message
-      });
-      
-      const botReply = data.reply || data.botReply || data.message;
-      
-      if (!botReply) {
+      if (!response.choices?.[0]?.message?.content) {
         throw new Error('服务器响应格式错误');
       }
+
+      const botReply = response.choices[0].message.content;
 
       setMessages(prev => [...prev, 
         { sender: 'user', text: currentInput },
@@ -233,11 +201,12 @@ export default function Chat() {
   // 创建新对话
   const handleCreateNewThread = async () => {
     try {
-      const openai = createOpenAIClient();
-      const newThread = await openai.beta.threads.create();
-      setCurrentThreadId(String(newThread.id));
-      setMessages([]);
-      await updateUserActiveThread(user?.user_id!, String(newThread.id));
+      const response = await fetch('/api/threads/create', { method: 'POST' });
+      const data = await response.json();
+      if (data.threadId) {
+        setCurrentThreadId(data.threadId);
+        await updateUserActiveThread(user?.user_id!, data.threadId);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : '创建新对话失败');
     }
