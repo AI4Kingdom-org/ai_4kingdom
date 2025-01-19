@@ -33,10 +33,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const response = await fetch(`${API_BASE}/wp-json/custom/v1/login`, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
         },
         credentials: 'include',
         body: JSON.stringify({ username, password })
+      });
+
+      console.log('[DEBUG] 登录响应头:', {
+        headers: Object.fromEntries(response.headers.entries()),
+        hasCookie: response.headers.get('set-cookie') !== null
       });
 
       const data = await response.json();
@@ -91,10 +97,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const response = await fetch(`${API_BASE}/wp-json/custom/v1/validate_session`, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
         },
-        credentials: 'include',
-        mode: 'cors'
+        credentials: 'include'
       });
 
       console.log('[DEBUG] 请求详情:', {
