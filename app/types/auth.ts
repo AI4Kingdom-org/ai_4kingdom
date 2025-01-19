@@ -33,6 +33,8 @@ export const FEATURE_ACCESS: Record<FeatureKey, MemberRole[]> = {
 };
 
 export interface AuthContextType extends AuthState {
+  login: (username: string, password: string) => Promise<boolean>;
+  logout: () => void;
   checkAuth: () => Promise<void>;
   getSubscriptionStatus: () => 'active' | 'inactive';
   getSubscriptionType: () => 'free' | 'pro' | 'ultimate';
