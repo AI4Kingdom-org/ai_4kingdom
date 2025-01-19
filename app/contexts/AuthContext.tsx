@@ -40,12 +40,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         mode: 'cors'
       });
 
-      console.log('[DEBUG] 验证请求详情:', {
-        url: response.url,
-        status: response.status,
-        headers: Object.fromEntries(response.headers.entries()),
-        cookies: document.cookie
-      });
+      console.log('[DEBUG] 请求Cookie:', document.cookie);
+      console.log('[DEBUG] 响应头:', Object.fromEntries(response.headers.entries()));
 
       if (response.status === 401) {
         console.log('[DEBUG] 会话已过期或未登录');
