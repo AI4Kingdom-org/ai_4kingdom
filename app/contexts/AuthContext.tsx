@@ -35,12 +35,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           'Content-Type': 'application/json',
           'X-Requested-With': 'XMLHttpRequest',
           'Accept': 'application/json',
-          'Origin': window.location.origin,
-          ...(state.user?.nonce && {
-            'Authorization': `Bearer ${state.user.nonce}`
-          })
+          'Origin': window.location.origin
         },
-        body: JSON.stringify({})
+        mode: 'cors'
       });
 
       console.log('[DEBUG] 验证请求详情:', {
@@ -50,6 +47,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         cookies: document.cookie,
         nonce: state.user?.nonce
       });
+
+      if (response.status === 401) {
+        console.log('[DEBUG] 会话已过期或未登录');
+        setState(prev => ({
+          ...prev,
+          user: null,
+          loading: false,
+          error: '请重新登录'
+        }));
+        return;
+      }
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
@@ -86,8 +94,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         message: err instanceof Error ? err.message : '未知错误',
         cookies: document.cookie,
         location: window.location.href,
-        origin: window.location.origin,
-        nonce: state.user?.nonce
+        origin: window.location.origin
       });
       
       setState(prev => ({
