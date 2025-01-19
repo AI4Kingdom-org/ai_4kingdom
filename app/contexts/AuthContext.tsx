@@ -35,7 +35,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           'Content-Type': 'application/json',
           'X-Requested-With': 'XMLHttpRequest',
           'Accept': 'application/json',
-          'Origin': window.location.origin
+          'Origin': window.location.origin,
+          ...(state.user?.nonce && {
+            'Authorization': `Bearer ${state.user.nonce}`
+          })
         },
         body: JSON.stringify({})
       });
@@ -44,7 +47,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         url: response.url,
         status: response.status,
         headers: Object.fromEntries(response.headers.entries()),
-        cookies: document.cookie
+        cookies: document.cookie,
+        nonce: state.user?.nonce
       });
 
       if (!response.ok) {
@@ -82,7 +86,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         message: err instanceof Error ? err.message : '未知错误',
         cookies: document.cookie,
         location: window.location.href,
-        origin: window.location.origin
+        origin: window.location.origin,
+        nonce: state.user?.nonce
       });
       
       setState(prev => ({
