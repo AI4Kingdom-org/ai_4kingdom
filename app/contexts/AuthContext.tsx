@@ -25,43 +25,53 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     error: null
   });
 
+  const API_BASE = 'https://ai4kingdom.com';
+
+  const makeRequest = async (endpoint: string, options: RequestInit) => {
+    const response = await fetch(`${API_BASE}/wp-json/custom/v1/${endpoint}`, {
+      ...options,
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        ...(options.headers || {})
+      },
+      credentials: 'include'
+    });
+
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[DEBUG] API请求:', {
+        endpoint,
+        status: response.status,
+        headers: Object.fromEntries(response.headers.entries()),
+        cookies: document.cookie
+      });
+    }
+
+    if (!response.ok) {
+      throw new Error(`API请求失败: ${response.statusText}`);
+    }
+
+    return response.json();
+  };
+
   const login = async (username: string, password: string): Promise<boolean> => {
     try {
       console.log('[DEBUG] 开始登录');
       
-      const API_BASE = 'https://ai4kingdom.com';
-      const response = await fetch(`${API_BASE}/wp-json/custom/v1/login`, {
+      const data = await makeRequest('login', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json'
-        },
-        credentials: 'include',
         body: JSON.stringify({ username, password })
       });
-
-      console.log('[DEBUG] 登录响应头:', {
-        headers: Object.fromEntries(response.headers.entries()),
-        hasCookie: response.headers.get('set-cookie') !== null
-      });
-
-      const data = await response.json();
       
       if (data.success) {
-        console.log('[DEBUG] 登录成功');
-        await checkAuth(); // 立即验证并获取用户信息
+        console.log('[DEBUG] 登录成功，正在获取用户信息');
+        await checkAuth();
         return true;
-      } else {
-        console.error('[ERROR] 登录失败:', data);
-        setState(prev => ({
-          ...prev,
-          error: data.message || '登录失败',
-          loading: false
-        }));
-        return false;
       }
+      
+      throw new Error(data.message || '登录失败');
     } catch (err) {
-      console.error('[ERROR] 登录过程错误:', err);
+      console.error('[ERROR] 登录失败:', err);
       setState(prev => ({
         ...prev,
         error: err instanceof Error ? err.message : '登录失败',
@@ -71,66 +81,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const logout = async () => {
-    try {
-      const API_BASE = 'https://ai4kingdom.com';
-      await fetch(`${API_BASE}/wp-json/custom/v1/logout`, {
-        method: 'POST',
-        credentials: 'include'
-      });
-    } catch (err) {
-      console.error('[ERROR] 登出错误:', err);
-    }
-    
-    setState({
-      user: null,
-      loading: false,
-      error: null
-    });
-  };
-
   const checkAuth = async () => {
     try {
       console.log('[DEBUG] 开始验证会话');
       
-      const API_BASE = 'https://ai4kingdom.com';
-      const response = await fetch(`${API_BASE}/wp-json/custom/v1/validate_session`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json'
-        },
-        credentials: 'include'
-      });
-
-      console.log('[DEBUG] 请求详情:', {
-        url: response.url,
-        method: 'POST',
-        status: response.status,
-        statusText: response.statusText
-      });
-
-      if (response.status === 401) {
-        console.log('[DEBUG] Token 已过期或无效');
-        setState(prev => ({
-          ...prev,
-          user: null,
-          loading: false,
-          error: '请重新登录'
-        }));
-        return;
-      }
-
-      if (!response.ok) {
-        throw new Error(`请求失败: ${response.statusText}`);
-      }
-
-      const data = await response.json();
-      console.log('[DEBUG] 响应数据:', {
-        success: data.success,
-        hasUserId: !!data.user_id,
-        hasSubscription: !!data.subscription,
-        subscriptionType: data.subscription?.type
+      const data = await makeRequest('validate_session', {
+        method: 'POST'
       });
 
       if (data.success) {
@@ -143,21 +99,39 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           loading: false,
           error: null
         }));
+        
+        console.log('[DEBUG] 会话验证成功:', {
+          userId: data.user_id,
+          subscription: data.subscription
+        });
       } else {
         throw new Error(data.message || '验证失败');
       }
     } catch (err) {
-      console.error('[ERROR] 验证过程错误:', {
-        message: err instanceof Error ? err.message : '未知错误',
-        location: window.location.href
-      });
-      
+      console.error('[ERROR] 会话验证失败:', err);
       setState(prev => ({
         ...prev,
         user: null,
         loading: false,
         error: err instanceof Error ? err.message : '认证失败'
       }));
+    }
+  };
+
+  const logout = async () => {
+    try {
+      await makeRequest('logout', {
+        method: 'POST'
+      });
+      console.log('[DEBUG] 登出成功');
+    } catch (err) {
+      console.error('[ERROR] 登出失败:', err);
+    } finally {
+      setState({
+        user: null,
+        loading: false,
+        error: null
+      });
     }
   };
 
