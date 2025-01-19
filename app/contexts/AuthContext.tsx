@@ -28,21 +28,34 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const API_BASE = 'https://ai4kingdom.com';
 
   const makeRequest = async (endpoint: string, options: RequestInit) => {
-    const response = await fetch(`${API_BASE}/wp-json/custom/v1/${endpoint}`, {
-      ...options,
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-        ...(options.headers || {})
-      },
-      credentials: 'include'
-    });
+    try {
+      console.log('[DEBUG] 发起请求:', {
+        endpoint,
+        method: options.method,
+        cookies: document.cookie
+      });
 
-    if (!response.ok) {
-      throw new Error(`API请求失败: ${response.statusText}`);
+      const response = await fetch(`${API_BASE}/wp-json/custom/v1/${endpoint}`, {
+        ...options,
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          ...(options.headers || {})
+        },
+        credentials: 'include'  // 确保所有请求都携带 Cookie
+      });
+
+      if (!response.ok) {
+        throw new Error(`API请求失败: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      console.log('[DEBUG] API响应:', { endpoint, data });
+      return data;
+    } catch (err) {
+      console.error('[ERROR] API请求失败:', err);
+      throw err;
     }
-
-    return response.json();
   };
 
   const login = async (username: string, password: string): Promise<boolean> => {
@@ -87,17 +100,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const checkAuth = async () => {
     try {
       console.log('[DEBUG] 开始验证会话');
+      console.log('[DEBUG] 当前 Cookie:', document.cookie);
       
-      const response = await fetch(`${API_BASE}/wp-json/custom/v1/validate_session`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json'
-        },
-        credentials: 'include'
+      const data = await makeRequest('validate_session', {
+        method: 'POST'
       });
-
-      const data = await response.json();
 
       if (data.success) {
         setState(prev => ({
@@ -112,7 +119,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         
         console.log('[DEBUG] 会话验证成功:', {
           userId: data.user_id,
-          subscription: data.subscription
+          subscription: data.subscription,
+          cookies: document.cookie
         });
       } else {
         throw new Error(data.message || '验证失败');
