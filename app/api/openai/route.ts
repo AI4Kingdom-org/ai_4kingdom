@@ -22,25 +22,4 @@ export async function POST(request: Request) {
       { status: 500 }
     );
   }
-}
-
-export async function getOpenAIResponse(prompt: string) {
-  try {
-    const response = await fetch('/api/openai', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ prompt }),
-    });
-
-    if (!response.ok) {
-      throw new Error('API 请求失败');
-    }
-
-    return await response.json();
-  } catch (error) {
-    console.error('获取 OpenAI 响应失败:', error);
-    throw error;
-  }
 } 
