@@ -44,8 +44,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         url: response.url,
         status: response.status,
         headers: Object.fromEntries(response.headers.entries()),
-        cookies: document.cookie,
-        nonce: state.user?.nonce
+        cookies: document.cookie
       });
 
       if (response.status === 401) {
