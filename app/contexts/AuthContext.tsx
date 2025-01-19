@@ -37,11 +37,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           'Accept': 'application/json',
           'Origin': window.location.origin
         },
-        mode: 'cors'
+        mode: 'cors',
+        body: JSON.stringify({})
       });
 
-      console.log('[DEBUG] 请求Cookie:', document.cookie);
-      console.log('[DEBUG] 响应头:', Object.fromEntries(response.headers.entries()));
+      console.log('[DEBUG] 请求详情:', {
+        url: response.url,
+        method: 'POST',
+        headers: Object.fromEntries(response.headers.entries()),
+        status: response.status,
+        statusText: response.statusText
+      });
+
+      console.log('[DEBUG] Cookie状态:', {
+        hasCookie: document.cookie.length > 0,
+        cookies: document.cookie
+      });
 
       if (response.status === 401) {
         console.log('[DEBUG] 会话已过期或未登录');
@@ -56,12 +67,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        console.error('[DEBUG] 验证失败详情:', errorData);
+        console.error('[DEBUG] 请求失败:', {
+          status: response.status,
+          statusText: response.statusText,
+          errorData
+        });
         throw new Error(`认证失败: ${errorData.message || response.statusText}`);
       }
 
       const data = await response.json();
-      console.log('[DEBUG] 验证响应数据:', {
+      console.log('[DEBUG] 响应数据:', {
         success: data.success,
         hasUserId: !!data.user_id,
         hasSubscription: !!data.subscription,
