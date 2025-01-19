@@ -474,17 +474,24 @@ async function getThreadMessages(threadId: string, openai: OpenAI) {
   }
 }
 
+// 创建 OpenAI 实例时添加配置
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+  // 如果是在 Edge Runtime 中运行，可以添加
+  // dangerouslyAllowBrowser: true
+});
+
+// 使用已创建的实例
 async function getOpenAIHistory(userId: string) {
   try {
     console.log('[DEBUG] 开始获取OpenAI历史记录:', { userId });
     
-    const threadId = await getUserActiveThread(userId, createOpenAIClient());
+    const threadId = await getUserActiveThread(userId, openai);
     if (!threadId) {
       console.log('[DEBUG] 未找到活动线程');
       return [];
     }
     
-    const openai = createOpenAIClient();
     const messages = await getThreadMessages(threadId, openai);
     
     // 转换为应用程序使用的格式
