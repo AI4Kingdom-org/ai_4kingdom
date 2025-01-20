@@ -13,8 +13,18 @@ export async function DELETE(
   { params }: { params: { threadId: string } }
 ) {
   try {
+    const userId = request.headers.get('user-id');
     const threadId = params.threadId;
-    console.log('[DEBUG] 开始删除对话:', { threadId });
+    
+    console.log('[DEBUG] 开始删除对话:', { 
+      userId,
+      threadId,
+      type: 'thread'  // 记录类型
+    });
+
+    if (!userId) {
+      throw new Error('未提供用户ID');
+    }
 
     // 1. 删除 OpenAI 的线程
     try {
@@ -27,15 +37,16 @@ export async function DELETE(
     // 2. 删除 DynamoDB 中的记录
     const docClient = await createDynamoDBClient();
     
-    // 使用 ThreadId 作为主键
+    // 使用正确的复合主键
     await docClient.send(new DeleteCommand({
       TableName: process.env.NEXT_PUBLIC_DYNAMODB_TABLE_NAME,
       Key: {
-        ThreadId: threadId  // 使用传入的 threadId 作为主键
+        UserId: userId,    // 分区键
+        Type: 'thread'     // 排序键
       }
     }));
 
-    console.log('[DEBUG] 删除对话成功:', { threadId });
+    console.log('[DEBUG] 删除对话成功:', { userId, threadId });
     return NextResponse.json({ success: true });
 
   } catch (error) {
