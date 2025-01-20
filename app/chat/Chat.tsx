@@ -5,8 +5,7 @@ import { useState, useEffect, useRef } from 'react';
 import styles from './Chat.module.css';
 import ConversationList from '../components/ConversationList';
 import { updateUserActiveThread } from '../utils/dynamodb';
-import { getOpenAIResponse } from '../utils/openaiService';
-import { OpenAI } from 'openai';
+import OpenAI from 'openai';
 
 export interface ChatMessage {
   Message: string;
@@ -72,61 +71,36 @@ export default function Chat() {
   };
 
   const fetchHistory = async (threadId?: string) => {
-    if (!user) return;
+    if (!threadId) {
+      setMessages([]);
+      return;
+    }
     
     setIsFetchingHistory(true);
     setError('');
     
     try {
-      console.log('[DEBUG] 开始获取历史记录:', {
-        userId: user.user_id,
-        threadId
-      });
+      console.log('[DEBUG] 开始获取历史记录:', { threadId });
       
-      if (threadId) {
-        // 如果有 threadId，直接从 OpenAI 获取消息
-        const messages = await openai.beta.threads.messages.list(threadId);
-        
-        const formattedMessages = messages.data
-          .map(message => ({
-            sender: message.role === 'user' ? 'user' : 'bot',
-            text: message.content
-              .filter(content => content.type === 'text')
-              .map(content => (content.type === 'text' ? content.text.value : ''))
-              .join('\n')
-          }))
-          .reverse(); // 反转消息顺序，使最早的消息显示在顶部
+      const messages = await openai.beta.threads.messages.list(threadId);
+      
+      const formattedMessages = messages.data
+        .map(message => ({
+          sender: message.role === 'user' ? 'user' : 'bot',
+          text: message.content
+            .filter(content => content.type === 'text')
+            .map(content => (content.type === 'text' ? content.text.value : ''))
+            .join('\n')
+        }))
+        .reverse();
 
-        setMessages(formattedMessages);
-      } else {
-        // 如果没有 threadId，使用原有的 DynamoDB 查询逻辑
-        const response = await fetch(
-          `/api/chat?userId=${user.user_id}`,
-          {
-            credentials: 'include',
-            headers: {
-              'Content-Type': 'application/json'
-            }
-          }
-        );
-        
-        if (!response.ok) {
-          throw new Error(`获取聊天历史失败: ${response.status}`);
-        }
-        
-        const data = await response.json();
-        const allMessages = data.flatMap((item: ChatMessage) => 
-          parseHistoryMessage(item.Message)
-        );
-        
-        setMessages(allMessages);
-      }
-
+      console.log('[DEBUG] 获取到的消息数量:', formattedMessages.length);
+      setMessages(formattedMessages);
       scrollToBottom();
-      setError('');
+
     } catch (err) {
       console.error('[ERROR] 获取历史记录失败:', err);
-      setError(err instanceof Error ? err.message : '加载失败');
+      setError(err instanceof Error ? err.message : '获取历史记录失败');
       setMessages([]);
     } finally {
       setIsFetchingHistory(false);
@@ -142,23 +116,13 @@ export default function Chat() {
   const sendMessage = async () => {
     if (!input.trim() || !user || isLoading) return;
     
-    console.log('[DEBUG] 开始发送消息:', {
-      userId: user.user_id,
-      messageLength: input.length
-    });
-    
     setIsLoading(true);
     const currentInput = input;
     setInput('');
     setError('');
 
     try {
-      // 如果是第一条消息，清空现有消息列表
-      if (messages.length === 0) {
-        setMessages([]);
-      }
-      
-      // 添加用户消息到底部
+      // 添加用户消息到界面
       setMessages(prev => [...prev, { sender: 'user', text: currentInput }]);
       scrollToBottom();
 
@@ -175,60 +139,44 @@ export default function Chat() {
       });
 
       if (!response.ok) {
-        throw new Error(
-          response.status === 504 
-            ? '请求超时，请稍后重试'
-            : `发送失败: ${response.status}`
-        );
+        throw new Error(response.status === 504 ? '请求超时' : '发送失败');
       }
 
       const data = await response.json();
-      
       if (data.error) {
         throw new Error(data.error);
       }
 
-      // 添加机器人回复到底部
-      setMessages(prev => [...prev, { sender: 'bot', text: data.reply }]);
-      setWeeklyUsage(prev => prev + 1);
-      
-      if (data.threadId && data.threadId !== currentThreadId) {
+      // 获取最新的消息历史
+      if (data.threadId) {
         setCurrentThreadId(data.threadId);
+        await fetchHistory(data.threadId);
       }
 
     } catch (err) {
       console.error('[ERROR] 发送消息失败:', err);
       setInput(currentInput);
       setError(err instanceof Error ? err.message : '发送失败');
-      
-      // 移除最后一条消息（如果发送失败）
+      // 移除失败的消息
       setMessages(prev => prev.slice(0, -1));
     } finally {
       setIsLoading(false);
-      scrollToBottom();
     }
   };
 
   const handleSelectThread = async (threadId: string) => {
     try {
-      // 如果点击当前对话，不做任何操作
       if (threadId === currentThreadId) {
         return;
       }
 
-      // 设置加载状态
       setIsLoading(true);
-      // 清空当前消息和错误
       setMessages([]);
       setError('');
       
-      // 更新当前线程ID
       setCurrentThreadId(String(threadId));
-      
-      // 获取新对话历史
       await fetchHistory(String(threadId));
       
-      // 更新用户活动线程
       if (user?.user_id) {
         await updateUserActiveThread(user.user_id, threadId);
       }
@@ -236,7 +184,6 @@ export default function Chat() {
     } catch (err) {
       console.error('[ERROR] 切换对话失败:', err);
       setError(err instanceof Error ? err.message : '切换对话失败');
-      // 如果失败，恢复到之前的状态
       setCurrentThreadId(currentThreadId);
     } finally {
       setIsLoading(false);
