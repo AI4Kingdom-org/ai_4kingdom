@@ -74,42 +74,81 @@
   }
 }
 
+.messageContainer {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;  /* 增加消息之间的间距 */
+  padding: 1rem;
+  max-width: 900px;  /* 限制最大宽度 */
+  margin: 0 auto;
+  width: 100%;
+}
+
 .message {
-    max-width: 70%;
-    padding: 10px;
-    border-radius: 10px;
-    word-wrap: break-word;
-    font-size: 14px;
-    display: flex;
-    align-items: flex-start;
-    gap: 8px;
+  display: flex;
+  align-items: flex-start;
+  max-width: 85%;  /* 限制消息框最大宽度 */
+}
+
+.userMessage {
+  margin-left: auto;  /* 用户消息靠右 */
+  flex-direction: row-reverse;  /* 反转方向，让头像在右边 */
+}
+
+.botMessage {
+  margin-right: auto;  /* AI消息靠左 */
 }
 
 .messageContent {
-    flex: 1;
+  padding: 1rem 1.5rem;
+  border-radius: 1rem;
+  position: relative;
+  word-wrap: break-word;
+  white-space: pre-wrap;
+  max-width: 100%;
+}
+
+.userMessage .messageContent {
+  background-color: #2563eb;
+  color: white;
+  border-top-right-radius: 0.25rem;  /* 调整用户消息气泡形状 */
+  margin-right: 0.5rem;
+}
+
+.botMessage .messageContent {
+  background-color: #f3f4f6;
+  color: #1f2937;
+  border-top-left-radius: 0.25rem;  /* 调整AI消息气泡形状 */
+  margin-left: 0.5rem;
 }
 
 .avatar {
-    width: 30px;
-    height: 30px;
-    border-radius: 50%;
-    object-fit: contain;
-    background-color: white;
-    padding: 2px;
-    border: 1px solid #ddd;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 0.5rem;
+  background-color: #e5e7eb;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
 }
 
-.user {
-    align-self: flex-end;
-    background-color: #007bff;
-    color: white;
-    flex-direction: row-reverse;
+.userAvatar {
+  background-color: #1d4ed8;
+  color: white;
 }
 
-.bot {
-    align-self: flex-start;
-    background-color: #e1e1e1;
-    color: black;
+.botAvatar {
+  background-color: #10b981;
+  color: white;
+}
+
+/* 消息容器的滚动区域 */
+.messagesWrapper {
+  flex: 1;
+  overflow-y: auto;
+  padding: 1rem 0;
+  scroll-behavior: smooth;
 }
 
 /* 输入区域固定在底部 */

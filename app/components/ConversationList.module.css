@@ -6,6 +6,7 @@
   border-right: 1px solid #e5e7eb;
   width: 280px;
   min-width: 280px;
+  overflow: hidden;
 }
 
 .header {
@@ -21,6 +22,10 @@
   font-size: 1.1rem;
   font-weight: 600;
   color: #0f172a;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
 }
 
 .newChatButton {
@@ -87,6 +92,7 @@
   min-height: 44px;
   position: relative;
   overflow: hidden;
+  max-width: 100%;
 }
 
 .item:hover {
@@ -103,6 +109,7 @@
   gap: 0.75rem;
   flex: 1;
   min-width: 0;
+  overflow: hidden;
 }
 
 .chatIcon {
@@ -110,15 +117,6 @@
   height: 16px;
   color: #6b7280;
   flex-shrink: 0;
-}
-
-.title {
-  font-size: 0.875rem;
-  color: #374151;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  flex: 1;
 }
 
 .deleteButton {
@@ -148,6 +146,30 @@
   padding: 0.5rem 0;
   overflow-y: auto;
   height: calc(100% - 60px);
+  scrollbar-width: thin;
+  scrollbar-color: #d1d5db transparent;
+}
+
+.list::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.list::-webkit-scrollbar-thumb {
+  background-color: #d1d5db;
+  border-radius: 3px;
+}
+
+.list::-webkit-scrollbar-thumb:hover {
+  background-color: #9ca3af;
+}
+
+.list::-webkit-scrollbar-horizontal {
+  display: none;
 }
 
 .emptyState {

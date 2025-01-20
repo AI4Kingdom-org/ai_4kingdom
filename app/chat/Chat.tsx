@@ -276,31 +276,33 @@ export default function Chat() {
         {isFetchingHistory ? (
           <div className={styles.loading}>加载历史记录中...</div>
         ) : (
-          <div className={styles.messages}>
-            {messages.length === 0 ? (
-              <div className={styles.emptyState}>
-                <p>开始新的对话吧！</p>
-              </div>
-            ) : (
-              messages.map((msg, index) => (
+          <div className={styles.messagesWrapper}>
+            <div className={styles.messageContainer}>
+              {messages.map((message, index) => (
                 <div
                   key={index}
-                  className={`${styles.message} ${msg.sender === 'user' ? styles.user : styles.bot}`}
+                  className={`${styles.message} ${
+                    message.sender === 'user' ? styles.userMessage : styles.botMessage
+                  }`}
                 >
-                  {msg.sender === 'bot' && (
-                    <img 
-                      src="https://logos-world.net/wp-content/uploads/2023/02/ChatGPT-Logo.png"
-                      alt="AI Avatar" 
-                      className={styles.avatar}
-                    />
-                  )}
                   <div className={styles.messageContent}>
-                    {msg.text}
+                    {message.text}
+                  </div>
+                  <div className={`${styles.avatar} ${
+                    message.sender === 'user' ? styles.userAvatar : styles.botAvatar
+                  }`}>
+                    {message.sender === 'user' ? 'U' : 'AI'}
                   </div>
                 </div>
-              ))
-            )}
-            <div ref={messagesEndRef} />
+              ))}
+              {isLoading && (
+                <div className={`${styles.message} ${styles.botMessage}`}>
+                  <div className={styles.messageContent}>
+                    <span className={styles.typing}>AI正在思考...</span>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         )}
         {error && <div className={styles.error}>{error}</div>}
