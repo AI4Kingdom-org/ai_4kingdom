@@ -27,15 +27,15 @@ export async function DELETE(
     // 2. 删除 DynamoDB 中的记录
     const docClient = await createDynamoDBClient();
     
-    // 简化删除操作，不使用条件表达式
+    // 使用 ThreadId 作为主键
     await docClient.send(new DeleteCommand({
       TableName: process.env.NEXT_PUBLIC_DYNAMODB_TABLE_NAME,
       Key: {
-        UserId: request.headers.get('user-id'), // 从请求头获取用户ID
-        Type: 'thread',  // 假设这是我们存储线程的方式
+        ThreadId: threadId  // 使用传入的 threadId 作为主键
       }
     }));
 
+    console.log('[DEBUG] 删除对话成功:', { threadId });
     return NextResponse.json({ success: true });
 
   } catch (error) {
