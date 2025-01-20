@@ -87,13 +87,15 @@ export default function Chat() {
         // 如果有 threadId，直接从 OpenAI 获取消息
         const messages = await openai.beta.threads.messages.list(threadId);
         
-        const formattedMessages = messages.data.map(message => ({
-          sender: message.role === 'user' ? 'user' : 'bot',
-          text: message.content
-            .filter(content => content.type === 'text')
-            .map(content => (content.type === 'text' ? content.text.value : ''))
-            .join('\n')
-        }));
+        const formattedMessages = messages.data
+          .map(message => ({
+            sender: message.role === 'user' ? 'user' : 'bot',
+            text: message.content
+              .filter(content => content.type === 'text')
+              .map(content => (content.type === 'text' ? content.text.value : ''))
+              .join('\n')
+          }))
+          .reverse(); // 反转消息顺序，使最早的消息显示在顶部
 
         setMessages(formattedMessages);
       } else {
@@ -196,6 +198,12 @@ export default function Chat() {
     setError('');
 
     try {
+      // 如果是第一条消息，清空现有消息列表
+      if (messages.length === 0) {
+        setMessages([]);
+      }
+      
+      // 添加用户消息到底部
       setMessages(prev => [...prev, { sender: 'user', text: currentInput }]);
       scrollToBottom();
 
@@ -225,6 +233,7 @@ export default function Chat() {
         throw new Error(data.error);
       }
 
+      // 添加机器人回复到底部
       setMessages(prev => [...prev, { sender: 'bot', text: data.reply }]);
       setWeeklyUsage(prev => prev + 1);
       
@@ -237,6 +246,7 @@ export default function Chat() {
       setInput(currentInput);
       setError(err instanceof Error ? err.message : '发送失败');
       
+      // 移除最后一条消息（如果发送失败）
       setMessages(prev => prev.slice(0, -1));
     } finally {
       setIsLoading(false);
@@ -279,41 +289,47 @@ export default function Chat() {
   return (
     <div className={styles.container}>
       {user && (
-        <ConversationList
-          userId={user.user_id}
-          currentThreadId={currentThreadId}
-          onSelectThread={handleSelectThread}
-          onCreateNewThread={handleCreateNewThread}
-        />
+        <div className={styles.conversationListContainer}>
+          <ConversationList
+            userId={user.user_id}
+            currentThreadId={currentThreadId}
+            onSelectThread={handleSelectThread}
+            onCreateNewThread={handleCreateNewThread}
+          />
+        </div>
       )}
       <div className={styles.chatWindow}>
         {isFetchingHistory ? (
           <div className={styles.loading}>加载历史记录中...</div>
         ) : (
           <div className={styles.messages}>
-            {messages.map((msg, index) => (
-              <div
-                key={index}
-                className={`${styles.message} ${msg.sender === 'user' ? styles.user : styles.bot}`}
-              >
-                {msg.sender === 'bot' && (
-                  <img 
-                    src="https://logos-world.net/wp-content/uploads/2023/02/ChatGPT-Logo.png"
-                    alt="AI Avatar" 
-                    className={styles.avatar}
-                  />
-                )}
-                <div className={styles.messageContent}>
-                  {msg.text}
-                </div>
+            {messages.length === 0 ? (
+              <div className={styles.emptyState}>
+                <p>开始新的对话吧！</p>
               </div>
-            ))}
+            ) : (
+              messages.map((msg, index) => (
+                <div
+                  key={index}
+                  className={`${styles.message} ${msg.sender === 'user' ? styles.user : styles.bot}`}
+                >
+                  {msg.sender === 'bot' && (
+                    <img 
+                      src="https://logos-world.net/wp-content/uploads/2023/02/ChatGPT-Logo.png"
+                      alt="AI Avatar" 
+                      className={styles.avatar}
+                    />
+                  )}
+                  <div className={styles.messageContent}>
+                    {msg.text}
+                  </div>
+                </div>
+              ))
+            )}
             <div ref={messagesEndRef} />
           </div>
         )}
-
         {error && <div className={styles.error}>{error}</div>}
-
         <div className={styles.inputArea}>
           <input
             type="text"
