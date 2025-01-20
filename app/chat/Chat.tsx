@@ -46,6 +46,7 @@ export default function Chat() {
   const [isLoading, setIsLoading] = useState(false);
   const [currentThreadId, setCurrentThreadId] = useState<string | null>(null);
   const [isFetchingHistory, setIsFetchingHistory] = useState(false);
+  const [isCreatingThread, setIsCreatingThread] = useState(false);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -108,8 +109,9 @@ export default function Chat() {
   };
 
   useEffect(() => {
-    if (user) {
-      fetchHistory();
+    if (user && !currentThreadId) {
+      console.log('[DEBUG] 初始化加载');
+      setMessages([]);
     }
   }, [user]);
 
@@ -195,26 +197,28 @@ export default function Chat() {
   };
 
   const handleCreateNewThread = async () => {
-    if (isLoading) return; // 防止重复点击
+    if (isCreatingThread) return;
     
     try {
+      setIsCreatingThread(true);
       setIsLoading(true);
       setError('');
       
       const newThread = await openai.beta.threads.create();
-      const threadId = newThread.id;
+      console.log('[DEBUG] 创建新线程:', { threadId: newThread.id });
       
-      setCurrentThreadId(threadId);
+      setCurrentThreadId(newThread.id);
       setMessages([]);
       
       if (user?.user_id) {
-        await updateUserActiveThread(user.user_id, threadId);
+        await updateUserActiveThread(user.user_id, newThread.id);
       }
 
     } catch (err) {
       console.error('[ERROR] 创建新对话失败:', err);
       setError(err instanceof Error ? err.message : '创建新对话失败');
     } finally {
+      setIsCreatingThread(false);
       setIsLoading(false);
     }
   };
@@ -242,6 +246,7 @@ export default function Chat() {
             currentThreadId={currentThreadId}
             onSelectThread={handleSelectThread}
             onCreateNewThread={handleCreateNewThread}
+            isCreating={isCreatingThread}
           />
         </div>
       )}

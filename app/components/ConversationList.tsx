@@ -13,14 +13,16 @@ interface ConversationListProps {
   userId: string;
   currentThreadId: string | null;
   onSelectThread: (threadId: string) => void;
-  onCreateNewThread: () => void;
+  onCreateNewThread: () => Promise<void>;
+  isCreating: boolean;
 }
 
 export default function ConversationList({ 
   userId, 
   currentThreadId,
   onSelectThread,
-  onCreateNewThread 
+  onCreateNewThread,
+  isCreating
 }: ConversationListProps) {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [loading, setLoading] = useState(true);
@@ -74,7 +76,7 @@ export default function ConversationList({
       
       // 如果删除的是当前对话，创建新对话
       if (threadId === currentThreadId) {
-        onCreateNewThread();
+        await onCreateNewThread();
       }
     } catch (error) {
       console.error('[ERROR] 删除对话失败:', error);
@@ -82,38 +84,10 @@ export default function ConversationList({
     }
   };
 
-  const handleCreateNewThread = async () => {
-    if (isLoading) return; // 防止重复点击
-    setIsLoading(true);
-    try {
-      const response = await fetch('/api/threads/create', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ userId })
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || '创建对话失败');
-      }
-
-      const { threadId } = await response.json();
-      
-      // 刷新对话列表
-      await fetchConversations();
-      
-      // 通知父组件新对话已创建
-      await onCreateNewThread();
-      
-      // 选择新创建的对话
-      onSelectThread(threadId);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : '创建对话失败');
-    } finally {
-      setIsLoading(false);
-    }
+  const handleCreateNewThread = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    if (isCreating) return;
+    await onCreateNewThread();
   };
 
   useEffect(() => {
@@ -153,9 +127,9 @@ export default function ConversationList({
         <button
           onClick={handleCreateNewThread}
           className={styles.newChatButton}
-          disabled={isLoading}
+          disabled={isCreating}
         >
-          {isLoading ? '创建中...' : '新对话'}
+          {isCreating ? '创建中...' : '新对话'}
         </button>
       </div>
       
