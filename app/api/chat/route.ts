@@ -510,38 +510,52 @@ export async function GET(request: Request) {
   const origin = request.headers.get('origin');
   const headers = setCORSHeaders(origin);
   
-  console.log('[DEBUG] 开始处理GET请求:', {
-    origin,
-    url: request.url
-  });
-  
-  const { searchParams } = new URL(request.url);
-  const userId = searchParams.get("userId");
-
-  if (!userId) {
-    return new Response(JSON.stringify({ error: "UserId is required" }), {
-      status: 400,
-      headers
-    });
-  }
-
   try {
-    // 从OpenAI获取历史记录
-    const messages = await getOpenAIHistory(userId);
-    
-    console.log('[DEBUG] 返回消息数量:', {
-      count: messages.length
+    const { searchParams } = new URL(request.url);
+    const userId = searchParams.get("userId");
+
+    if (!userId) {
+      return new Response(JSON.stringify({ error: "UserId is required" }), {
+        status: 400,
+        headers
+      });
+    }
+
+    // 添加详细的错误日志
+    console.log('[DEBUG] 开始获取聊天历史:', {
+      userId,
+      tableName: CONFIG.tableName
     });
 
-    return new Response(JSON.stringify(messages), { headers });
+    const docClient = await createDynamoDBClient();
+    
+    // 修改查询逻辑
+    const command = new QueryCommand({
+      TableName: CONFIG.tableName,
+      KeyConditionExpression: 'UserId = :userId AND begins_with(Type, :type)',
+      ExpressionAttributeValues: {
+        ':userId': String(userId),
+        ':type': 'thread'
+      }
+    });
+
+    const response = await docClient.send(command);
+    
+    console.log('[DEBUG] DynamoDB响应:', {
+      itemCount: response.Items?.length,
+      scannedCount: response.ScannedCount
+    });
+
+    return new Response(JSON.stringify(response.Items || []), { headers });
+    
   } catch (error) {
     console.error('[ERROR] 获取聊天历史失败:', {
       error: error instanceof Error ? error.message : '未知错误',
-      type: error instanceof Error ? error.name : typeof error
+      stack: error instanceof Error ? error.stack : undefined
     });
     
     return new Response(JSON.stringify({
-      error: "获取聊天历史失败",
+      error: '获取聊天历史失败',
       details: error instanceof Error ? error.message : '未知错误'
     }), {
       status: 500,
