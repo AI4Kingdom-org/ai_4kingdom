@@ -260,44 +260,47 @@ async function waitForCompletion(openai: OpenAI, threadId: string, runId: string
   return runStatus;
 }
 
-// 修改 POST 处理函数
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY
+});
+
+const ASSISTANT_ID = 'asst_O9yodhRcFLqS28ZybIF35Y4o';
+
 export async function POST(request: Request) {
   try {
     const { userId, message, threadId } = await request.json();
     
-    if (!userId || !message) {
-      return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
-    }
+    console.log('[DEBUG] 接收到聊天请求:', { 
+      userId, 
+      messageLength: message.length, 
+      threadId,
+      assistantId: ASSISTANT_ID 
+    });
 
-    console.log('[DEBUG] 接收到聊天请求:', { userId, messageLength: message.length, threadId });
-
-    // 使用现有的 threadId，不再创建新的
-    const currentThreadId = threadId;
-    
     // 发送消息到 OpenAI
-    await openai.beta.threads.messages.create(currentThreadId, {
+    await openai.beta.threads.messages.create(threadId, {
       role: 'user',
       content: message
     });
 
     // 运行助手
-    const run = await openai.beta.threads.runs.create(currentThreadId, {
-      assistant_id: process.env.OPENAI_ASSISTANT_ID!
+    const run = await openai.beta.threads.runs.create(threadId, {
+      assistant_id: ASSISTANT_ID
     });
 
     // 等待运行完成
-    let runStatus = await openai.beta.threads.runs.retrieve(currentThreadId, run.id);
+    let runStatus = await openai.beta.threads.runs.retrieve(threadId, run.id);
     
     while (runStatus.status !== 'completed') {
       if (runStatus.status === 'failed' || runStatus.status === 'cancelled') {
         throw new Error(`Assistant run failed: ${runStatus.status}`);
       }
       await new Promise(resolve => setTimeout(resolve, 1000));
-      runStatus = await openai.beta.threads.runs.retrieve(currentThreadId, run.id);
+      runStatus = await openai.beta.threads.runs.retrieve(threadId, run.id);
     }
 
     // 获取助手的回复
-    const messages = await openai.beta.threads.messages.list(currentThreadId);
+    const messages = await openai.beta.threads.messages.list(threadId);
     const lastMessage = messages.data[0];
     const assistantReply = lastMessage.content
       .filter(content => content.type === 'text')
@@ -308,15 +311,12 @@ export async function POST(request: Request) {
     
     return NextResponse.json({
       reply: assistantReply,
-      threadId: currentThreadId
+      threadId: threadId
     });
 
   } catch (error) {
     console.error('[ERROR] 处理聊天请求失败:', error);
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : '处理请求失败' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: '发送失败' }, { status: 500 });
   }
 }
 
@@ -353,13 +353,6 @@ async function getThreadMessages(threadId: string, openai: OpenAI) {
     throw error;
   }
 }
-
-// 创建 OpenAI 实例时添加配置
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-  // 如果是在 Edge Runtime 中运行，可以添加
-  // dangerouslyAllowBrowser: true
-});
 
 // 使用已创建的实例
 async function getOpenAIHistory(userId: string) {
