@@ -38,15 +38,21 @@ export async function POST(request: Request) {
       Item: newThreadData
     }));
 
-    return NextResponse.json({ threadId: newThread.id });
+    // 确保返回有效的 JSON 响应
+    return NextResponse.json({
+      success: true,
+      threadId: newThread.id,
+      data: newThreadData
+    });
+
   } catch (error) {
     console.error('[ERROR] 创建对话失败:', error);
-    return NextResponse.json(
-      { 
-        error: '创建对话失败',
-        details: error instanceof Error ? error.message : '未知错误'
-      }, 
-      { status: 500 }
-    );
+    
+    // 确保错误响应也是有效的 JSON
+    return NextResponse.json({
+      success: false,
+      error: '创建对话失败',
+      details: error instanceof Error ? error.message : '未知错误'
+    }, { status: 500 });
   }
 } 
