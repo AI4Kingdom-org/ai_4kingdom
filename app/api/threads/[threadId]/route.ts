@@ -29,9 +29,10 @@ export async function DELETE(
     // 1. 删除 OpenAI 的线程
     try {
       await openai.beta.threads.del(threadId);
+      console.log('[DEBUG] OpenAI thread 删除成功:', threadId);
     } catch (error) {
-      console.warn('[WARN] OpenAI 线程删除失败:', error);
-      // 继续执行，因为我们仍然需要删除本地记录
+      console.error('[ERROR] OpenAI thread 删除失败:', error);
+      // 即使 OpenAI 删除失败，我们仍继续删除数据库记录
     }
 
     // 2. 删除 DynamoDB 中的记录
