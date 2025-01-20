@@ -252,10 +252,19 @@ async function updateUserActiveThread(userId: string, threadId: string) {
     TableName: "UserThreads",
     Item: {
       "UserId": String(userId),
-      "activeThreadId": threadId
+      "activeThreadId": threadId,
+      "Timestamp": new Date().toISOString(),
+      "Type": "thread"
     }
   });
-  return docClient.send(command);
+  
+  try {
+    await docClient.send(command);
+    console.log('[DEBUG] 更新用户活动线程成功:', { userId, threadId });
+  } catch (error) {
+    console.error('[ERROR] 更新用户活动线程失败:', error);
+    throw error;
+  }
 }
 
 // 修改等待完成函数的超时策略
