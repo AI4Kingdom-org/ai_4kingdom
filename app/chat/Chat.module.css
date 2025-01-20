@@ -186,28 +186,31 @@
 .inputContainer {
   display: flex;
   align-items: center;
-  gap: 1rem;  /* 增加输入框和按钮的间距 */
-  padding: 1rem 2rem;  /* 增加左右内边距 */
+  gap: 1rem;
+  padding: 1.5rem 1rem;  /* 减小左右内边距 */
   background-color: #ffffff;
   border-top: 1px solid #e5e7eb;
   position: sticky;
   bottom: 0;
   width: 100%;
-  min-height: 80px;  /* 设置最小高度 */
+  min-height: 100px;
+  max-width: 100%;  /* 确保容器占满宽度 */
 }
 
 .input {
   flex: 1;
-  padding: 0.75rem 1rem;
+  padding: 1rem 1.25rem;
   border: 1px solid #e5e7eb;
   border-radius: 0.5rem;
   font-size: 1rem;
   outline: none;
   resize: none;
-  min-height: 45px;
+  min-height: 60px;
   max-height: 200px;
   background-color: #f9fafb;
   transition: border-color 0.2s ease;
+  line-height: 1.5;
+  width: calc(100% - 120px);  /* 减去按钮宽度和间距 */
 }
 
 .input:focus {
@@ -216,7 +219,8 @@
 }
 
 .sendButton {
-  padding: 0.75rem 1.5rem;
+  padding: 1rem 1.5rem;
+  height: 60px;
   background-color: #2563eb;
   color: white;
   border: none;
@@ -225,7 +229,10 @@
   font-size: 1rem;
   font-weight: 500;
   transition: all 0.2s ease;
-  min-width: 100px;  /* 设置按钮最小宽度 */
+  min-width: 100px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .sendButton:hover {
