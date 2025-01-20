@@ -4,6 +4,8 @@
   flex-direction: column;
   background-color: #ffffff;
   border-right: 1px solid #e5e7eb;
+  width: 280px;
+  min-width: 280px;
 }
 
 .header {
@@ -22,21 +24,46 @@
 }
 
 .newChatButton {
-  padding: 0.5rem 1rem;
-  background-color: #3b82f6;
+  padding: 0.75rem 1.25rem;
+  background-color: #2563eb;
   color: white;
   border: none;
-  border-radius: 6px;
+  border-radius: 8px;
   cursor: pointer;
-  font-size: 0.9rem;
+  font-size: 0.95rem;
+  font-weight: 500;
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  transition: background-color 0.2s;
+  gap: 0.75rem;
+  transition: all 0.2s ease;
+  width: calc(100% - 2rem);
+  margin: 1rem;
+  box-shadow: 0 2px 4px rgba(37, 99, 235, 0.1);
+  white-space: nowrap;
+  justify-content: center;
 }
 
 .newChatButton:hover {
-  background-color: #2563eb;
+  background-color: #1d4ed8;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 6px rgba(37, 99, 235, 0.15);
+}
+
+.newChatButton:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 4px rgba(37, 99, 235, 0.1);
+}
+
+.newChatButton:disabled {
+  background-color: #94a3b8;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+.newChatButton svg {
+  width: 1.25rem;
+  height: 1.25rem;
 }
 
 .conversationList {
@@ -53,19 +80,27 @@
   margin: 0.25rem 0;
   border-radius: 6px;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.2s ease;
   background-color: #f8fafc;
   border: 1px solid transparent;
+  user-select: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
 }
 
 .conversationItem:hover {
   background-color: #f1f5f9;
   border-color: #e2e8f0;
+  transform: translateX(4px);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
 }
 
 .conversationItem.active {
   background-color: #eff6ff;
   border-color: #bfdbfe;
+  transform: translateX(4px);
+  box-shadow: 0 2px 4px rgba(37, 99, 235, 0.1);
 }
 
 .conversationTitle {
@@ -74,6 +109,11 @@
   gap: 0.5rem;
   color: #1e293b;
   font-size: 0.9rem;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .chatIcon {
@@ -89,17 +129,23 @@
   border-radius: 4px;
   cursor: pointer;
   opacity: 0;
-  transition: all 0.2s;
+  transition: all 0.2s ease;
   color: #94a3b8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
 }
 
 .conversationItem:hover .deleteButton {
   opacity: 1;
+  transform: translateX(0);
 }
 
 .deleteButton:hover {
   background-color: #fee2e2;
   color: #ef4444;
+  transform: scale(1.1);
 }
 
 .deleteIcon {

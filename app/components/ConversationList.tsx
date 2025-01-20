@@ -49,32 +49,35 @@ export default function ConversationList({
   };
 
   // 删除对话
-  const handleDeleteThread = async (threadId: string, e: React.MouseEvent) => {
-    e.stopPropagation(); // 防止触发选择事件
-    
+  const handleDelete = async (threadId: string) => {
     try {
       const response = await fetch(`/api/threads/${threadId}`, {
         method: 'DELETE',
-        credentials: 'include',
         headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ userId })
+          'Content-Type': 'application/json',
+          'user-id': userId  // 添加用户ID到请求头
+        }
       });
 
       if (!response.ok) {
         throw new Error('删除对话失败');
       }
 
-      // 刷新对话列表
+      const data = await response.json();
+      if (!data.success) {
+        throw new Error(data.error || '删除对话失败');
+      }
+
+      // 删除成功后刷新对话列表
       fetchConversations();
       
       // 如果删除的是当前对话，创建新对话
       if (threadId === currentThreadId) {
         onCreateNewThread();
       }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : '删除失败');
+    } catch (error) {
+      console.error('[ERROR] 删除对话失败:', error);
+      setError(error instanceof Error ? error.message : '删除失败');
     }
   };
 
@@ -187,7 +190,7 @@ export default function ConversationList({
               </span>
               <button
                 className={styles.deleteButton}
-                onClick={(e) => handleDeleteThread(conv.threadId, e)}
+                onClick={(e) => handleDelete(conv.threadId)}
               >
                 <svg 
                   viewBox="0 0 24 24" 

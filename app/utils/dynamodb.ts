@@ -49,6 +49,7 @@ export async function updateUserActiveThread(userId: string, threadId: string) {
         UserId: String(userId),
         Type: 'thread',
         threadId: threadId,
+        Timestamp: new Date().toISOString(),
         createdAt: new Date().toISOString()
       }
     }));
