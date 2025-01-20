@@ -189,36 +189,19 @@ async function shouldCreateNewThread(threadId: string, userId: string, openai: O
 async function getUserActiveThread(userId: string, openai: OpenAI): Promise<string> {
   try {
     const docClient = await createDynamoDBClient();
-    const response = await docClient.send(new GetCommand({
+    const response = await docClient.send(new QueryCommand({  // 改用 QueryCommand 而不是 GetCommand
       TableName: CONFIG.tableName,
-      Key: {
-        UserId: String(userId),
-        Type: 'thread'
+      KeyConditionExpression: 'UserId = :userId AND Type = :type',
+      ExpressionAttributeValues: {
+        ':userId': String(userId),
+        ':type': 'thread'
       }
     }));
 
-    const threadId = response.Item?.threadId;
+    // 获取最新的线程
+    const latestThread = response.Items?.[0];
+    const threadId = latestThread?.threadId;
     
-    if (threadId && await shouldCreateNewThread(threadId, userId, openai)) {
-      // 创建新线程
-      const newThread = await openai.beta.threads.create();
-      
-      // 保存新线程ID，添加 Timestamp
-      await docClient.send(new PutCommand({
-        TableName: CONFIG.tableName,
-        Item: {
-          UserId: String(userId),
-          Type: 'thread',
-          threadId: newThread.id,
-          Timestamp: new Date().toISOString(),  // 添加必需的 Timestamp
-          createdAt: new Date().toISOString()
-        }
-      }));
-      
-      console.log('[DEBUG] 已创建新线程:', newThread.id);
-      return newThread.id;
-    }
-
     if (!threadId) {
       // 如果没有现有线程，创建新线程
       const newThread = await openai.beta.threads.create();
@@ -229,8 +212,7 @@ async function getUserActiveThread(userId: string, openai: OpenAI): Promise<stri
           UserId: String(userId),
           Type: 'thread',
           threadId: newThread.id,
-          Timestamp: new Date().toISOString(),  // 添加必需的 Timestamp
-          createdAt: new Date().toISOString()
+          Timestamp: new Date().toISOString()
         }
       }));
       
@@ -241,7 +223,7 @@ async function getUserActiveThread(userId: string, openai: OpenAI): Promise<stri
     return threadId;
   } catch (error) {
     console.error('[ERROR] 获取用户线程失败:', error);
-    throw error;  // 让错误向上传播，而不是自动创建新线程
+    throw error;
   }
 }
 
