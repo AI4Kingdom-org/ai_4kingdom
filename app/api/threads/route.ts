@@ -17,14 +17,26 @@ export async function GET(request: Request) {
       TableName: process.env.NEXT_PUBLIC_DYNAMODB_TABLE_NAME,
       KeyConditionExpression: 'UserId = :userId AND Type = :type',
       ExpressionAttributeValues: {
-        ':userId': userId,
+        ':userId': String(userId),
         ':type': 'thread'
       }
     }));
 
-    return NextResponse.json(response.Items);
+    // 确保返回的数据格式符合 ConversationList 组件的接口
+    const conversations = response.Items?.map(item => ({
+      threadId: item.threadId,
+      createdAt: item.Timestamp || item.createdAt,
+      UserId: item.UserId
+    })) || [];
+
+    console.log('[DEBUG] 获取到的对话列表:', {
+      userId,
+      count: conversations.length
+    });
+
+    return NextResponse.json(conversations);
   } catch (error) {
-    console.error('获取对话列表失败:', error);
+    console.error('[ERROR] 获取对话列表失败:', error);
     return NextResponse.json(
       { error: '获取对话列表失败' },
       { status: 500 }
