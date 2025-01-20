@@ -6,6 +6,7 @@ import styles from './Chat.module.css';
 import ConversationList from '../components/ConversationList';
 import { updateUserActiveThread } from '../utils/dynamodb';
 import { getOpenAIResponse } from '../utils/openaiService';
+import { OpenAI } from 'openai';
 
 export interface ChatMessage {
   Message: string;
@@ -30,6 +31,10 @@ const WEEKLY_LIMITS: UsageLimit = {
     pro: 100,
     ultimate: Infinity
 };
+
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY
+});
 
 export default function Chat() {
   const { user, loading, error: authError } = useAuth();
@@ -77,34 +82,43 @@ export default function Chat() {
         threadId
       });
       
-      const response = await fetch(
-        `/api/chat?userId=${user.user_id}${threadId ? `&threadId=${threadId}` : ''}`,
-        {
-          credentials: 'include',
-          headers: {
-            'Content-Type': 'application/json'
+      if (threadId) {
+        // 如果有 threadId，直接从 OpenAI 获取消息
+        const messages = await openai.beta.threads.messages.list(threadId);
+        
+        const formattedMessages = messages.data.map(message => ({
+          sender: message.role === 'user' ? 'user' : 'bot',
+          text: message.content
+            .filter(content => content.type === 'text')
+            .map(content => (content.type === 'text' ? content.text.value : ''))
+            .join('\n')
+        }));
+
+        setMessages(formattedMessages);
+      } else {
+        // 如果没有 threadId，使用原有的 DynamoDB 查询逻辑
+        const response = await fetch(
+          `/api/chat?userId=${user.user_id}`,
+          {
+            credentials: 'include',
+            headers: {
+              'Content-Type': 'application/json'
+            }
           }
+        );
+        
+        if (!response.ok) {
+          throw new Error(`获取聊天历史失败: ${response.status}`);
         }
-      );
-      
-      if (!response.ok) {
-        throw new Error(`获取聊天历史失败: ${response.status}`);
+        
+        const data = await response.json();
+        const allMessages = data.flatMap((item: ChatMessage) => 
+          parseHistoryMessage(item.Message)
+        );
+        
+        setMessages(allMessages);
       }
-      
-      const data = await response.json();
-      console.log('[DEBUG] 获取到的历史记录:', {
-        recordCount: data.length
-      });
-      
-      const allMessages = data.flatMap((item: ChatMessage) => 
-        parseHistoryMessage(item.Message)
-      );
-      
-      console.log('[DEBUG] 解析后的消息:', {
-        messageCount: allMessages.length
-      });
-      
-      setMessages(allMessages);
+
       scrollToBottom();
       setError('');
     } catch (err) {
