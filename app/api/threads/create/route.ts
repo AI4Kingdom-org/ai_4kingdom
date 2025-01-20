@@ -7,21 +7,32 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
 });
 
-export async function POST() {
+export async function POST(request: Request) {
   try {
-    const newThread = await openai.beta.threads.create();
-    const userId = process.env.NEXT_PUBLIC_DYNAMODB_TABLE_NAME;
-    const timestamp = new Date().toISOString();
-    const type = 'thread';
-    const threadId = newThread.id;
+    // 从请求体获取 userId
+    const { userId } = await request.json();
+    
+    if (!userId) {
+      return NextResponse.json({ error: 'UserId is required' }, { status: 400 });
+    }
 
+    console.log('[DEBUG] 开始创建新对话:', { userId });
+
+    // 创建 OpenAI 线程
+    const newThread = await openai.beta.threads.create();
+    const timestamp = new Date().toISOString();
+
+    // 准备新线程数据
     const newThreadData = {
       UserId: String(userId),
       Timestamp: timestamp,
-      Type: type,
-      threadId: threadId,
+      Type: 'thread',
+      threadId: newThread.id,
     };
 
+    console.log('[DEBUG] 保存线程数据:', newThreadData);
+
+    // 保存到 DynamoDB
     await docClient.send(new PutCommand({
       TableName: process.env.NEXT_PUBLIC_DYNAMODB_TABLE_NAME,
       Item: newThreadData
@@ -29,6 +40,13 @@ export async function POST() {
 
     return NextResponse.json({ threadId: newThread.id });
   } catch (error) {
-    return NextResponse.json({ error: '创建对话失败' }, { status: 500 });
+    console.error('[ERROR] 创建对话失败:', error);
+    return NextResponse.json(
+      { 
+        error: '创建对话失败',
+        details: error instanceof Error ? error.message : '未知错误'
+      }, 
+      { status: 500 }
+    );
   }
 } 

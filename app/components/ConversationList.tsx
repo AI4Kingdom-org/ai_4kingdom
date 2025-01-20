@@ -78,6 +78,36 @@ export default function ConversationList({
     }
   };
 
+  const handleCreateNewThread = async () => {
+    try {
+      const response = await fetch('/api/threads/create', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ userId })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || '创建对话失败');
+      }
+
+      const { threadId } = await response.json();
+      
+      // 刷新对话列表
+      await fetchConversations();
+      
+      // 通知父组件新对话已创建
+      onCreateNewThread();
+      
+      // 选择新创建的对话
+      onSelectThread(threadId);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '创建对话失败');
+    }
+  };
+
   useEffect(() => {
     if (userId) {
       fetchConversations();
@@ -113,7 +143,7 @@ export default function ConversationList({
       <div className={styles.header}>
         <button 
           className={styles.newChatButton}
-          onClick={onCreateNewThread}
+          onClick={handleCreateNewThread}
         >
           <svg 
             viewBox="0 0 24 24" 
@@ -138,18 +168,6 @@ export default function ConversationList({
             <p className={styles.emptyText}>
               点击上方"新对话"按钮，开始与 AI 助手交流
             </p>
-            <button 
-              className={styles.emptyButton}
-              onClick={onCreateNewThread}
-            >
-              <svg 
-                viewBox="0 0 24 24" 
-                className={styles.startIcon}
-              >
-                <path fill="currentColor" d="M8 5v14l11-7z"/>
-              </svg>
-              立即开始
-            </button>
           </div>
         ) : (
           conversations.map((conv) => (
