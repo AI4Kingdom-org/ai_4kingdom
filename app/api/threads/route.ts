@@ -20,7 +20,10 @@ export async function GET(request: Request) {
 
     const response = await docClient.send(new QueryCommand({
       TableName: process.env.NEXT_PUBLIC_DYNAMODB_TABLE_NAME,
-      KeyConditionExpression: 'UserId = :userId AND Type = :type',
+      KeyConditionExpression: 'UserId = :userId AND #type = :type',
+      ExpressionAttributeNames: {
+        '#type': 'Type'
+      },
       ExpressionAttributeValues: {
         ':userId': String(userId),
         ':type': 'thread'

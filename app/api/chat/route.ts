@@ -189,15 +189,20 @@ async function shouldCreateNewThread(threadId: string, userId: string, openai: O
 async function getUserActiveThread(userId: string, openai: OpenAI): Promise<string> {
   try {
     const docClient = await createDynamoDBClient();
-    const response = await docClient.send(new QueryCommand({  // 改用 QueryCommand 而不是 GetCommand
+    const command = new QueryCommand({
       TableName: CONFIG.tableName,
-      KeyConditionExpression: 'UserId = :userId AND Type = :type',
+      KeyConditionExpression: 'UserId = :userId AND #type = :type',
+      ExpressionAttributeNames: {
+        '#type': 'Type'
+      },
       ExpressionAttributeValues: {
         ':userId': String(userId),
         ':type': 'thread'
       }
-    }));
+    });
 
+    const response = await docClient.send(command);
+    
     // 获取最新的线程
     const latestThread = response.Items?.[0];
     const threadId = latestThread?.threadId;
@@ -532,7 +537,10 @@ export async function GET(request: Request) {
     // 修改查询逻辑
     const command = new QueryCommand({
       TableName: CONFIG.tableName,
-      KeyConditionExpression: 'UserId = :userId AND begins_with(Type, :type)',
+      KeyConditionExpression: 'UserId = :userId AND #type = :type',
+      ExpressionAttributeNames: {
+        '#type': 'Type'
+      },
       ExpressionAttributeValues: {
         ':userId': String(userId),
         ':type': 'thread'
