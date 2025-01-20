@@ -199,18 +199,17 @@ export default function Chat() {
       setIsLoading(true);
       setError('');
       
-      // 创建新的 OpenAI 线程
       const newThread = await openai.beta.threads.create();
       const threadId = newThread.id;
       
       setCurrentThreadId(threadId);
       setMessages([]);
       
-      // 这里调用了一次
       if (user?.user_id) {
         console.log('[DEBUG] handleCreateNewThread 创建记录:', { threadId });
         await updateUserActiveThread(user.user_id, threadId);
       }
+
     } catch (err) {
       console.error('[ERROR] 创建新对话失败:', err);
       setError(err instanceof Error ? err.message : '创建新对话失败');
