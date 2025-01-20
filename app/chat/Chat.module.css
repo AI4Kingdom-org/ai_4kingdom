@@ -82,21 +82,23 @@
   max-width: 900px;  /* 限制最大宽度 */
   margin: 0 auto;
   width: 100%;
+  overflow-x: hidden;
 }
 
+/* 修改消息布局 */
 .message {
   display: flex;
   align-items: flex-start;
-  max-width: 85%;  /* 限制消息框最大宽度 */
+  max-width: 85%;
+  gap: 0.75rem;  /* 统一设置头像和消息框的间距 */
 }
 
 .userMessage {
-  margin-left: auto;  /* 用户消息靠右 */
-  flex-direction: row-reverse;  /* 反转方向，让头像在右边 */
+  margin-left: auto;
 }
 
 .botMessage {
-  margin-right: auto;  /* AI消息靠左 */
+  margin-right: auto;
 }
 
 .messageContent {
@@ -143,45 +145,96 @@
   color: white;
 }
 
-/* 消息容器的滚动区域 */
+/* 统一滚动条样式 */
 .messagesWrapper {
   flex: 1;
   overflow-y: auto;
   padding: 1rem 0;
   scroll-behavior: smooth;
+  margin-bottom: 80px;
+  
+  /* 自定义滚动条样式 */
+  scrollbar-width: thin;
+  scrollbar-color: #d1d5db transparent;
 }
 
-/* 输入区域固定在底部 */
-.inputArea {
-  padding: 1rem;
+/* Webkit浏览器的滚动条样式 */
+.messagesWrapper::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.messagesWrapper::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.messagesWrapper::-webkit-scrollbar-thumb {
+  background-color: #d1d5db;
+  border-radius: 3px;
+}
+
+.messagesWrapper::-webkit-scrollbar-thumb:hover {
+  background-color: #9ca3af;
+}
+
+/* 隐藏横向滚动条 */
+.messagesWrapper::-webkit-scrollbar-horizontal {
+  display: none;
+}
+
+/* 修改底部输入区域 */
+.inputContainer {
+  display: flex;
+  align-items: center;
+  gap: 1rem;  /* 增加输入框和按钮的间距 */
+  padding: 1rem 2rem;  /* 增加左右内边距 */
+  background-color: #ffffff;
   border-top: 1px solid #e5e7eb;
-  background: #ffffff;
+  position: sticky;
+  bottom: 0;
+  width: 100%;
+  min-height: 80px;  /* 设置最小高度 */
 }
 
-/* 为 input 添加局部类名 */
-.inputField {
-    flex: 1;
-    padding: 8px;
-    border: 1px solid #ccc;
-    border-radius: 5px;
-    font-size: 14px;
+.input {
+  flex: 1;
+  padding: 0.75rem 1rem;
+  border: 1px solid #e5e7eb;
+  border-radius: 0.5rem;
+  font-size: 1rem;
+  outline: none;
+  resize: none;
+  min-height: 45px;
+  max-height: 200px;
+  background-color: #f9fafb;
+  transition: border-color 0.2s ease;
 }
 
-/* 为 button 添加局部类名 */
+.input:focus {
+  border-color: #2563eb;
+  background-color: #ffffff;
+}
+
 .sendButton {
-    padding: 10px 20px;
-    border: none;
-    border-radius: 5px;
-    background-color: #007bff;
-    color: white;
-    font-size: 14px;
-    cursor: pointer;
-    transition: background-color 0.3s ease;
+  padding: 0.75rem 1.5rem;
+  background-color: #2563eb;
+  color: white;
+  border: none;
+  border-radius: 0.5rem;
+  cursor: pointer;
+  font-size: 1rem;
+  font-weight: 500;
+  transition: all 0.2s ease;
+  min-width: 100px;  /* 设置按钮最小宽度 */
+}
+
+.sendButton:hover {
+  background-color: #1d4ed8;
 }
 
 .sendButton:disabled {
-    background-color: #ccc;
-    cursor: not-allowed;
+  background-color: #9ca3af;
+  cursor: not-allowed;
 }
 
 .error {

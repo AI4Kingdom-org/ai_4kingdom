@@ -285,18 +285,26 @@ export default function Chat() {
                     message.sender === 'user' ? styles.userMessage : styles.botMessage
                   }`}
                 >
+                  {message.sender === 'bot' && (
+                    <div className={`${styles.avatar} ${styles.botAvatar}`}>
+                      AI
+                    </div>
+                  )}
                   <div className={styles.messageContent}>
                     {message.text}
                   </div>
-                  <div className={`${styles.avatar} ${
-                    message.sender === 'user' ? styles.userAvatar : styles.botAvatar
-                  }`}>
-                    {message.sender === 'user' ? 'U' : 'AI'}
-                  </div>
+                  {message.sender === 'user' && (
+                    <div className={`${styles.avatar} ${styles.userAvatar}`}>
+                      U
+                    </div>
+                  )}
                 </div>
               ))}
               {isLoading && (
                 <div className={`${styles.message} ${styles.botMessage}`}>
+                  <div className={`${styles.avatar} ${styles.botAvatar}`}>
+                    AI
+                  </div>
                   <div className={styles.messageContent}>
                     <span className={styles.typing}>AI正在思考...</span>
                   </div>
