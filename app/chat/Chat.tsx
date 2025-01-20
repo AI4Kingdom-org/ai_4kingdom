@@ -134,51 +134,6 @@ export default function Chat() {
   };
 
   useEffect(() => {
-    async function fetchHistory() {
-      if (!user) return;
-      
-      console.log('[DEBUG] 开始获取历史记录:', {
-        userId: user.user_id,
-        userType: user.subscription?.type
-      });
-      
-      try {
-        const response = await fetch(`/api/chat?userId=${user.user_id}`, {
-          credentials: 'include',
-          headers: {
-            'Content-Type': 'application/json'
-          }
-        });
-        
-        console.log('[DEBUG] 历史记录响应状态:', {
-          status: response.status,
-          ok: response.ok
-        });
-        
-        if (!response.ok) {
-          throw new Error(`获取聊天历史失败: ${response.status}`);
-        }
-        
-        const data = await response.json();
-        console.log('[DEBUG] 获取到的历史记录:', {
-          recordCount: data.length
-        });
-        
-        const allMessages = data.flatMap((item: ChatMessage) => 
-          parseHistoryMessage(item.Message)
-        );
-        console.log('[DEBUG] 解析后的消息数量:', {
-          messageCount: allMessages.length
-        });
-        
-        setMessages(allMessages);
-        scrollToBottom();
-      } catch (err) {
-        console.error('[ERROR] 获取历史记录失败:', err);
-        setError(err instanceof Error ? err.message : '加载失败');
-      }
-    }
-
     if (user) {
       fetchHistory();
     }
@@ -255,8 +210,37 @@ export default function Chat() {
   };
 
   const handleSelectThread = async (threadId: string) => {
-    setCurrentThreadId(String(threadId));
-    await fetchHistory(String(threadId));
+    try {
+      // 如果点击当前对话，不做任何操作
+      if (threadId === currentThreadId) {
+        return;
+      }
+
+      // 设置加载状态
+      setIsLoading(true);
+      // 清空当前消息和错误
+      setMessages([]);
+      setError('');
+      
+      // 更新当前线程ID
+      setCurrentThreadId(String(threadId));
+      
+      // 获取新对话历史
+      await fetchHistory(String(threadId));
+      
+      // 更新用户活动线程
+      if (user?.user_id) {
+        await updateUserActiveThread(user.user_id, threadId);
+      }
+
+    } catch (err) {
+      console.error('[ERROR] 切换对话失败:', err);
+      setError(err instanceof Error ? err.message : '切换对话失败');
+      // 如果失败，恢复到之前的状态
+      setCurrentThreadId(currentThreadId);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleCreateNewThread = async () => {
