@@ -118,21 +118,33 @@ export default function Chat() {
   const sendMessage = async () => {
     if (!input.trim() || !user || isLoading) return;
     
+    console.log('[DEBUG] 准备发送消息:', {
+      threadId: currentThreadId,
+      messageLength: input.length,
+      userId: user.user_id
+    });
+    
     setIsLoading(true);
     const currentInput = input;
     setInput('');
     setError('');
 
     try {
-      // 如果没有当前线程，先创建一个
       if (!currentThreadId) {
+        console.log('[DEBUG] 没有当前对话，创建新对话');
         const newThread = await openai.beta.threads.create();
+        console.log('[DEBUG] 创建新对话成功:', { threadId: newThread.id });
         setCurrentThreadId(newThread.id);
       }
 
       // 添加用户消息到界面
       setMessages(prev => [...prev, { sender: 'user', text: currentInput }]);
       scrollToBottom();
+
+      console.log('[DEBUG] 发送消息到API:', {
+        threadId: currentThreadId,
+        userId: user.user_id
+      });
 
       const response = await fetch('/api/chat', {
         method: 'POST',
@@ -151,6 +163,12 @@ export default function Chat() {
       }
 
       const data = await response.json();
+      console.log('[DEBUG] API响应:', {
+        success: true,
+        threadId: data.threadId,
+        hasReply: !!data.reply
+      });
+
       if (data.error) {
         throw new Error(data.error);
       }
@@ -161,7 +179,10 @@ export default function Chat() {
       }
 
     } catch (err) {
-      console.error('[ERROR] 发送消息失败:', err);
+      console.error('[ERROR] 发送消息失败:', {
+        error: err instanceof Error ? err.message : '发送失败',
+        threadId: currentThreadId
+      });
       setInput(currentInput);
       setError(err instanceof Error ? err.message : '发送失败');
       setMessages(prev => prev.slice(0, -1));
@@ -176,12 +197,17 @@ export default function Chat() {
         return;
       }
 
+      console.log('[DEBUG] 切换对话:', {
+        from: currentThreadId || 'none',
+        to: threadId
+      });
+
       setIsLoading(true);
       setMessages([]);
       setError('');
       
-      setCurrentThreadId(String(threadId));
-      await fetchHistory(String(threadId));
+      setCurrentThreadId(threadId);
+      await fetchHistory(threadId);
       
       if (user?.user_id) {
         await updateUserActiveThread(user.user_id, threadId);

@@ -27,11 +27,11 @@ export default function ConversationList({
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
 
-  // 获取所有对话
+  // 获取对话列表
   const fetchConversations = async () => {
     try {
+      console.log('[DEBUG] 开始获取对话列表');
       const response = await fetch(`/api/threads?userId=${userId}`, {
         credentials: 'include'
       });
@@ -41,9 +41,11 @@ export default function ConversationList({
       }
       
       const data = await response.json();
+      console.log('[DEBUG] 获取到的对话列表:', data);
       setConversations(data || []);
       setError(null);
     } catch (err) {
+      console.error('[ERROR] 获取对话列表失败:', err);
       setError(err instanceof Error ? err.message : '加载失败');
       setConversations([]);
     } finally {
@@ -84,12 +86,15 @@ export default function ConversationList({
     }
   };
 
+  // 创建新对话并刷新列表
   const handleCreateNewThread = async (e: React.MouseEvent) => {
     e.preventDefault();
     if (isCreating) return;
     await onCreateNewThread();
+    await fetchConversations(); // 创建完成后刷新列表
   };
 
+  // 初始加载和用户ID变化时获取对话列表
   useEffect(() => {
     if (userId) {
       fetchConversations();
@@ -134,7 +139,9 @@ export default function ConversationList({
       </div>
       
       <div className={styles.list}>
-        {conversations.length === 0 ? (
+        {error ? (
+          <div className={styles.error}>{error}</div>
+        ) : conversations.length === 0 ? (
           <div className={styles.emptyState}>
             <svg 
               viewBox="0 0 24 24" 
@@ -165,7 +172,10 @@ export default function ConversationList({
               </span>
               <button
                 className={styles.deleteButton}
-                onClick={(e) => handleDelete(conv.threadId)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleDelete(conv.threadId);
+                }}
               >
                 <svg 
                   viewBox="0 0 24 24" 
