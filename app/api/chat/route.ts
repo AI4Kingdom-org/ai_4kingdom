@@ -203,13 +203,14 @@ async function getUserActiveThread(userId: string, openai: OpenAI): Promise<stri
       // 创建新线程
       const newThread = await openai.beta.threads.create();
       
-      // 保存新线程ID
+      // 保存新线程ID，添加 Timestamp
       await docClient.send(new PutCommand({
         TableName: CONFIG.tableName,
         Item: {
           UserId: String(userId),
           Type: 'thread',
           threadId: newThread.id,
+          Timestamp: new Date().toISOString(),  // 添加必需的 Timestamp
           createdAt: new Date().toISOString()
         }
       }));
@@ -228,6 +229,7 @@ async function getUserActiveThread(userId: string, openai: OpenAI): Promise<stri
           UserId: String(userId),
           Type: 'thread',
           threadId: newThread.id,
+          Timestamp: new Date().toISOString(),  // 添加必需的 Timestamp
           createdAt: new Date().toISOString()
         }
       }));
@@ -239,10 +241,7 @@ async function getUserActiveThread(userId: string, openai: OpenAI): Promise<stri
     return threadId;
   } catch (error) {
     console.error('[ERROR] 获取用户线程失败:', error);
-    // 出错时创建新线程
-    const newThread = await openai.beta.threads.create();
-    console.log('[DEBUG] 错误恢复：创建新线程:', newThread.id);
-    return newThread.id;
+    throw error;  // 让错误向上传播，而不是自动创建新线程
   }
 }
 
