@@ -191,6 +191,7 @@ async function getUserActiveThread(userId: string, openai: OpenAI): Promise<stri
     const docClient = await createDynamoDBClient();
     const command = new QueryCommand({
       TableName: CONFIG.tableName,
+      IndexName: 'UserTypeIndex',  // 使用 GSI
       KeyConditionExpression: 'UserId = :userId AND #type = :type',
       ExpressionAttributeNames: {
         '#type': 'Type'
@@ -537,6 +538,7 @@ export async function GET(request: Request) {
     // 修改查询逻辑
     const command = new QueryCommand({
       TableName: CONFIG.tableName,
+      IndexName: 'UserTypeIndex',  // 使用 GSI
       KeyConditionExpression: 'UserId = :userId AND #type = :type',
       ExpressionAttributeNames: {
         '#type': 'Type'

@@ -20,6 +20,7 @@ export async function GET(request: Request) {
 
     const response = await docClient.send(new QueryCommand({
       TableName: process.env.NEXT_PUBLIC_DYNAMODB_TABLE_NAME,
+      IndexName: 'UserTypeIndex',  // 使用 GSI
       KeyConditionExpression: 'UserId = :userId AND #type = :type',
       ExpressionAttributeNames: {
         '#type': 'Type'
