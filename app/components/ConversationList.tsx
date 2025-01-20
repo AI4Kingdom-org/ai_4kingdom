@@ -59,8 +59,7 @@ export default function ConversationList({
       const response = await fetch(`/api/threads/${threadId}`, {
         method: 'DELETE',
         headers: {
-          'Content-Type': 'application/json',
-          'user-id': userId  // 添加用户ID到请求头
+          'user-id': userId // 添加用户ID到请求头
         }
       });
 
@@ -68,18 +67,9 @@ export default function ConversationList({
         throw new Error('删除对话失败');
       }
 
-      const data = await response.json();
-      if (!data.success) {
-        throw new Error(data.error || '删除对话失败');
-      }
-
-      // 删除成功后刷新对话列表
-      fetchConversations();
+      // 刷新对话列表
+      await fetchConversations();
       
-      // 如果删除的是当前对话，创建新对话
-      if (threadId === currentThreadId) {
-        await onCreateNewThread();
-      }
     } catch (error) {
       console.error('[ERROR] 删除对话失败:', error);
       setError(error instanceof Error ? error.message : '删除失败');

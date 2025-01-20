@@ -27,17 +27,12 @@ export async function DELETE(
     // 2. 删除 DynamoDB 中的记录
     const docClient = await createDynamoDBClient();
     
-    // 查询并删除所有相关记录
+    // 简化删除操作，不使用条件表达式
     await docClient.send(new DeleteCommand({
-      TableName: process.env.NEXT_PUBLIC_DYNAMODB_TABLE_NAME!,
+      TableName: process.env.NEXT_PUBLIC_DYNAMODB_TABLE_NAME,
       Key: {
-        UserId: request.headers.get('user-id'),  // 从请求头获取用户ID
-        Timestamp: new Date().toISOString()
-      },
-      // 添加条件表达式确保只删除指定的线程
-      ConditionExpression: 'threadId = :threadId',
-      ExpressionAttributeValues: {
-        ':threadId': threadId
+        UserId: request.headers.get('user-id'), // 从请求头获取用户ID
+        Type: 'thread',  // 假设这是我们存储线程的方式
       }
     }));
 
@@ -46,11 +41,7 @@ export async function DELETE(
   } catch (error) {
     console.error('[ERROR] 删除对话失败:', error);
     return NextResponse.json(
-      { 
-        success: false, 
-        error: '删除对话失败',
-        details: error instanceof Error ? error.message : '未知错误'
-      }, 
+      { error: '删除对话失败' },
       { status: 500 }
     );
   }
