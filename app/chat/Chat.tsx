@@ -208,10 +208,6 @@ export default function Chat() {
       
       setCurrentThreadId(threadId);
       await fetchHistory(threadId);
-      
-      if (user?.user_id) {
-        await updateUserActiveThread(user.user_id, threadId);
-      }
 
     } catch (err) {
       console.error('[ERROR] 切换对话失败:', err);

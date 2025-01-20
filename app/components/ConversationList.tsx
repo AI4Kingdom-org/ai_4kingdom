@@ -128,13 +128,12 @@ export default function ConversationList({
   return (
     <div className={styles.container}>
       <div className={styles.header}>
-        <h2 className={styles.title}>对话列表</h2>
         <button
           onClick={handleCreateNewThread}
           className={styles.newChatButton}
           disabled={isCreating}
         >
-          {isCreating ? '创建中...' : '新对话'}
+          {isCreating ? '创建中...' : '+ 新对话'}
         </button>
       </div>
       
@@ -143,16 +142,7 @@ export default function ConversationList({
           <div className={styles.error}>{error}</div>
         ) : conversations.length === 0 ? (
           <div className={styles.emptyState}>
-            <svg 
-              viewBox="0 0 24 24" 
-              className={styles.emptyIcon}
-            >
-              <path fill="currentColor" d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zM9 11H7V9h2v2zm4 0h-2V9h2v2zm4 0h-2V9h2v2z"/>
-            </svg>
-            <h3 className={styles.emptyTitle}>开始您的第一个对话</h3>
-            <p className={styles.emptyText}>
-              点击上方"新对话"按钮，开始与 AI 助手交流
-            </p>
+            <p>还没有对话，开始创建一个吧！</p>
           </div>
         ) : (
           conversations.map((conv) => (
@@ -161,15 +151,24 @@ export default function ConversationList({
               className={`${styles.item} ${currentThreadId === conv.threadId ? styles.active : ''}`}
               onClick={() => onSelectThread(conv.threadId)}
             >
-              <span className={styles.title}>
+              <div className={styles.itemContent}>
                 <svg 
-                  viewBox="0 0 24 24" 
                   className={styles.chatIcon}
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
                 >
-                  <path fill="currentColor" d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/>
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"
+                  />
                 </svg>
-                对话 {conv.threadId.substring(0, 8)}
-              </span>
+                <span className={styles.title}>
+                  对话 {new Date(conv.createdAt).toLocaleDateString()}
+                </span>
+              </div>
               <button
                 className={styles.deleteButton}
                 onClick={(e) => {
@@ -179,9 +178,16 @@ export default function ConversationList({
               >
                 <svg 
                   viewBox="0 0 24 24" 
+                  fill="none" 
+                  stroke="currentColor" 
                   className={styles.deleteIcon}
                 >
-                  <path fill="currentColor" d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                  />
                 </svg>
               </button>
             </div>
