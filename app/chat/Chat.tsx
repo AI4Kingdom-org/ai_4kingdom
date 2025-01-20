@@ -126,8 +126,6 @@ export default function Chat() {
       if (!currentThreadId) {
         const newThread = await openai.beta.threads.create();
         setCurrentThreadId(newThread.id);
-        // 注意：这里不再调用 updateUserActiveThread
-        // 因为 handleCreateNewThread 已经处理了
       }
 
       // 添加用户消息到界面
@@ -205,17 +203,14 @@ export default function Chat() {
       const newThread = await openai.beta.threads.create();
       const threadId = newThread.id;
       
-      // 更新当前线程 ID
       setCurrentThreadId(threadId);
-      
-      // 清空消息
       setMessages([]);
       
-      // 只在这里调用一次 updateUserActiveThread
+      // 这里调用了一次
       if (user?.user_id) {
+        console.log('[DEBUG] handleCreateNewThread 创建记录:', { threadId });
         await updateUserActiveThread(user.user_id, threadId);
       }
-
     } catch (err) {
       console.error('[ERROR] 创建新对话失败:', err);
       setError(err instanceof Error ? err.message : '创建新对话失败');

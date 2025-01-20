@@ -42,6 +42,7 @@ export async function createDynamoDBClient() {
 // 添加更新用户活动线程的函数
 export async function updateUserActiveThread(userId: string, threadId: string) {
   try {
+    console.log('[DEBUG] 开始创建线程记录:', { userId, threadId });
     const docClient = await createDynamoDBClient();
     await docClient.send(new PutCommand({
       TableName: process.env.NEXT_PUBLIC_DYNAMODB_TABLE_NAME,
@@ -49,10 +50,10 @@ export async function updateUserActiveThread(userId: string, threadId: string) {
         UserId: String(userId),
         Type: 'thread',
         threadId: threadId,
-        Timestamp: new Date().toISOString(),
-        createdAt: new Date().toISOString()
+        Timestamp: new Date().toISOString()
       }
     }));
+    console.log('[DEBUG] 线程记录创建成功');
   } catch (error) {
     console.error('[ERROR] 更新用户活动线程失败:', error);
     throw error;
