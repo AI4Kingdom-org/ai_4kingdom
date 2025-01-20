@@ -122,6 +122,14 @@ export default function Chat() {
     setError('');
 
     try {
+      // 如果没有当前线程，先创建一个
+      if (!currentThreadId) {
+        const newThread = await openai.beta.threads.create();
+        setCurrentThreadId(newThread.id);
+        // 注意：这里不再调用 updateUserActiveThread
+        // 因为 handleCreateNewThread 已经处理了
+      }
+
       // 添加用户消息到界面
       setMessages(prev => [...prev, { sender: 'user', text: currentInput }]);
       scrollToBottom();
@@ -149,7 +157,6 @@ export default function Chat() {
 
       // 获取最新的消息历史
       if (data.threadId) {
-        setCurrentThreadId(data.threadId);
         await fetchHistory(data.threadId);
       }
 
@@ -157,7 +164,6 @@ export default function Chat() {
       console.error('[ERROR] 发送消息失败:', err);
       setInput(currentInput);
       setError(err instanceof Error ? err.message : '发送失败');
-      // 移除失败的消息
       setMessages(prev => prev.slice(0, -1));
     } finally {
       setIsLoading(false);
@@ -192,14 +198,29 @@ export default function Chat() {
 
   const handleCreateNewThread = async () => {
     try {
-      const response = await fetch('/api/threads/create', { method: 'POST' });
-      const data = await response.json();
-      if (data.threadId) {
-        setCurrentThreadId(data.threadId);
-        await updateUserActiveThread(user?.user_id!, data.threadId);
+      setIsLoading(true);
+      setError('');
+      
+      // 创建新的 OpenAI 线程
+      const newThread = await openai.beta.threads.create();
+      const threadId = newThread.id;
+      
+      // 更新当前线程 ID
+      setCurrentThreadId(threadId);
+      
+      // 清空消息
+      setMessages([]);
+      
+      // 只在这里调用一次 updateUserActiveThread
+      if (user?.user_id) {
+        await updateUserActiveThread(user.user_id, threadId);
       }
+
     } catch (err) {
+      console.error('[ERROR] 创建新对话失败:', err);
       setError(err instanceof Error ? err.message : '创建新对话失败');
+    } finally {
+      setIsLoading(false);
     }
   };
 
