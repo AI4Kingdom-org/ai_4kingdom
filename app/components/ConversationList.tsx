@@ -25,6 +25,7 @@ export default function ConversationList({
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
 
   // 获取所有对话
   const fetchConversations = async () => {
@@ -82,6 +83,8 @@ export default function ConversationList({
   };
 
   const handleCreateNewThread = async () => {
+    if (isLoading) return; // 防止重复点击
+    setIsLoading(true);
     try {
       const response = await fetch('/api/threads/create', {
         method: 'POST',
@@ -102,12 +105,14 @@ export default function ConversationList({
       await fetchConversations();
       
       // 通知父组件新对话已创建
-      onCreateNewThread();
+      await onCreateNewThread();
       
       // 选择新创建的对话
       onSelectThread(threadId);
     } catch (err) {
       setError(err instanceof Error ? err.message : '创建对话失败');
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -144,17 +149,13 @@ export default function ConversationList({
   return (
     <div className={styles.container}>
       <div className={styles.header}>
-        <button 
-          className={styles.newChatButton}
+        <h2 className={styles.title}>对话列表</h2>
+        <button
           onClick={handleCreateNewThread}
+          className={styles.newChatButton}
+          disabled={isLoading}
         >
-          <svg 
-            viewBox="0 0 24 24" 
-            className={styles.plusIcon}
-          >
-            <path fill="currentColor" d="M12 4v16m-8-8h16"/>
-          </svg>
-          新对话
+          {isLoading ? '创建中...' : '新对话'}
         </button>
       </div>
       

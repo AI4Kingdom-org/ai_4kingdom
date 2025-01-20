@@ -195,6 +195,8 @@ export default function Chat() {
   };
 
   const handleCreateNewThread = async () => {
+    if (isLoading) return; // 防止重复点击
+    
     try {
       setIsLoading(true);
       setError('');
@@ -206,7 +208,6 @@ export default function Chat() {
       setMessages([]);
       
       if (user?.user_id) {
-        console.log('[DEBUG] handleCreateNewThread 创建记录:', { threadId });
         await updateUserActiveThread(user.user_id, threadId);
       }
 
