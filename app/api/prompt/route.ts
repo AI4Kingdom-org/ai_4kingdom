@@ -5,6 +5,12 @@ import {
   GetCommand,
   PutCommand
 } from "@aws-sdk/lib-dynamodb";
+import OpenAI from 'openai';
+import { ASSISTANT_ID, VECTOR_STORE_ID } from "@/app/config/constants";
+
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY
+});
 
 // 添加调试日志
 console.log('[DEBUG] AWS 环境变量:', {
@@ -70,8 +76,6 @@ console.log('[DEBUG] AWS Config:', {
 
 const docClient = DynamoDBDocumentClient.from(client);
 
-const VECTOR_STORE_ID = process.env.NEXT_PUBLIC_VECTOR_STORE_ID || 'vs_AMJIJ1zfGnzHpI1msv4T8Ww3';
-
 // 获取当前Prompt
 export async function GET(request: Request) {
   try {
@@ -132,6 +136,21 @@ export async function PUT(request: Request) {
     console.log('[DEBUG] 开始更新 Prompt');
     const { content, vectorStoreId = VECTOR_STORE_ID } = await request.json();
     
+    // 1. 更新 OpenAI Assistant 的 instructions
+    try {
+      await openai.beta.assistants.update(
+        ASSISTANT_ID,
+        {
+          instructions: content
+        }
+      );
+      console.log('[DEBUG] OpenAI Assistant instructions 更新成功');
+    } catch (error) {
+      console.error('[ERROR] 更新 OpenAI Assistant 失败:', error);
+      throw error;
+    }
+
+    // 2. 更新 DynamoDB
     const command = new PutCommand({
       TableName: "AIPrompts",
       Item: {
@@ -150,7 +169,9 @@ export async function PUT(request: Request) {
     console.log('[DEBUG] Prompt 更新成功');
     
     return NextResponse.json({ 
-      message: 'Prompt更新成功' 
+      message: 'Prompt更新成功',
+      assistant: true,
+      database: true
     });
   } catch (error) {
     console.error('[ERROR] 更新Prompt失败:', {

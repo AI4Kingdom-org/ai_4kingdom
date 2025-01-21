@@ -1,11 +1,10 @@
 import { NextResponse } from 'next/server';
 import OpenAI from 'openai';
+import { VECTOR_STORE_ID } from '@/app/config/constants';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
 });
-
-const VECTOR_STORE_ID = 'vs_AMJIJ1zfGnzHpI1msv4T8Ww3';
 
 export async function DELETE(
   request: Request,

@@ -3,6 +3,7 @@ import { DynamoDBDocumentClient, PutCommand, QueryCommand, GetCommand } from "@a
 import { fromCognitoIdentityPool } from "@aws-sdk/credential-providers";
 import OpenAI from 'openai';
 import { NextResponse } from 'next/server';
+import { ASSISTANT_ID } from '@/app/config/constants';
 
 // 统一环境变量配置
 const CONFIG = {
@@ -263,8 +264,6 @@ async function waitForCompletion(openai: OpenAI, threadId: string, runId: string
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
 });
-
-const ASSISTANT_ID = 'asst_O9yodhRcFLqS28ZybIF35Y4o';
 
 export async function POST(request: Request) {
   try {

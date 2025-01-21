@@ -314,22 +314,27 @@ export default function Chat() {
           </div>
         )}
         {error && <div className={styles.error}>{error}</div>}
-        <div className={styles.inputArea}>
-          <input
-            type="text"
+        <div className={styles.inputContainer}>
+          <textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && !isLoading && sendMessage()}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                if (!isLoading) sendMessage();
+              }
+            }}
             placeholder={isLoading ? "发送中..." : "输入消息..."}
-            className={styles.inputField}
+            className={styles.input}
             disabled={isLoading || isFetchingHistory}
+            rows={2}
           />
           <button
             onClick={sendMessage}
             disabled={!input.trim() || isLoading || isFetchingHistory}
             className={styles.sendButton}
           >
-            {isLoading ? '发送中...' : '发送'}
+            {isLoading ? "发送中..." : "发送"}
           </button>
         </div>
       </div>
