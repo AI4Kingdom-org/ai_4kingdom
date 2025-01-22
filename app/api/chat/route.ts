@@ -289,14 +289,35 @@ export async function POST(request: Request) {
     });
 
     // 等待运行完成
-    let runStatus = await openai.beta.threads.runs.retrieve(threadId, run.id);
+    let runStatus = await waitForCompletion(openai, threadId, run.id);
+
+    // 获取所有运行步骤的使用情况
+    const runSteps = await openai.beta.threads.runs.steps.list(threadId, run.id);
     
-    while (runStatus.status !== 'completed') {
-      if (runStatus.status === 'failed' || runStatus.status === 'cancelled') {
-        throw new Error(`Assistant run failed: ${runStatus.status}`);
+    // 累计所有步骤的 token 使用情况
+    let totalTokenUsage = {
+      prompt_tokens: 0,
+      completion_tokens: 0,
+      total_tokens: 0,
+      retrieval_tokens: 0,  // 新增：检索相关的 token
+    };
+
+    // 遍历所有步骤，累计 token 使用情况
+    for (const step of runSteps.data) {
+      if (step.step_details.type === 'message_creation') {
+        totalTokenUsage.prompt_tokens += step.usage?.prompt_tokens || 0;
+        totalTokenUsage.completion_tokens += step.usage?.completion_tokens || 0;
+        totalTokenUsage.total_tokens += step.usage?.total_tokens || 0;
       }
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      runStatus = await openai.beta.threads.runs.retrieve(threadId, run.id);
+      
+      // 记录检索相关的 token
+      if ((step.step_details as any).type === 'retrieval') {
+        totalTokenUsage.retrieval_tokens += step.usage?.total_tokens || 0;
+        console.log('[DEBUG] 文件检索 Token:', {
+          stepId: step.id,
+          retrievalTokens: step.usage?.total_tokens || 0
+        });
+      }
     }
 
     // 获取助手的回复
@@ -307,26 +328,20 @@ export async function POST(request: Request) {
       .map(content => (content.type === 'text' ? content.text.value : ''))
       .join('\n');
 
-    // 获取使用情况
-    const usage = await openai.beta.threads.runs.steps.list(threadId, run.id);
-    const lastStep = usage.data[0];
+    // 保存完整的 token 使用记录
+    await saveTokenUsage(userId, threadId, {
+      prompt_tokens: totalTokenUsage.prompt_tokens,
+      completion_tokens: totalTokenUsage.completion_tokens,
+      total_tokens: totalTokenUsage.total_tokens + totalTokenUsage.retrieval_tokens,
+      retrieval_tokens: totalTokenUsage.retrieval_tokens  // 新增字段
+    });
     
-    if (lastStep.step_details.type === 'message_creation') {
-      const tokenUsage = {
-        prompt_tokens: lastStep.usage?.prompt_tokens || 0,
-        completion_tokens: lastStep.usage?.completion_tokens || 0,
-        total_tokens: lastStep.usage?.total_tokens || 0
-      };
-
-      // 保存 token 使用记录
-      await saveTokenUsage(userId, threadId, tokenUsage);
-      
-      console.log('[DEBUG] Token使用情况:', tokenUsage);
-    }
+    console.log('[DEBUG] 完整Token使用情况:', totalTokenUsage);
     
     return NextResponse.json({
       reply: assistantReply,
-      threadId: threadId
+      threadId: threadId,
+      usage: totalTokenUsage  // 在响应中也返回使用情况
     });
 
   } catch (error) {

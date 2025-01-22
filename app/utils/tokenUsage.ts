@@ -15,6 +15,7 @@ export interface TokenUsage {
   prompt_tokens: number;
   completion_tokens: number;
   total_tokens: number;
+  retrieval_tokens: number;
 }
 
 export async function saveTokenUsage(
