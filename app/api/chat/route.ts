@@ -4,6 +4,7 @@ import { fromCognitoIdentityPool } from "@aws-sdk/credential-providers";
 import OpenAI from 'openai';
 import { NextResponse } from 'next/server';
 import { ASSISTANT_ID } from '@/app/config/constants';
+import { saveTokenUsage } from '@/app/utils/tokenUsage';
 
 // 统一环境变量配置
 const CONFIG = {
@@ -282,7 +283,7 @@ export async function POST(request: Request) {
       content: message
     });
 
-    // 运行助手
+    // 运行助手并获取使用情况
     const run = await openai.beta.threads.runs.create(threadId, {
       assistant_id: ASSISTANT_ID
     });
@@ -306,7 +307,22 @@ export async function POST(request: Request) {
       .map(content => (content.type === 'text' ? content.text.value : ''))
       .join('\n');
 
-    // 不再在这里调用 updateUserActiveThread，因为前端已经处理了
+    // 获取使用情况
+    const usage = await openai.beta.threads.runs.steps.list(threadId, run.id);
+    const lastStep = usage.data[0];
+    
+    if (lastStep.step_details.type === 'message_creation') {
+      const tokenUsage = {
+        prompt_tokens: lastStep.usage?.prompt_tokens || 0,
+        completion_tokens: lastStep.usage?.completion_tokens || 0,
+        total_tokens: lastStep.usage?.total_tokens || 0
+      };
+
+      // 保存 token 使用记录
+      await saveTokenUsage(userId, threadId, tokenUsage);
+      
+      console.log('[DEBUG] Token使用情况:', tokenUsage);
+    }
     
     return NextResponse.json({
       reply: assistantReply,
