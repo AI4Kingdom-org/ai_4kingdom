@@ -130,22 +130,21 @@ export default function Chat() {
     setError('');
 
     try {
-      if (!currentThreadId) {
+      // 如果没有 threadId，先创建一个新的
+      let activeThreadId = currentThreadId;
+      if (!activeThreadId) {
         console.log('[DEBUG] 没有当前对话，创建新对话');
         const newThread = await openai.beta.threads.create();
-        console.log('[DEBUG] 创建新对话成功:', { threadId: newThread.id });
-        setCurrentThreadId(newThread.id);
+        activeThreadId = newThread.id;
+        setCurrentThreadId(activeThreadId);
+        console.log('[DEBUG] 创建新对话成功:', { threadId: activeThreadId });
       }
 
       // 添加用户消息到界面
       setMessages(prev => [...prev, { sender: 'user', text: currentInput }]);
       scrollToBottom();
 
-      console.log('[DEBUG] 发送消息到API:', {
-        threadId: currentThreadId,
-        userId: user.user_id
-      });
-
+      // 发送消息到API
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: {
@@ -154,7 +153,7 @@ export default function Chat() {
         body: JSON.stringify({
           userId: user.user_id,
           message: currentInput,
-          threadId: currentThreadId
+          threadId: activeThreadId  // 使用确保存在的 threadId
         })
       });
 
@@ -174,15 +173,10 @@ export default function Chat() {
       }
 
       // 获取最新的消息历史
-      if (data.threadId) {
-        await fetchHistory(data.threadId);
-      }
+      await fetchHistory(activeThreadId);
 
     } catch (err) {
-      console.error('[ERROR] 发送消息失败:', {
-        error: err instanceof Error ? err.message : '发送失败',
-        threadId: currentThreadId
-      });
+      console.error('[ERROR] 发送消息失败:', err);
       setInput(currentInput);
       setError(err instanceof Error ? err.message : '发送失败');
       setMessages(prev => prev.slice(0, -1));
