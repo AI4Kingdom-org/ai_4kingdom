@@ -134,8 +134,24 @@ export default function Chat() {
       let activeThreadId = currentThreadId;
       if (!activeThreadId) {
         console.log('[DEBUG] 没有当前对话，创建新对话');
-        const newThread = await openai.beta.threads.create();
-        activeThreadId = newThread.id;
+        
+        // 调用创建线程的 API
+        const response = await fetch('/api/threads/create', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            userId: user.user_id
+          })
+        });
+
+        if (!response.ok) {
+          throw new Error('创建新对话失败');
+        }
+
+        const data = await response.json();
+        activeThreadId = data.threadId;
         setCurrentThreadId(activeThreadId);
         console.log('[DEBUG] 创建新对话成功:', { threadId: activeThreadId });
       }
@@ -173,7 +189,9 @@ export default function Chat() {
       }
 
       // 获取最新的消息历史
-      await fetchHistory(activeThreadId);
+      if (activeThreadId) {
+        await fetchHistory(activeThreadId);
+      }
 
     } catch (err) {
       console.error('[ERROR] 发送消息失败:', err);
