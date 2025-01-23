@@ -273,26 +273,47 @@ export async function POST(request: Request) {
     console.log('[DEBUG] 接收到聊天请求:', { 
       userId, 
       messageLength: message.length, 
-      threadId,
-      assistantId: ASSISTANT_ID 
+      threadId
     });
 
+    // 如果没有 threadId，创建新的线程并保存到 DynamoDB
+    let activeThreadId = threadId;
+    if (!activeThreadId) {
+      console.log('[DEBUG] 未提供 threadId，创建新线程');
+      const newThread = await openai.beta.threads.create();
+      activeThreadId = newThread.id;
+
+      // 保存新线程到 DynamoDB
+      const docClient = await createDynamoDBClient();
+      await docClient.send(new PutCommand({
+        TableName: CONFIG.tableName,
+        Item: {
+          UserId: String(userId),
+          Timestamp: new Date().toISOString(),
+          Type: 'thread',
+          threadId: activeThreadId
+        }
+      }));
+      
+      console.log('[DEBUG] 新线程已创建并保存:', { threadId: activeThreadId });
+    }
+
     // 发送消息到 OpenAI
-    await openai.beta.threads.messages.create(threadId, {
+    await openai.beta.threads.messages.create(activeThreadId, {
       role: 'user',
       content: message
     });
 
     // 运行助手并获取使用情况
-    const run = await openai.beta.threads.runs.create(threadId, {
+    const run = await openai.beta.threads.runs.create(activeThreadId, {
       assistant_id: ASSISTANT_ID
     });
 
     // 等待运行完成
-    let runStatus = await waitForCompletion(openai, threadId, run.id);
+    let runStatus = await waitForCompletion(openai, activeThreadId, run.id);
 
     // 获取所有运行步骤的使用情况
-    const runSteps = await openai.beta.threads.runs.steps.list(threadId, run.id);
+    const runSteps = await openai.beta.threads.runs.steps.list(activeThreadId, run.id);
     
     // 累计所有步骤的 token 使用情况
     let totalTokenUsage = {
@@ -321,7 +342,7 @@ export async function POST(request: Request) {
     }
 
     // 获取助手的回复
-    const messages = await openai.beta.threads.messages.list(threadId);
+    const messages = await openai.beta.threads.messages.list(activeThreadId);
     const lastMessage = messages.data[0];
     const assistantReply = lastMessage.content
       .filter(content => content.type === 'text')
@@ -329,7 +350,7 @@ export async function POST(request: Request) {
       .join('\n');
 
     // 保存完整的 token 使用记录
-    await saveTokenUsage(userId, threadId, {
+    await saveTokenUsage(userId, activeThreadId, {
       prompt_tokens: totalTokenUsage.prompt_tokens,
       completion_tokens: totalTokenUsage.completion_tokens,
       total_tokens: totalTokenUsage.total_tokens + totalTokenUsage.retrieval_tokens,
@@ -340,8 +361,8 @@ export async function POST(request: Request) {
     
     return NextResponse.json({
       reply: assistantReply,
-      threadId: threadId,
-      usage: totalTokenUsage  // 在响应中也返回使用情况
+      threadId: activeThreadId,  // 返回可能是新创建的 threadId
+      usage: totalTokenUsage
     });
 
   } catch (error) {
