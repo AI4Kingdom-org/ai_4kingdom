@@ -84,3 +84,6 @@ amplifyconfiguration*
 .Trashes
 ehthumbs.db
 Thumbs.db
+
+# cursor rules
+cursorrules.txt
