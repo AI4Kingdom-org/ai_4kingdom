@@ -5,6 +5,7 @@ import OpenAI from 'openai';
 import { NextResponse } from 'next/server';
 import { ASSISTANT_ID } from '@/app/config/constants';
 import { saveTokenUsage } from '@/app/utils/tokenUsage';
+import { updateMonthlyTokenUsage } from '@/app/utils/monthlyTokenUsage';
 
 // 统一环境变量配置
 const CONFIG = {
@@ -354,8 +355,11 @@ export async function POST(request: Request) {
       prompt_tokens: totalTokenUsage.prompt_tokens,
       completion_tokens: totalTokenUsage.completion_tokens,
       total_tokens: totalTokenUsage.total_tokens + totalTokenUsage.retrieval_tokens,
-      retrieval_tokens: totalTokenUsage.retrieval_tokens  // 新增字段
+      retrieval_tokens: totalTokenUsage.retrieval_tokens
     });
+
+    // 更新月度使用统计
+    await updateMonthlyTokenUsage(userId, totalTokenUsage);
     
     console.log('[DEBUG] 完整Token使用情况:', totalTokenUsage);
     
