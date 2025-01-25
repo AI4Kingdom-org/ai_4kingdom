@@ -2,27 +2,31 @@
 
 import { useState, useEffect } from 'react';
 import styles from './ConversationList.module.css';
+import { ChatType, CHAT_TYPE_CONFIGS } from '../config/chatTypes';
 
 interface Conversation {
   threadId: string;
   createdAt: string;
   UserId: string;
+  type: string;
 }
 
 interface ConversationListProps {
   userId: string;
   currentThreadId: string | null;
   onSelectThread: (threadId: string) => void;
-  onCreateNewThread: () => Promise<void>;
-  isCreating: boolean;
+  type: ChatType;
+  isCreating?: boolean;
+  onCreateNewThread?: () => Promise<void>;
 }
 
 export default function ConversationList({ 
   userId, 
   currentThreadId,
   onSelectThread,
-  onCreateNewThread,
-  isCreating
+  type,
+  isCreating = false,
+  onCreateNewThread
 }: ConversationListProps) {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [loading, setLoading] = useState(true);
@@ -31,18 +35,53 @@ export default function ConversationList({
   // 获取对话列表
   const fetchConversations = async () => {
     try {
-      console.log('[DEBUG] 开始获取对话列表');
-      const response = await fetch(`/api/threads?userId=${userId}`, {
+      console.log('[DEBUG] 开始获取对话列表:', { 
+        userId, 
+        type,
+        url: `/api/threads?userId=${userId}&type=${type}`
+      });
+
+      const response = await fetch(`/api/threads?userId=${userId}&type=${type}`, {
         credentials: 'include'
       });
       
       if (!response.ok) {
-        throw new Error('获取对话列表失败');
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.details || errorData.error || '获取对话列表失败');
       }
       
       const data = await response.json();
-      console.log('[DEBUG] 获取到的对话列表:', data);
-      setConversations(data || []);
+      console.log('[DEBUG] 原始数据:', data);
+
+      // 确保数据格式正确
+      const validConversations = data.filter((conv: any) => {
+        // 检查 Type 或 type 字段
+        const convType = conv.Type || conv.type;
+        const isValid = conv.threadId && convType === type;
+        if (!isValid) {
+          console.log('[DEBUG] 过滤掉无效对话:', {
+            conv,
+            expectedType: type,
+            actualType: convType
+          });
+        }
+        return isValid;
+      });
+
+      console.log('[DEBUG] 过滤后的对话:', {
+        type,
+        before: data.length,
+        after: validConversations.length,
+        conversations: validConversations
+      });
+
+      setConversations(validConversations.map((conv: any) => ({
+        threadId: conv.threadId,
+        createdAt: conv.createdAt || conv.Timestamp,
+        UserId: conv.UserId,
+        type: conv.Type || conv.type
+      })));
+      
       setError(null);
     } catch (err) {
       console.error('[ERROR] 获取对话列表失败:', err);
@@ -79,17 +118,36 @@ export default function ConversationList({
   // 创建新对话并刷新列表
   const handleCreateNewThread = async (e: React.MouseEvent) => {
     e.preventDefault();
-    if (isCreating) return;
+    if (isCreating || !onCreateNewThread) return;
     await onCreateNewThread();
-    await fetchConversations(); // 创建完成后刷新列表
+    await fetchConversations();
   };
 
-  // 初始加载和用户ID变化时获取对话列表
+  // 添加监听器来处理刷新事件
   useEffect(() => {
-    if (userId) {
+    const handleRefresh = () => {
+      console.log('[DEBUG] 收到刷新对话列表事件:', { type });
+      fetchConversations();
+    };
+
+    window.addEventListener('refreshConversations', handleRefresh);
+    return () => window.removeEventListener('refreshConversations', handleRefresh);
+  }, [type]);
+
+  // 初始加载和依赖变化时获取对话列表
+  useEffect(() => {
+    if (userId && type) {
+      console.log('[DEBUG] 触发获取对话列表:', { 
+        userId, 
+        type,
+        trigger: 'dependency change' 
+      });
       fetchConversations();
     }
-  }, [userId]);
+  }, [userId, type]);
+
+  // 在组件中可以使用配置信息
+  const config = CHAT_TYPE_CONFIGS[type];
 
   if (loading) return <div className={styles.loading}>加载中...</div>;
   
@@ -123,7 +181,7 @@ export default function ConversationList({
           className={styles.newChatButton}
           disabled={isCreating}
         >
-          {isCreating ? '创建中...' : '+ 新对话'}
+          {isCreating ? '创建中...' : `+ 新建${config.title}`}
         </button>
       </div>
       

@@ -6,6 +6,7 @@ import styles from './Chat.module.css';
 import ConversationList from '../components/ConversationList';
 import { updateUserActiveThread } from '../utils/dynamodb';
 import OpenAI from 'openai';
+import { CHAT_TYPES, ChatType } from '../config/chatTypes';
 
 export interface ChatMessage {
   Message: string;
@@ -36,7 +37,13 @@ const openai = new OpenAI({
   dangerouslyAllowBrowser: true
 });
 
-export default function Chat() {
+interface ChatProps {
+  type: ChatType;
+  assistantId: string;
+  vectorStoreId: string;
+}
+
+export default function Chat({ type, assistantId, vectorStoreId }: ChatProps) {
   const { user, loading, error: authError } = useAuth();
   const [messages, setMessages] = useState<{ sender: string; text: string }[]>([]);
   const [input, setInput] = useState('');
@@ -231,23 +238,34 @@ export default function Chat() {
   };
 
   const handleCreateNewThread = async () => {
-    if (isCreatingThread) return;
+    if (isCreatingThread || !user) return;
     
     try {
       setIsCreatingThread(true);
       setIsLoading(true);
       setError('');
       
-      const newThread = await openai.beta.threads.create();
-      console.log('[DEBUG] 创建新线程:', { threadId: newThread.id });
-      
-      setCurrentThreadId(newThread.id);
-      setMessages([]);
-      
-      if (user?.user_id) {
-        await updateUserActiveThread(user.user_id, newThread.id);
+      const response = await fetch('/api/threads/create', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          userId: String(user.user_id),
+          type: type
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('创建新对话失败');
       }
 
+      const data = await response.json();
+      console.log('[DEBUG] 创建新线程:', { threadId: data.threadId });
+      
+      setCurrentThreadId(data.threadId);
+      setMessages([]);
+      
     } catch (err) {
       console.error('[ERROR] 创建新对话失败:', err);
       setError(err instanceof Error ? err.message : '创建新对话失败');
@@ -276,11 +294,12 @@ export default function Chat() {
       {user && (
         <div className={styles.conversationListContainer}>
           <ConversationList
-            userId={user.user_id}
+            userId={String(user.user_id)}  // 确保 userId 是字符串类型
             currentThreadId={currentThreadId}
             onSelectThread={handleSelectThread}
             onCreateNewThread={handleCreateNewThread}
             isCreating={isCreatingThread}
+            type={type}
           />
         </div>
       )}

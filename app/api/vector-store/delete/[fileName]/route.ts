@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import OpenAI from 'openai';
-import { VECTOR_STORE_ID } from '@/app/config/constants';
+import { VECTOR_STORE_IDS } from '@/app/config/constants';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY

@@ -5,6 +5,8 @@ import "./app.css";
 import Chat from "./chat/Chat";
 import { AuthProvider } from "./contexts/AuthContext";
 import { ErrorBoundary } from "./components/ErrorBoundary";
+import { CHAT_TYPES } from './config/chatTypes';
+import { ASSISTANT_IDS, VECTOR_STORE_IDS } from './config/constants';
 
 export default function Page() {
   useEffect(() => {
@@ -37,7 +39,11 @@ export default function Page() {
               maxHeight: '100vh',
               overflow: 'auto'
             }}>
-              <Chat />
+              <Chat 
+                type={CHAT_TYPES.GENERAL}
+                assistantId={ASSISTANT_IDS.GENERAL}
+                vectorStoreId={VECTOR_STORE_IDS.GENERAL}
+              />
             </div>
           </div>
         </main>

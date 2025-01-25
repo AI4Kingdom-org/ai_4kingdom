@@ -4,26 +4,28 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { FEATURE_ACCESS } from '../types/auth';
 import type { UserData, AuthState, AuthContextType, FeatureKey, MemberRole } from '../types/auth';
 
-const AuthContext = createContext<AuthContextType>({
-  user: null,
-  loading: true,
-  error: null,
-  login: async () => false,
-  checkAuth: async () => {},
-  logout: () => {},
-  getSubscriptionStatus: () => 'inactive',
-  getSubscriptionType: () => 'free',
-  isSubscriptionValid: () => false,
-  hasRole: () => false,
-  canAccessFeature: () => false
-});
+interface User {
+  user_id: string;
+  nonce?: string;
+  username: string;
+  email: string;
+  display_name: string;
+  success: boolean;
+  subscription: {
+    status: 'active' | 'inactive';
+    type: 'free' | 'pro' | 'ultimate';
+    roles: MemberRole[];
+    expiry: string | null;
+    plan_id: string;
+  };
+}
+
+const AuthContext = createContext<AuthContextType | null>(null);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [state, setState] = useState<AuthState>({
-    user: null,
-    loading: true,
-    error: null
-  });
+  const [user, setUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const API_BASE = 'https://ai4kingdom.com';
 
@@ -88,11 +90,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       throw new Error(data.message || '登录失败');
     } catch (err) {
       console.error('[ERROR] 登录失败:', err);
-      setState(prev => ({
-        ...prev,
-        error: err instanceof Error ? err.message : '登录失败',
-        loading: false
-      }));
+      setError(err instanceof Error ? err.message : '登录失败');
+      setLoading(false);
       return false;
     }
   };
@@ -107,15 +106,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       });
 
       if (data.success) {
-        setState(prev => ({
-          ...prev,
-          user: {
-            ...data,
-            user_id: String(data.user_id)
-          },
-          loading: false,
-          error: null
-        }));
+        setUser({
+          user_id: data.user_id,
+          nonce: data.nonce,
+          username: data.username,
+          email: data.email,
+          display_name: data.display_name,
+          success: data.success,
+          subscription: {
+            status: data.subscription?.status || 'inactive',
+            type: data.subscription?.type || 'free',
+            roles: data.subscription?.roles || [],
+            expiry: data.subscription?.expiry || null,
+            plan_id: data.subscription?.plan_id || ''
+          }
+        });
         
         console.log('[DEBUG] 会话验证成功:', {
           userId: data.user_id,
@@ -127,12 +132,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     } catch (err) {
       console.error('[ERROR] 会话验证失败:', err);
-      setState(prev => ({
-        ...prev,
-        user: null,
-        loading: false,
-        error: err instanceof Error ? err.message : '认证失败'
-      }));
+      setError(err instanceof Error ? err.message : '认证失败');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -145,25 +147,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } catch (err) {
       console.error('[ERROR] 登出失败:', err);
     } finally {
-      setState({
-        user: null,
-        loading: false,
-        error: null
-      });
+      setUser(null);
+      setLoading(false);
+      setError(null);
     }
   };
 
   // 订阅相关的工具方法
-  const getSubscriptionStatus = () => {
-    return state.user?.subscription?.status || 'inactive';
+  const getSubscriptionStatus = (): 'active' | 'inactive' => {
+    return user?.subscription?.status || 'inactive';
   };
 
-  const getSubscriptionType = () => {
-    return state.user?.subscription?.type || 'free';
+  const getSubscriptionType = (): 'free' | 'pro' | 'ultimate' => {
+    return user?.subscription?.type || 'free';
   };
 
   const isSubscriptionValid = () => {
-    const subscription = state.user?.subscription;
+    const subscription = user?.subscription;
     if (!subscription) return false;
 
     if (subscription.status !== 'active') return false;
@@ -178,12 +178,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // 新增：角色检查方法
   const hasRole = (role: MemberRole) => {
-    return state.user?.subscription?.roles?.includes(role) || false;
+    return user?.subscription?.roles?.includes(role) || false;
   };
 
   // 新增：功能访问检查方法
   const canAccessFeature = (feature: FeatureKey) => {
-    const userRoles = state.user?.subscription?.roles || [];
+    const userRoles = user?.subscription?.roles || [];
     const requiredRoles = FEATURE_ACCESS[feature];
     return userRoles.some(role => requiredRoles.includes(role));
   };
@@ -206,7 +206,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const value = {
-    ...state,
+    user,
+    loading,
+    error,
     login,
     logout,
     checkAuth,

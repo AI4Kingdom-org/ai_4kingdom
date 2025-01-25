@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import OpenAI from 'openai';
-import { VECTOR_STORE_ID } from '@/app/config/constants';
+import { VECTOR_STORE_IDS } from '@/app/config/constants';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
@@ -33,7 +33,7 @@ export async function POST(request: Request) {
 
           // 将文件添加到Vector Store
           await openai.beta.vectorStores.files.create(
-            VECTOR_STORE_ID,
+            VECTOR_STORE_IDS.GENERAL,
             { file_id: uploadedFile.id }
           );
 

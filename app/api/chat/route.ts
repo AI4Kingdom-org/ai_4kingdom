@@ -3,7 +3,7 @@ import { DynamoDBDocumentClient, PutCommand, QueryCommand, GetCommand } from "@a
 import { fromCognitoIdentityPool } from "@aws-sdk/credential-providers";
 import OpenAI from 'openai';
 import { NextResponse } from 'next/server';
-import { ASSISTANT_ID } from '@/app/config/constants';
+import { ASSISTANT_IDS } from '@/app/config/constants';
 import { saveTokenUsage } from '@/app/utils/tokenUsage';
 import { updateMonthlyTokenUsage } from '@/app/utils/monthlyTokenUsage';
 
@@ -269,12 +269,28 @@ const openai = new OpenAI({
 
 export async function POST(request: Request) {
   try {
-    const { userId, message, threadId } = await request.json();
+    const { userId, message, threadId, assistantId, type = 'general' } = await request.json();
     
     console.log('[DEBUG] 接收到聊天请求:', { 
       userId, 
       messageLength: message.length, 
-      threadId
+      threadId,
+      type,
+      assistantId
+    });
+
+    // 验证必要参数
+    if (!message) {
+      return NextResponse.json({ error: '消息不能为空' }, { status: 400 });
+    }
+
+    // 如果没有 userId，从 ChatContext 获取
+    const effectiveUserId = userId || (await request.headers.get('user-id'));
+    
+    console.log('[DEBUG] 使用的用户ID:', {
+      originalUserId: userId,
+      effectiveUserId,
+      headers: Object.fromEntries(request.headers)
     });
 
     // 如果没有 threadId，创建新的线程并保存到 DynamoDB
@@ -284,16 +300,22 @@ export async function POST(request: Request) {
       const newThread = await openai.beta.threads.create();
       activeThreadId = newThread.id;
 
-      // 保存新线程到 DynamoDB
+      const timestamp = new Date().toISOString();
+      const threadData = {
+        UserId: String(effectiveUserId),
+        Timestamp: timestamp,
+        Type: type,
+        threadId: activeThreadId,
+        Status: 'active',
+        LastMessage: message.substring(0, 100)
+      };
+
+      console.log('[DEBUG] 准备保存线程数据:', threadData);
+
       const docClient = await createDynamoDBClient();
       await docClient.send(new PutCommand({
         TableName: CONFIG.tableName,
-        Item: {
-          UserId: String(userId),
-          Timestamp: new Date().toISOString(),
-          Type: 'thread',
-          threadId: activeThreadId
-        }
+        Item: threadData
       }));
       
       console.log('[DEBUG] 新线程已创建并保存:', { threadId: activeThreadId });
@@ -307,7 +329,7 @@ export async function POST(request: Request) {
 
     // 运行助手并获取使用情况
     const run = await openai.beta.threads.runs.create(activeThreadId, {
-      assistant_id: ASSISTANT_ID
+      assistant_id: assistantId || ASSISTANT_IDS.GENERAL
     });
 
     // 等待运行完成
@@ -351,7 +373,7 @@ export async function POST(request: Request) {
       .join('\n');
 
     // 保存完整的 token 使用记录
-    await saveTokenUsage(userId, activeThreadId, {
+    await saveTokenUsage(effectiveUserId, activeThreadId, {
       prompt_tokens: totalTokenUsage.prompt_tokens,
       completion_tokens: totalTokenUsage.completion_tokens,
       total_tokens: totalTokenUsage.total_tokens + totalTokenUsage.retrieval_tokens,
@@ -359,7 +381,7 @@ export async function POST(request: Request) {
     });
 
     // 更新月度使用统计
-    await updateMonthlyTokenUsage(userId, totalTokenUsage);
+    await updateMonthlyTokenUsage(effectiveUserId, totalTokenUsage);
     
     console.log('[DEBUG] 完整Token使用情况:', totalTokenUsage);
     
@@ -370,8 +392,18 @@ export async function POST(request: Request) {
     });
 
   } catch (error) {
-    console.error('[ERROR] 处理聊天请求失败:', error);
-    return NextResponse.json({ error: '发送失败' }, { status: 500 });
+    // 增强错误日志
+    console.error('[ERROR] 处理聊天请求失败:', {
+      error,
+      message: error instanceof Error ? error.message : '未知错误',
+      stack: error instanceof Error ? error.stack : undefined,
+      type: error instanceof Error ? error.constructor.name : typeof error
+    });
+    
+    return NextResponse.json({ 
+      error: '发送失败',
+      details: error instanceof Error ? error.message : '未知错误'
+    }, { status: 500 });
   }
 }
 

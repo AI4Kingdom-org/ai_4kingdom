@@ -1,70 +1,71 @@
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
-import { DynamoDBDocumentClient, UpdateCommand, GetCommand } from "@aws-sdk/lib-dynamodb";
-import { getDynamoDBConfig } from "./dynamodb";
+import { DynamoDBDocumentClient, UpdateCommand, GetCommand, PutCommand } from "@aws-sdk/lib-dynamodb";
+import { createDynamoDBClient } from "./dynamodb";
 
-interface MonthlyUsage {
-  UserId: string;
-  YearMonth: string;  // 格式: "2024-03"
+interface TokenUsage {
   prompt_tokens: number;
   completion_tokens: number;
   total_tokens: number;
   retrieval_tokens: number;
-  last_updated: string;
 }
 
-export async function updateMonthlyTokenUsage(
-  userId: string,
-  usage: {
-    prompt_tokens: number;
-    completion_tokens: number;
-    total_tokens: number;
-    retrieval_tokens: number;
-  }
-) {
+interface MonthlyUsageRecord {
+  PK: string;          // USER#{userId}
+  SK: string;          // MONTH#{YYYY-MM}
+  UserId: string;      // 用户ID
+  YearMonth: string;   // YYYY-MM 格式
+  PromptTokens: number;
+  CompletionTokens: number;
+  TotalTokens: number;
+  RetrievalTokens: number;
+  UpdatedAt: string;   // ISO 日期字符串
+}
+
+export async function updateMonthlyTokenUsage(userId: string, usage: TokenUsage) {
   try {
-    const config = await getDynamoDBConfig();
-    const client = new DynamoDBClient(config);
-    const docClient = DynamoDBDocumentClient.from(client);
-    
-    // 获取当前年月
     const now = new Date();
     const yearMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-
-    // 更新月度使用量
+    
+    const docClient = await createDynamoDBClient();
+    
     const command = new UpdateCommand({
-      TableName: "MonthlyTokenUsage",
+      TableName: 'TokenUsage',
       Key: {
-        UserId: userId,
-        YearMonth: yearMonth
+        PK: `USER#${userId}`,
+        SK: `MONTH#${yearMonth}`
       },
       UpdateExpression: `
-        SET prompt_tokens = if_not_exists(prompt_tokens, :zero) + :prompt,
-            completion_tokens = if_not_exists(completion_tokens, :zero) + :completion,
-            total_tokens = if_not_exists(total_tokens, :zero) + :total,
-            retrieval_tokens = if_not_exists(retrieval_tokens, :zero) + :retrieval,
-            last_updated = :now
+        SET UserId = :userId,
+            YearMonth = :yearMonth,
+            PromptTokens = if_not_exists(PromptTokens, :zero) + :prompt,
+            CompletionTokens = if_not_exists(CompletionTokens, :zero) + :completion,
+            TotalTokens = if_not_exists(TotalTokens, :zero) + :total,
+            RetrievalTokens = if_not_exists(RetrievalTokens, :zero) + :retrieval,
+            UpdatedAt = :now
       `,
       ExpressionAttributeValues: {
-        ":zero": 0,
-        ":prompt": usage.prompt_tokens,
-        ":completion": usage.completion_tokens,
-        ":total": usage.total_tokens,
-        ":retrieval": usage.retrieval_tokens,
-        ":now": new Date().toISOString()
+        ':userId': userId,
+        ':yearMonth': yearMonth,
+        ':zero': 0,
+        ':prompt': usage.prompt_tokens,
+        ':completion': usage.completion_tokens,
+        ':total': usage.total_tokens,
+        ':retrieval': usage.retrieval_tokens,
+        ':now': new Date().toISOString()
       },
-      ReturnValues: "ALL_NEW"
+      ReturnValues: 'ALL_NEW'
     });
 
     const result = await docClient.send(command);
-    console.log('[DEBUG] 月度token使用更新成功:', {
+
+    console.log('[DEBUG] 月度token使用已更新:', {
       userId,
       yearMonth,
       newValues: result.Attributes
     });
-
-    return result.Attributes as MonthlyUsage;
   } catch (error) {
     console.error('[ERROR] 更新月度token使用失败:', error);
-    throw error;
+    // 不抛出错误，避免影响主流程
+    // throw error;  
   }
 } 

@@ -6,6 +6,7 @@ import { QueryCommand } from "@aws-sdk/lib-dynamodb";
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const userId = searchParams.get('userId');
+  const type = searchParams.get('type') || 'general';
 
   if (!userId) {
     return NextResponse.json({ error: 'UserId is required' }, { status: 400 });
@@ -13,39 +14,42 @@ export async function GET(request: Request) {
 
   try {
     const docClient = await createDynamoDBClient();
+    
     console.log('[DEBUG] 开始查询用户线程:', {
       userId,
+      type,
       tableName: process.env.NEXT_PUBLIC_DYNAMODB_TABLE_NAME
     });
 
+    // 使用 UserId 作为分区键进行查询
     const response = await docClient.send(new QueryCommand({
-      TableName: process.env.NEXT_PUBLIC_DYNAMODB_TABLE_NAME,
-      IndexName: 'UserTypeIndex',  // 使用 GSI
-      KeyConditionExpression: 'UserId = :userId AND #type = :type',
+      TableName: process.env.NEXT_PUBLIC_DYNAMODB_TABLE_NAME!,
+      KeyConditionExpression: 'UserId = :userId',
+      FilterExpression: '#type = :type',
       ExpressionAttributeNames: {
         '#type': 'Type'
       },
       ExpressionAttributeValues: {
         ':userId': String(userId),
-        ':type': 'thread'
+        ':type': type
       }
     }));
 
-    console.log('[DEBUG] 查询结果:', {
-      itemCount: response.Items?.length,
-      scannedCount: response.ScannedCount
-    });
+    console.log('[DEBUG] 查询结果:', response);
 
     const conversations = response.Items?.map(item => ({
-      threadId: item.threadId || item.activeThreadId,
+      threadId: item.threadId,
       createdAt: item.Timestamp,
-      UserId: item.UserId
+      UserId: item.UserId,
+      Type: item.Type
     })) || [];
 
     return NextResponse.json(conversations);
+
   } catch (error) {
     console.error('[ERROR] 获取线程列表失败:', {
-      error: error instanceof Error ? error.message : '未知错误',
+      error,
+      message: error instanceof Error ? error.message : '未知错误',
       stack: error instanceof Error ? error.stack : undefined
     });
     

@@ -1,25 +1,42 @@
-## AWS Amplify Next.js (App Router) Starter Template
+# 项目名称
 
-This repository provides a starter template for creating applications using Next.js (App Router) and AWS Amplify, emphasizing easy setup for authentication, API, and database capabilities.
+## 简介
+这是一个基于 Next.js 的聊天应用，支持多种对话类型。
 
-## Overview
+## 创建新页面的流程
 
-This template equips you with a foundational Next.js application integrated with AWS Amplify, streamlined for scalability and performance. It is ideal for developers looking to jumpstart their project with pre-configured AWS services like Cognito, AppSync, and DynamoDB.
+1. **定义页面类型**
+   - 在 `app/config/chatTypes.ts` 中添加新的对话类型。
 
-## Features
+2. **创建新的页面目录和文件**
+   - 在 `app/` 目录下创建一个新的子目录，例如 `app/new-page/`。
+   - 在新目录中创建 `page.tsx` 文件。
 
-- **Authentication**: Setup with Amazon Cognito for secure user authentication.
-- **API**: Ready-to-use GraphQL endpoint with AWS AppSync.
-- **Database**: Real-time database powered by Amazon DynamoDB.
+3. **配置路由**
+   - 创建目录和 `page.tsx` 文件会自动生成路由。
 
-## Deploying to AWS
+4. **使用现有组件**
+   - 在新页面中使用 `Chat` 组件，传入对应的 `type`、`assistantId` 和 `vectorStoreId`。
 
-For detailed instructions on deploying your application, refer to the [deployment section](https://docs.amplify.aws/nextjs/start/quickstart/nextjs-app-router-client-components/#deploy-a-fullstack-app-to-aws) of our documentation.
+5. **数据库支持**
+   - 确保 DynamoDB 表支持新的对话类型。
 
-## Security
+6. **更新导航（可选）**
+   - 在应用的导航中添加新页面的链接。
 
-See [CONTRIBUTING](CONTRIBUTING.md#security-issue-notifications) for more information.
+## 运行项目
+1. 安装依赖：
+   ```bash
+   npm install
+   ```
 
-## License
+2. 启动开发服务器：
+   ```bash
+   npm run dev
+   ```
 
-This library is licensed under the MIT-0 License. See the LICENSE file.
+3. 打开浏览器访问 `http://localhost:3000`。
+
+## 许可证
+MIT
+```

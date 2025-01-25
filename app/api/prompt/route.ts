@@ -6,7 +6,7 @@ import {
   PutCommand
 } from "@aws-sdk/lib-dynamodb";
 import OpenAI from 'openai';
-import { ASSISTANT_ID, VECTOR_STORE_ID } from "@/app/config/constants";
+import { ASSISTANT_IDS, VECTOR_STORE_IDS } from "@/app/config/constants";
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
@@ -81,7 +81,7 @@ export async function GET(request: Request) {
   try {
     console.log('[DEBUG] 开始获取 Prompt');
     const { searchParams } = new URL(request.url);
-    const vectorStoreId = searchParams.get('vectorStoreId') || VECTOR_STORE_ID;
+    const vectorStoreId = searchParams.get('vectorStoreId') || VECTOR_STORE_IDS.GENERAL;
     
     const command = new GetCommand({
       TableName: "AIPrompts",
@@ -134,12 +134,12 @@ export async function GET(request: Request) {
 export async function PUT(request: Request) {
   try {
     console.log('[DEBUG] 开始更新 Prompt');
-    const { content, vectorStoreId = VECTOR_STORE_ID } = await request.json();
+    const { content, vectorStoreId = VECTOR_STORE_IDS.GENERAL } = await request.json();
     
     // 1. 更新 OpenAI Assistant 的 instructions
     try {
       await openai.beta.assistants.update(
-        ASSISTANT_ID,
+        ASSISTANT_IDS.GENERAL,
         {
           instructions: content
         }
