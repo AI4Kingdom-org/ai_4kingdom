@@ -37,10 +37,29 @@ const validateEnvVars = () => {
 const createDynamoDBClient = () => {
   try {
     const { region } = validateEnvVars();
+    const isDev = process.env.NODE_ENV === 'development';
     
-    // 在 Amplify 环境中使用默认凭证提供者链
+    console.log('[DEBUG] 创建 DynamoDB 客户端:', {
+      region,
+      isDev,
+      hasAccessKey: !!process.env.NEXT_PUBLIC_AWS_ACCESS_KEY,
+      hasSecretKey: !!process.env.NEXT_PUBLIC_AWS_SECRET_KEY
+    });
+
+    // 本地开发环境使用访问密钥
+    if (isDev) {
+      return new DynamoDBClient({
+        region,
+        credentials: {
+          accessKeyId: process.env.NEXT_PUBLIC_AWS_ACCESS_KEY || '',
+          secretAccessKey: process.env.NEXT_PUBLIC_AWS_SECRET_KEY || ''
+        }
+      });
+    }
+    
+    // 生产环境使用默认凭证提供者链
     return new DynamoDBClient({
-      region: region
+      region
     });
     
   } catch (error) {
@@ -220,4 +239,11 @@ export async function POST(request: Request) {
     });
     return NextResponse.json({ error: '保存数据失败' }, { status: 500 });
   }
-} 
+}
+
+console.log('[DEBUG] 凭证检查:', {
+  identityPoolId: process.env.NEXT_PUBLIC_IDENTITY_POOL_ID,
+  region: process.env.NEXT_PUBLIC_REGION,
+  roleArn: process.env.AWS_LAMBDA_ROLE,
+  // 其他相关配置
+}); 
