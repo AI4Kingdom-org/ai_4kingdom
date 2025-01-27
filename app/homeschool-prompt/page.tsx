@@ -2,6 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import { useChat, ChatProvider } from '../contexts/ChatContext';
+import { ASSISTANT_IDS, VECTOR_STORE_IDS } from '../config/constants';
 import styles from './HomeschoolPrompt.module.css';
 
 interface PromptData {
@@ -10,8 +12,9 @@ interface PromptData {
   recentChanges: string;
 }
 
-export default function HomeschoolPrompt() {
+function HomeschoolPromptContent() {
   const { user } = useAuth();
+  const { setConfig } = useChat();
   const [promptData, setPromptData] = useState<PromptData>({
     childName: '',
     basicInfo: '',
@@ -64,6 +67,11 @@ export default function HomeschoolPrompt() {
       });
 
       if (response.ok) {
+        const data = await response.json();
+        if (data.assistantId) {
+          // 更新 Chat Context 中的 assistantId
+          setConfig({ assistantId: data.assistantId });
+        }
         setMessage('保存成功');
       } else {
         throw new Error('保存失败');
@@ -138,5 +146,17 @@ export default function HomeschoolPrompt() {
         {isLoading ? '保存中...' : '保存'}
       </button>
     </div>
+  );
+}
+
+export default function HomeschoolPrompt() {
+  return (
+    <ChatProvider initialConfig={{
+      type: 'homeschool',
+      assistantId: ASSISTANT_IDS.HOMESCHOOL,
+      vectorStoreId: VECTOR_STORE_IDS.HOMESCHOOL
+    }}>
+      <HomeschoolPromptContent />
+    </ChatProvider>
   );
 }

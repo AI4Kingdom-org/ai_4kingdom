@@ -1,6 +1,11 @@
 import { NextResponse } from 'next/server';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, GetCommand, PutCommand } from '@aws-sdk/lib-dynamodb';
+import OpenAI from 'openai';
+
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY
+});
 
 // 添加调试日志
 console.log('[DEBUG] AWS 环境变量:', {
@@ -60,6 +65,59 @@ const createDynamoDBClient = () => {
 
 const client = createDynamoDBClient();
 const docClient = DynamoDBDocumentClient.from(client);
+
+// 创建或更新用户的 Assistant
+async function getOrCreateAssistant(userId: string, childInfo: any) {
+  try {
+    // 先检查数据库中是否存在 assistant
+    const getCommand = new GetCommand({
+      TableName: 'HomeschoolPrompts',
+      Key: { UserId: String(userId) }
+    });
+
+    const existingData = await docClient.send(getCommand);
+    
+    // 构建 instructions
+    const instructions = `你是一个家校助手，主要帮助家长和老师沟通。
+      学生信息：
+      姓名：${childInfo.childName}
+      基本状况：${childInfo.basicInfo}
+      最新变化：${childInfo.recentChanges}
+      
+      请基于以上信息，帮助优化家长与老师的沟通。`;
+
+    if (existingData.Item?.assistantId) {
+      console.log('[DEBUG] 找到现有 Assistant，准备更新:', existingData.Item.assistantId);
+      
+      // 更新现有 Assistant 的 instructions
+      const updatedAssistant = await openai.beta.assistants.update(
+        existingData.Item.assistantId,
+        {
+          name: `Homeschool Assistant for ${childInfo.childName}`,
+          instructions: instructions
+        }
+      );
+
+      console.log('[DEBUG] Assistant 更新成功:', updatedAssistant.id);
+      return existingData.Item.assistantId;
+    }
+
+    // 如果不存在，创建新的 Assistant
+    console.log('[DEBUG] 创建新的 Assistant');
+    const assistant = await openai.beta.assistants.create({
+      name: `Homeschool Assistant for ${childInfo.childName}`,
+      instructions: instructions,
+      model: "gpt-4-turbo-preview"
+    });
+
+    console.log('[DEBUG] 新 Assistant 创建成功:', assistant.id);
+    return assistant.id;
+
+  } catch (error) {
+    console.error('[ERROR] Assistant 创建/更新失败:', error);
+    throw error;
+  }
+}
 
 // 获取用户的家校信息
 export async function GET(request: Request) {
@@ -128,6 +186,13 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'UserId is required' }, { status: 400 });
     }
 
+    // 获取或创建 Assistant
+    const assistantId = await getOrCreateAssistant(userId, {
+      childName,
+      basicInfo,
+      recentChanges
+    });
+
     const command = new PutCommand({
       TableName: 'HomeschoolPrompts',
       Item: {
@@ -135,19 +200,26 @@ export async function POST(request: Request) {
         childName,
         basicInfo,
         recentChanges,
+        assistantId,  // 保存 assistantId
         updatedAt: new Date().toISOString()
       }
     });
 
     console.log('[DEBUG] DynamoDB 命令:', {
       TableName: command.input.TableName,
-      Item: command.input.Item
+      Item: {
+        ...command.input.Item,
+        assistantId
+      }
     });
 
     await docClient.send(command);
     console.log('[DEBUG] 保存成功');
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ 
+      success: true,
+      assistantId  // 返回 assistantId 给客户端
+    });
   } catch (error) {
     console.error('[ERROR] 保存数据失败:', {
       error,
