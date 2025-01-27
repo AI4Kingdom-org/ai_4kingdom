@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, GetCommand, PutCommand } from '@aws-sdk/lib-dynamodb';
 import OpenAI from 'openai';
+import { fromCognitoIdentityPool } from "@aws-sdk/credential-providers";
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
@@ -34,7 +35,7 @@ const validateEnvVars = () => {
 };
 
 // 创建 DynamoDB 客户端
-const createDynamoDBClient = () => {
+const createDynamoDBClient = async () => {
   try {
     const { region } = validateEnvVars();
     const isDev = process.env.NODE_ENV === 'development';
@@ -42,6 +43,7 @@ const createDynamoDBClient = () => {
     console.log('[DEBUG] 创建 DynamoDB 客户端:', {
       region,
       isDev,
+      identityPoolId: process.env.NEXT_PUBLIC_IDENTITY_POOL_ID,
       hasAccessKey: !!process.env.NEXT_PUBLIC_AWS_ACCESS_KEY,
       hasSecretKey: !!process.env.NEXT_PUBLIC_AWS_SECRET_KEY
     });
@@ -57,10 +59,21 @@ const createDynamoDBClient = () => {
       });
     }
     
-    // 生产环境使用默认凭证提供者链
-    return new DynamoDBClient({
-      region
-    });
+    // 生产环境使用 Cognito Identity Pool
+    try {
+      const credentials = await fromCognitoIdentityPool({
+        clientConfig: { region },
+        identityPoolId: process.env.NEXT_PUBLIC_IDENTITY_POOL_ID!
+      })();
+
+      return new DynamoDBClient({
+        region,
+        credentials
+      });
+    } catch (error) {
+      console.error('[ERROR] Cognito 凭证获取失败:', error);
+      throw error;
+    }
     
   } catch (error) {
     console.error('[ERROR] DynamoDB 客户端创建失败:', error);
@@ -68,13 +81,17 @@ const createDynamoDBClient = () => {
   }
 };
 
-const client = createDynamoDBClient();
-const docClient = DynamoDBDocumentClient.from(client);
+// 由于 createDynamoDBClient 现在是异步的，需要修改其他使用它的地方
+const getDocClient = async () => {
+  const client = await createDynamoDBClient();
+  return DynamoDBDocumentClient.from(client);
+};
 
 // 创建或更新用户的 Assistant
 async function getOrCreateAssistant(userId: string, childInfo: any) {
   try {
     // 先检查数据库中是否存在 assistant
+    const docClient = await getDocClient();
     const getCommand = new GetCommand({
       TableName: 'HomeschoolPrompts',
       Key: { UserId: String(userId) }
@@ -138,6 +155,7 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: 'UserId is required' }, { status: 400 });
     }
 
+    const docClient = await getDocClient();
     const command = new GetCommand({
       TableName: 'HomeschoolPrompts',
       Key: { UserId: userId }
@@ -191,6 +209,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'UserId is required' }, { status: 400 });
     }
 
+    const docClient = await getDocClient();
     // 获取或创建 Assistant
     const assistantId = await getOrCreateAssistant(userId, {
       childName,
