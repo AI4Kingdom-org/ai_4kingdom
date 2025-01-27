@@ -18,24 +18,16 @@ console.log('[DEBUG] AWS 环境变量:', {
 // 检查环境变量
 const validateEnvVars = () => {
   const credentials = {
-    accessKeyId: process.env.NEXT_PUBLIC_AWS_ACCESS_KEY,
-    secretAccessKey: process.env.NEXT_PUBLIC_AWS_SECRET_KEY,
-    region: process.env.NEXT_PUBLIC_AWS_REGION
+    region: process.env.NEXT_PUBLIC_AWS_REGION || process.env.AWS_REGION
   };
 
   console.log('[DEBUG] 验证环境变量:', {
-    hasAccessKey: !!credentials.accessKeyId,
-    hasSecretKey: !!credentials.secretAccessKey,
-    region: credentials.region
+    region: credentials.region,
+    isAmplifyEnv: process.env.AWS_EXECUTION_ENV?.includes('AWS_Amplify')
   });
 
-  if (!credentials.accessKeyId || !credentials.secretAccessKey) {
-    console.error('[ERROR] AWS凭证检查失败:', {
-      available: Object.keys(process.env).filter(key => key.startsWith('NEXT_PUBLIC_')),
-      hasAccessKey: !!credentials.accessKeyId,
-      hasSecretKey: !!credentials.secretAccessKey
-    });
-    throw new Error('AWS credentials not found');
+  if (!credentials.region) {
+    throw new Error('AWS region not found');
   }
 
   return credentials;
@@ -44,19 +36,13 @@ const validateEnvVars = () => {
 // 创建 DynamoDB 客户端
 const createDynamoDBClient = () => {
   try {
-    const credentials = validateEnvVars();
-    console.log('[DEBUG] 创建 DynamoDB 客户端:', {
-      region: credentials.region,
-      hasCredentials: !!(credentials.accessKeyId && credentials.secretAccessKey)
+    const { region } = validateEnvVars();
+    
+    // 在 Amplify 环境中使用默认凭证提供者链
+    return new DynamoDBClient({
+      region: region
     });
     
-    return new DynamoDBClient({
-      region: credentials.region,
-      credentials: {
-        accessKeyId: credentials.accessKeyId!,
-        secretAccessKey: credentials.secretAccessKey!
-      }
-    });
   } catch (error) {
     console.error('[ERROR] DynamoDB 客户端创建失败:', error);
     throw error;
