@@ -1,7 +1,7 @@
 "use client";
 
-import React, { createContext, useContext, useState, useCallback } from 'react';
-import { ASSISTANT_ID, VECTOR_STORE_ID } from '../config/constants';
+import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
+import { ASSISTANT_IDS, VECTOR_STORE_IDS } from '../config/constants';
 
 interface ChatConfig {
   type: string;
@@ -12,7 +12,7 @@ interface ChatConfig {
 
 interface ChatContextType {
   config: ChatConfig;
-  setConfig: (config: ChatConfig) => void;
+  setConfig: (config: Partial<ChatConfig>) => void;
   messages: Array<{ sender: string; text: string }>;
   setMessages: React.Dispatch<React.SetStateAction<Array<{ sender: string; text: string }>>>;
   currentThreadId: string | null;
@@ -27,19 +27,32 @@ const ChatContext = createContext<ChatContextType | null>(null);
 export function ChatProvider({ 
   children,
   initialConfig = {
-    assistantId: ASSISTANT_ID,
-    vectorStoreId: VECTOR_STORE_ID,
+    assistantId: ASSISTANT_IDS.GENERAL,
+    vectorStoreId: VECTOR_STORE_IDS.GENERAL,
     type: 'general'
   }
 }: {
   children: React.ReactNode;
   initialConfig?: ChatConfig;
 }) {
-  const [config, setConfig] = useState<ChatConfig>(initialConfig);
+  const [config, setConfigState] = useState<ChatConfig>(initialConfig);
   const [messages, setMessages] = useState<Array<{ sender: string; text: string }>>([]);
   const [currentThreadId, setCurrentThreadId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const setConfig = useCallback((newConfig: Partial<ChatConfig>) => {
+    setConfigState(prev => ({
+      ...prev,
+      ...newConfig
+    }));
+  }, []);
+
+  useEffect(() => {
+    setMessages([]);
+    setCurrentThreadId(null);
+    setError(null);
+  }, [config.assistantId, config.vectorStoreId, config.type]);
 
   const sendMessage = useCallback(async (message: string) => {
     if (!message.trim() || isLoading) return;
@@ -57,6 +70,7 @@ export function ChatProvider({
           message,
           threadId: currentThreadId,
           assistantId: config.assistantId,
+          vectorStoreId: config.vectorStoreId,
           type: config.type
         })
       });
