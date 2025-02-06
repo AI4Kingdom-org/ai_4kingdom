@@ -111,6 +111,42 @@
    };
    ```
 
+5. **添加 WordPress Shortcode**
+   在服务器的 `/bitnami/wordpress/wp-content/themes/hello-biz/function.php` 中添加：
+   ```php
+   // 注册新的 iframe shortcode
+   add_shortcode('new_chat_iframe', function($atts) {
+       if (!is_user_logged_in()) {
+           return '<div class="notice notice-warning">请先登录查看内容</div>';
+       }
+       
+       $current_user = wp_get_current_user();
+       $user_id = $current_user->ID;
+       
+       $additional_params = isset($atts['params']) ? wp_parse_args($atts['params']) : [];
+       $query_params = array_merge([
+           'userId' => $user_id,
+           'nonce' => wp_create_nonce('wp_rest')
+       ], $additional_params);
+       
+       $base_url = 'https://main.d3ts7h8kta7yzt.amplifyapp.com/new-chat';  // 替换为你的新聊天页面路径
+       $iframe_url = $base_url . '/?' . http_build_query($query_params);
+       
+       return get_iframe_html('new-chat-module', $iframe_url);  // 替换为你的模块名称
+   });
+   ```
+
+   > 注意：
+   > - 将 `new_chat_iframe` 替换为你想要的 shortcode 名称
+   > - 将 `/new-chat` 替换为你的新页面路径
+   > - 将 `new-chat-module` 替换为你的模块名称
+
+6. **使用 Shortcode**
+   在 WordPress 页面中使用：
+   ```
+   [new_chat_iframe]
+   ```
+
 ## 运行项目
 1. 安装依赖：
    ```bash
