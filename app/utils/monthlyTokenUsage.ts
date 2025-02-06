@@ -28,24 +28,26 @@ export async function updateMonthlyTokenUsage(userId: string, usage: TokenUsage)
     
     const docClient = await createDynamoDBClient();
     
+    console.log('[DEBUG] 更新月度使用统计:', {
+      userId,
+      yearMonth,
+      usage
+    });
+
     const command = new UpdateCommand({
-      TableName: 'TokenUsage',
+      TableName: 'MonthlyTokenUsage',
       Key: {
-        PK: `USER#${userId}`,
-        SK: `MONTH#${yearMonth}`
+        UserId: String(userId),
+        YearMonth: yearMonth
       },
       UpdateExpression: `
-        SET UserId = :userId,
-            YearMonth = :yearMonth,
-            PromptTokens = if_not_exists(PromptTokens, :zero) + :prompt,
-            CompletionTokens = if_not_exists(CompletionTokens, :zero) + :completion,
-            TotalTokens = if_not_exists(TotalTokens, :zero) + :total,
-            RetrievalTokens = if_not_exists(RetrievalTokens, :zero) + :retrieval,
-            UpdatedAt = :now
+        SET prompt_tokens = if_not_exists(prompt_tokens, :zero) + :prompt,
+            completion_tokens = if_not_exists(completion_tokens, :zero) + :completion,
+            total_tokens = if_not_exists(total_tokens, :zero) + :total,
+            retrieval_tokens = if_not_exists(retrieval_tokens, :zero) + :retrieval,
+            last_updated = :now
       `,
       ExpressionAttributeValues: {
-        ':userId': userId,
-        ':yearMonth': yearMonth,
         ':zero': 0,
         ':prompt': usage.prompt_tokens,
         ':completion': usage.completion_tokens,
@@ -57,15 +59,9 @@ export async function updateMonthlyTokenUsage(userId: string, usage: TokenUsage)
     });
 
     const result = await docClient.send(command);
+    console.log('[DEBUG] 更新成功:', result.Attributes);
 
-    console.log('[DEBUG] 月度token使用已更新:', {
-      userId,
-      yearMonth,
-      newValues: result.Attributes
-    });
   } catch (error) {
     console.error('[ERROR] 更新月度token使用失败:', error);
-    // 不抛出错误，避免影响主流程
-    // throw error;  
   }
 } 

@@ -1,52 +1,61 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import "./app.css";
-import Chat from "./chat/Chat";
-import { AuthProvider } from "./contexts/AuthContext";
+import { AuthProvider, useAuth } from './contexts/AuthContext';
+import WithChat from './components/layouts/WithChat';
+import Chat from './components/Chat/Chat';
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { CHAT_TYPES } from './config/chatTypes';
 import { ASSISTANT_IDS, VECTOR_STORE_IDS } from './config/constants';
+import { ChatProvider } from './contexts/ChatContext';
 
-export default function Page() {
-  useEffect(() => {
-    window.scrollTo = () => {};
-    document.body.style.overflow = 'hidden';
-  }, []);
+export default function Home() {
+  const { user, loading } = useAuth();
+  
+  console.log('[DEBUG] General页面初始化:', {
+    userId: user?.user_id,
+    loading,
+    assistantId: ASSISTANT_IDS.GENERAL,
+    vectorStoreId: VECTOR_STORE_IDS.GENERAL
+  });
+  
+  if (loading) {
+    return <div>加载中...</div>;
+  }
+
+  if (!user?.user_id) {
+    return <div>请先登录</div>;
+  }
 
   return (
     <ErrorBoundary>
       <AuthProvider>
-        <main style={{ 
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          overflow: 'hidden',
-          zIndex: 1000
-        }}>
-          <div style={{ 
-            width: '100%',
-            height: '100%',
+        <WithChat>
+          <main style={{ 
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
             display: 'flex',
-            justifyContent: 'center',
-            alignItems: 'center',
-            overflow: 'hidden'
+            flexDirection: 'column'
           }}>
-            <div className="chat-container" style={{
-              height: '100%',
-              maxHeight: '100vh',
-              overflow: 'auto'
-            }}>
-              <Chat 
-                type={CHAT_TYPES.GENERAL}
-                assistantId={ASSISTANT_IDS.GENERAL}
-                vectorStoreId={VECTOR_STORE_IDS.GENERAL}
-              />
+            <div style={{ flex: 1, display: 'flex' }}>
+              <ChatProvider initialConfig={{
+                type: CHAT_TYPES.GENERAL,
+                assistantId: ASSISTANT_IDS.GENERAL,
+                vectorStoreId: VECTOR_STORE_IDS.GENERAL,
+                userId: user.user_id
+              }}>
+                <Chat 
+                  type={CHAT_TYPES.GENERAL}
+                  assistantId={ASSISTANT_IDS.GENERAL}
+                  vectorStoreId={VECTOR_STORE_IDS.GENERAL}
+                  userId={user.user_id}
+                />
+              </ChatProvider>
             </div>
-          </div>
-        </main>
+          </main>
+        </WithChat>
       </AuthProvider>
     </ErrorBoundary>
   );

@@ -8,6 +8,7 @@ import ConversationList from '../ConversationList';
 import MessageList from './MessageList';
 import ChatInput from './ChatInput';
 import { ChatType } from '../../config/chatTypes';
+import { ASSISTANT_IDS, VECTOR_STORE_IDS } from '../../config/constants';
 
 interface ChatProps {
   type: ChatType;
@@ -25,18 +26,46 @@ export default function Chat({ type, assistantId, vectorStoreId, userId }: ChatP
     setCurrentThreadId,
     sendMessage,
     isLoading,
-    error 
+    error,
+    setError,
+    loadChatHistory,
+    config
   } = useChat();
   const [isCreatingThread, setIsCreatingThread] = useState(false);
 
   useEffect(() => {
-    console.log('[DEBUG] Chat component mounted:', { user, authLoading });
-    setConfig({
-      assistantId,
-      vectorStoreId,
-      type
+    console.log('[DEBUG] Chat组件认证状态:', {
+      authLoading,
+      userId: user?.user_id,
+      providedUserId: userId,
+      hasConfig: !!config
     });
-  }, [assistantId, vectorStoreId, type, setConfig]);
+
+    if (!authLoading && (userId || user?.user_id)) {
+      setConfig({
+        type,
+        assistantId,
+        vectorStoreId,
+        userId: userId || user?.user_id
+      });
+    }
+  }, [authLoading, user, userId, type, assistantId, vectorStoreId]);
+
+  useEffect(() => {
+    console.log('[DEBUG] Chat组件加载状态:', {
+      currentThreadId,
+      userId: config?.userId,
+      isConfigReady: !!config
+    });
+    
+    if (currentThreadId && config?.userId) {
+      console.log('[DEBUG] 准备加载聊天历史:', {
+        threadId: currentThreadId,
+        userId: config.userId
+      });
+      loadChatHistory(config.userId as string);
+    }
+  }, [currentThreadId, loadChatHistory, config]);
 
   const handleCreateNewThread = async () => {
     if (isCreatingThread || !user) return;
@@ -74,8 +103,31 @@ export default function Chat({ type, assistantId, vectorStoreId, userId }: ChatP
     }
   };
 
+  const handleSendMessage = async (message: string) => {
+    console.log('[DEBUG] 准备发送消息:', {
+      message,
+      currentConfig: config,
+      threadId: currentThreadId
+    });
+
+    if (!config?.assistantId) {
+      console.error('[ERROR] 缺少助手ID配置');
+      setError('配置错误：缺少助手ID');
+      return;
+    }
+
+    try {
+      setIsCreatingThread(true);
+      await sendMessage(message);
+    } catch (error) {
+      console.error('[ERROR] 发送消息失败:', error);
+      setError(error instanceof Error ? error.message : '发送消息失败');
+    } finally {
+      setIsCreatingThread(false);
+    }
+  };
+
   if (authLoading) {
-    console.log('[DEBUG] Auth loading...');
     return <div className={styles.loadingContainer}>
       <div className={styles.loadingText}>认证中...</div>
       <div className={styles.loadingDetails}>
@@ -84,13 +136,12 @@ export default function Chat({ type, assistantId, vectorStoreId, userId }: ChatP
     </div>;
   }
 
-  if (!user) {
-    console.log('[DEBUG] No user found');
+  if (!userId && !user?.user_id) {
     return <div className={styles.loginPrompt}>
-      <p>请先登录后使用</p>
+      <p>请先登录</p>
       <button 
         className={styles.loginButton}
-        onClick={() => window.location.href = 'https://ai4kingdom.com/login'}
+        onClick={() => window.location.href = '/login'}
       >
         去登录
       </button>
@@ -100,7 +151,7 @@ export default function Chat({ type, assistantId, vectorStoreId, userId }: ChatP
   return (
     <div className={styles.container}>
       <ConversationList
-        userId={user.user_id}
+        userId={userId || user?.user_id || ''}
         currentThreadId={currentThreadId}
         onSelectThread={setCurrentThreadId}
         type={type}
@@ -110,7 +161,7 @@ export default function Chat({ type, assistantId, vectorStoreId, userId }: ChatP
       <div className={styles.chatWindow}>
         <MessageList messages={messages} isLoading={isLoading} />
         {error && <div className={styles.error}>{error}</div>}
-        <ChatInput onSend={sendMessage} isLoading={isLoading} />
+        <ChatInput onSend={handleSendMessage} isLoading={isLoading} />
       </div>
     </div>
   );

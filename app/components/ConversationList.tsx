@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import styles from './ConversationList.module.css';
-import { ChatType, CHAT_TYPE_CONFIGS } from '../config/chatTypes';
+import { CHAT_CONFIGS, ChatType } from '../config/chatTypes';
 
 interface Conversation {
   threadId: string;
@@ -16,73 +16,75 @@ interface ConversationListProps {
   currentThreadId: string | null;
   onSelectThread: (threadId: string) => void;
   type: ChatType;
-  isCreating?: boolean;
-  onCreateNewThread?: () => Promise<void>;
+  isCreating: boolean;
+  onCreateNewThread: () => void;
 }
 
-export default function ConversationList({ 
-  userId, 
+export default function ConversationList({
+  userId,
   currentThreadId,
   onSelectThread,
   type,
-  isCreating = false,
+  isCreating,
   onCreateNewThread
 }: ConversationListProps) {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const config = CHAT_CONFIGS[type];
 
   // 获取对话列表
   const fetchConversations = async () => {
-    try {
-      console.log('[DEBUG] 开始获取对话列表:', { 
+    console.log('[DEBUG] 开始获取对话列表:', { 
         userId, 
         type,
-        url: `/api/threads?userId=${userId}&type=${type}`
-      });
+        currentThreadId  // 添加当前线程ID
+    });
+    
+    try {
+        const response = await fetch(`/api/threads?userId=${userId}&type=${type}`, {
+            credentials: 'include'
+        });
+        
+        console.log('[DEBUG] 对话列表响应状态:', {
+            status: response.status,
+            ok: response.ok,
+            headers: Object.fromEntries(response.headers)  // 添加响应头信息
+        });
+        
+        const data = await response.json();
+        console.log('[DEBUG] 获取到的原始对话数据:', {
+            dataLength: data.length,
+            firstItem: data[0],
+            allData: data
+        });
 
-      const response = await fetch(`/api/threads?userId=${userId}&type=${type}`, {
-        credentials: 'include'
-      });
-      
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.details || errorData.error || '获取对话列表失败');
-      }
-      
-      const data = await response.json();
-      console.log('[DEBUG] 原始数据:', data);
+        // 添加数据验证日志
+        const validConversations = data.filter((conv: any) => {
+            const convType = conv.Type || conv.type;
+            const isValid = conv.threadId && convType === type;
+            console.log('[DEBUG] 验证对话项:', {
+                threadId: conv.threadId,
+                type: convType,
+                isValid
+            });
+            return isValid;
+        });
 
-      // 确保数据格式正确
-      const validConversations = data.filter((conv: any) => {
-        // 检查 Type 或 type 字段
-        const convType = conv.Type || conv.type;
-        const isValid = conv.threadId && convType === type;
-        if (!isValid) {
-          console.log('[DEBUG] 过滤掉无效对话:', {
-            conv,
-            expectedType: type,
-            actualType: convType
-          });
-        }
-        return isValid;
-      });
+        const formattedConversations = validConversations.map((conv: any) => ({
+            threadId: conv.threadId,
+            createdAt: conv.createdAt || conv.Timestamp,
+            UserId: conv.UserId,
+            type: conv.Type || conv.type
+        }));
 
-      console.log('[DEBUG] 过滤后的对话:', {
-        type,
-        before: data.length,
-        after: validConversations.length,
-        conversations: validConversations
-      });
-
-      setConversations(validConversations.map((conv: any) => ({
-        threadId: conv.threadId,
-        createdAt: conv.createdAt || conv.Timestamp,
-        UserId: conv.UserId,
-        type: conv.Type || conv.type
-      })));
-      
-      setError(null);
+        setConversations(formattedConversations);
+        console.log('[DEBUG] 最终处理后的对话列表:', {
+            count: formattedConversations.length,
+            conversations: formattedConversations
+        });
+        
+        setError(null);
     } catch (err) {
       console.error('[ERROR] 获取对话列表失败:', err);
       setError(err instanceof Error ? err.message : '加载失败');
@@ -126,7 +128,6 @@ export default function ConversationList({
   // 添加监听器来处理刷新事件
   useEffect(() => {
     const handleRefresh = () => {
-      console.log('[DEBUG] 收到刷新对话列表事件:', { type });
       fetchConversations();
     };
 
@@ -137,17 +138,13 @@ export default function ConversationList({
   // 初始加载和依赖变化时获取对话列表
   useEffect(() => {
     if (userId && type) {
-      console.log('[DEBUG] 触发获取对话列表:', { 
-        userId, 
-        type,
-        trigger: 'dependency change' 
-      });
       fetchConversations();
     }
   }, [userId, type]);
 
-  // 在组件中可以使用配置信息
-  const config = CHAT_TYPE_CONFIGS[type];
+  const handleThreadSelect = (threadId: string) => {
+    onSelectThread(threadId);
+  };
 
   if (loading) return <div className={styles.loading}>加载中...</div>;
   
@@ -177,8 +174,8 @@ export default function ConversationList({
     <div className={styles.container}>
       <div className={styles.header}>
         <button
+          className={styles.newButton}
           onClick={handleCreateNewThread}
-          className={styles.newChatButton}
           disabled={isCreating}
         >
           {isCreating ? '创建中...' : `+ 新建${config.title}`}
@@ -197,7 +194,7 @@ export default function ConversationList({
             <div 
               key={conv.threadId}
               className={`${styles.item} ${currentThreadId === conv.threadId ? styles.active : ''}`}
-              onClick={() => onSelectThread(conv.threadId)}
+              onClick={() => handleThreadSelect(conv.threadId)}
             >
               <div className={styles.itemContent}>
                 <svg 

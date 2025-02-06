@@ -87,3 +87,11 @@ Thumbs.db
 
 # cursor rules
 cursorrules.txt
+
+# 忽略临时文件目录
+app/temp/*
+!app/temp/.gitkeep
+
+# 忽略所有.env文件
+.env
+.venv

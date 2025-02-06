@@ -31,12 +31,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const makeRequest = async (endpoint: string, options: RequestInit) => {
     try {
-      console.log('[DEBUG] 发起请求:', {
-        endpoint,
-        method: options.method,
-        cookies: document.cookie
-      });
-
       const response = await fetch(`${API_BASE}/wp-json/custom/v1/${endpoint}`, {
         ...options,
         headers: {
@@ -44,7 +38,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           'Accept': 'application/json',
           ...(options.headers || {})
         },
-        credentials: 'include'  // 确保所有请求都携带 Cookie
+        credentials: 'include'
       });
 
       if (!response.ok) {
@@ -52,7 +46,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       const data = await response.json();
-      console.log('[DEBUG] API响应:', { endpoint, data });
       return data;
     } catch (err) {
       console.error('[ERROR] API请求失败:', err);
@@ -62,8 +55,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const login = async (username: string, password: string): Promise<boolean> => {
     try {
-      console.log('[DEBUG] 开始登录');
-      
       const response = await fetch(`${API_BASE}/wp-json/custom/v1/login`, {
         method: 'POST',
         headers: {
@@ -73,16 +64,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         credentials: 'include',
         body: JSON.stringify({ username, password })
       });
-
-      console.log('[DEBUG] 登录响应头:', {
-        headers: Object.fromEntries(response.headers.entries()),
-        hasCookie: response.headers.get('set-cookie') !== null
-      });
       
       const data = await response.json();
       
       if (data.success) {
-        console.log('[DEBUG] 登录成功，正在获取用户信息');
         await checkAuth();
         return true;
       }
@@ -98,9 +83,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const checkAuth = async () => {
     try {
-      console.log('[DEBUG] 开始验证会话');
-      console.log('[DEBUG] 当前 Cookie:', document.cookie);
-      
       const data = await makeRequest('validate_session', {
         method: 'POST'
       });
@@ -121,12 +103,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             plan_id: data.subscription?.plan_id || ''
           }
         });
-        
-        console.log('[DEBUG] 会话验证成功:', {
-          userId: data.user_id,
-          subscription: data.subscription,
-          cookies: document.cookie
-        });
       } else {
         throw new Error(data.message || '验证失败');
       }
@@ -143,7 +119,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       await makeRequest('logout', {
         method: 'POST'
       });
-      console.log('[DEBUG] 登出成功');
     } catch (err) {
       console.error('[ERROR] 登出失败:', err);
     } finally {
@@ -196,9 +171,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // 定期检查会话状态
   useEffect(() => {
     const sessionCheckInterval = setInterval(() => {
-      console.log('[DEBUG] 执行定期会话检查');
       checkAuth();
-    }, 5 * 60 * 1000); // 每5分钟检查一次
+    }, 30 * 60 * 1000); // 每30分钟检查一次
 
     return () => {
       clearInterval(sessionCheckInterval);

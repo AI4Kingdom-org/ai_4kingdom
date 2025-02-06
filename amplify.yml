@@ -9,6 +9,9 @@ frontend:
   phases:
     preBuild:
       commands:
+        # 安装 Python 依赖
+        - python3 -m pip install --user yt-dlp openai-whisper torch torchvision torchaudio
+        # 常规 npm 安装
         - npm ci
     build:
       commands:

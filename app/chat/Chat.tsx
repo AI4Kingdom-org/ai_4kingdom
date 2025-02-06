@@ -7,6 +7,7 @@ import ConversationList from '../components/ConversationList';
 import { updateUserActiveThread } from '../utils/dynamodb';
 import OpenAI from 'openai';
 import { CHAT_TYPES, ChatType } from '../config/chatTypes';
+import { useChat } from '../contexts/ChatContext';
 
 export interface ChatMessage {
   Message: string;
@@ -45,13 +46,22 @@ interface ChatProps {
 
 export default function Chat({ type, assistantId, vectorStoreId }: ChatProps) {
   const { user, loading, error: authError } = useAuth();
-  const [messages, setMessages] = useState<{ sender: string; text: string }[]>([]);
+  const { 
+    setConfig,
+    messages,
+    currentThreadId,
+    setCurrentThreadId,
+    sendMessage,
+    isLoading,
+    error,
+    loadChatHistory,
+    setMessages,
+    setError,
+    setIsLoading
+  } = useChat();
   const [input, setInput] = useState('');
-  const [error, setError] = useState('');
   const [weeklyUsage, setWeeklyUsage] = useState(0);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [currentThreadId, setCurrentThreadId] = useState<string | null>(null);
   const [isFetchingHistory, setIsFetchingHistory] = useState(false);
   const [isCreatingThread, setIsCreatingThread] = useState(false);
 
@@ -122,94 +132,6 @@ export default function Chat({ type, assistantId, vectorStoreId }: ChatProps) {
     }
   }, [user]);
 
-  const sendMessage = async () => {
-    if (!input.trim() || !user || isLoading) return;
-    
-    console.log('[DEBUG] 准备发送消息:', {
-      threadId: currentThreadId,
-      messageLength: input.length,
-      userId: user.user_id
-    });
-    
-    setIsLoading(true);
-    const currentInput = input;
-    setInput('');
-    setError('');
-
-    try {
-      // 如果没有 threadId，先创建一个新的
-      let activeThreadId = currentThreadId;
-      if (!activeThreadId) {
-        console.log('[DEBUG] 没有当前对话，创建新对话');
-        
-        // 调用创建线程的 API
-        const response = await fetch('/api/threads/create', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            userId: user.user_id
-          })
-        });
-
-        if (!response.ok) {
-          throw new Error('创建新对话失败');
-        }
-
-        const data = await response.json();
-        activeThreadId = data.threadId;
-        setCurrentThreadId(activeThreadId);
-        console.log('[DEBUG] 创建新对话成功:', { threadId: activeThreadId });
-      }
-
-      // 添加用户消息到界面
-      setMessages(prev => [...prev, { sender: 'user', text: currentInput }]);
-      scrollToBottom();
-
-      // 发送消息到API
-      const response = await fetch('/api/chat', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          userId: user.user_id,
-          message: currentInput,
-          threadId: activeThreadId  // 使用确保存在的 threadId
-        })
-      });
-
-      if (!response.ok) {
-        throw new Error(response.status === 504 ? '请求超时' : '发送失败');
-      }
-
-      const data = await response.json();
-      console.log('[DEBUG] API响应:', {
-        success: true,
-        threadId: data.threadId,
-        hasReply: !!data.reply
-      });
-
-      if (data.error) {
-        throw new Error(data.error);
-      }
-
-      // 获取最新的消息历史
-      if (activeThreadId) {
-        await fetchHistory(activeThreadId);
-      }
-
-    } catch (err) {
-      console.error('[ERROR] 发送消息失败:', err);
-      setInput(currentInput);
-      setError(err instanceof Error ? err.message : '发送失败');
-      setMessages(prev => prev.slice(0, -1));
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
   const handleSelectThread = async (threadId: string) => {
     try {
       if (threadId === currentThreadId) {
@@ -226,7 +148,6 @@ export default function Chat({ type, assistantId, vectorStoreId }: ChatProps) {
       setError('');
       
       setCurrentThreadId(threadId);
-      await fetchHistory(threadId);
 
     } catch (err) {
       console.error('[ERROR] 切换对话失败:', err);
@@ -275,6 +196,13 @@ export default function Chat({ type, assistantId, vectorStoreId }: ChatProps) {
     }
   };
 
+  const handleSubmit = () => {
+    if (!isLoading && input.trim()) {
+      sendMessage(input.trim());
+      setInput('');
+    }
+  };
+
   if (loading) return <div>加载中...</div>;
   if (error) return <div>认证错误: {error}</div>;
   if (!user) return (
@@ -294,12 +222,12 @@ export default function Chat({ type, assistantId, vectorStoreId }: ChatProps) {
       {user && (
         <div className={styles.conversationListContainer}>
           <ConversationList
-            userId={String(user.user_id)}  // 确保 userId 是字符串类型
+            userId={String(user.user_id)}
             currentThreadId={currentThreadId}
             onSelectThread={handleSelectThread}
-            onCreateNewThread={handleCreateNewThread}
-            isCreating={isCreatingThread}
             type={type}
+            isCreating={isCreatingThread}
+            onCreateNewThread={handleCreateNewThread}
           />
         </div>
       )}
@@ -352,7 +280,7 @@ export default function Chat({ type, assistantId, vectorStoreId }: ChatProps) {
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
-                if (!isLoading) sendMessage();
+                handleSubmit();
               }
             }}
             placeholder={isLoading ? "发送中..." : "输入消息..."}
@@ -361,7 +289,7 @@ export default function Chat({ type, assistantId, vectorStoreId }: ChatProps) {
             rows={2}
           />
           <button
-            onClick={sendMessage}
+            onClick={handleSubmit}
             disabled={!input.trim() || isLoading || isFetchingHistory}
             className={styles.sendButton}
           >

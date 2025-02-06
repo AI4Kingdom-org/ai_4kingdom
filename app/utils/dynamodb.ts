@@ -24,19 +24,19 @@ export async function getDynamoDBConfig() {
 
 // 添加创建 DynamoDB 客户端的函数
 export async function createDynamoDBClient() {
-  try {
-    const config = await getDynamoDBConfig();
-    console.log('[DEBUG] DynamoDB 配置:', {
-      region: config.region,
-      hasCredentials: !!config.credentials
-    });
-    
-    const client = new DynamoDBClient(config);
-    return DynamoDBDocumentClient.from(client);
-  } catch (error) {
-    console.error('[ERROR] DynamoDB 客户端创建失败:', error);
-    throw error;
-  }
+  const client = new DynamoDBClient({
+    region: process.env.NEXT_PUBLIC_REGION,
+    credentials: {
+      accessKeyId: process.env.NEXT_PUBLIC_AWS_ACCESS_KEY || '',
+      secretAccessKey: process.env.NEXT_PUBLIC_SECRET_ACCESS_KEY || ''
+    }
+  });
+
+  return DynamoDBDocumentClient.from(client, {
+    marshallOptions: {
+      removeUndefinedValues: true,
+    },
+  });
 }
 
 // 添加更新用户活动线程的函数

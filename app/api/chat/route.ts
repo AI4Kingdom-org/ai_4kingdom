@@ -3,7 +3,7 @@ import { DynamoDBDocumentClient, PutCommand, QueryCommand, GetCommand } from "@a
 import { fromCognitoIdentityPool } from "@aws-sdk/credential-providers";
 import OpenAI from 'openai';
 import { NextResponse } from 'next/server';
-import { ASSISTANT_IDS } from '@/app/config/constants';
+import { ASSISTANT_IDS, VECTOR_STORE_IDS } from '@/app/config/constants';
 import { saveTokenUsage } from '@/app/utils/tokenUsage';
 import { updateMonthlyTokenUsage } from '@/app/utils/monthlyTokenUsage';
 
@@ -96,106 +96,17 @@ function setCORSHeaders(origin: string | null) {
   return headers;
 }
 
-// OpenAI 配置和客户端创建
-function createOpenAIClient() {
-  const OPENAI_API_KEY = process.env.OPENAI_API_KEY?.trim();
-  const OPENAI_ORG_ID = process.env.OPENAI_ORG_ID?.trim();
-
-  if (!OPENAI_API_KEY) {
-    throw new Error('OpenAI API Key 缺失');
-  }
-
-  return new OpenAI({
-    apiKey: OPENAI_API_KEY,
-    ...(OPENAI_ORG_ID && { organization: OPENAI_ORG_ID })
-  });
-}
-
-// 添加错误处理中间件
-const withErrorHandler = (handler: Function) => async (request: Request) => {
-  try {
-    return await handler(request);
-  } catch (error) {
-    console.error('[ERROR]:', error);
-    return new Response(
-      JSON.stringify({
-        error: '请求处理失败',
-        message: error instanceof Error ? error.message : '未知错误',
-        code: error instanceof Error ? error.name : 'UNKNOWN_ERROR'
-      }),
-      {
-        status: 500,
-        headers: { 'Content-Type': 'application/json' }
-      }
-    );
-  }
-};
-
-// 添加获取 Prompt 的函数
-async function getPromptFromDB(vectorStoreId: string) {
-  try {
-    const docClient = await createDynamoDBClient();
-    const command = new GetCommand({
-      TableName: "AIPrompts",
-      Key: { id: vectorStoreId }
-    });
-
-    const response = await docClient.send(command);
-    return response.Item?.content || "You are an AI assistant specializing in home schooling...";
-  } catch (error) {
-    console.error('[ERROR] 获取Prompt失败:', error);
-    // 如果获取失败，返回默认 prompt
-    return "You are an AI assistant specializing in home schooling...";
-  }
-}
-
-const MAX_MESSAGES_PER_THREAD = 10;  // 每个线程最多保留10条消息
-const THREAD_MAX_AGE = 30 * 60 * 1000;  // 线程最大存活时间30分钟
-
-async function shouldCreateNewThread(threadId: string, userId: string, openai: OpenAI) {
-  try {
-    const docClient = await createDynamoDBClient();
-    
-    // 获取当前线程的消息数量
-    const messages = await openai.beta.threads.messages.list(threadId);
-    const messageCount = messages.data.length;
-    
-    console.log('[DEBUG] 当前线程状态:', {
-      threadId,
-      messageCount,
-      maxMessages: MAX_MESSAGES_PER_THREAD
-    });
-
-    // 如果消息数量超过限制，返回true以创建新线程
-    if (messageCount >= MAX_MESSAGES_PER_THREAD) {
-      console.log('[DEBUG] 消息数量超过限制，将创建新线程');
-      return true;
-    }
-
-    // 获取线程创建时间
-    const thread = await openai.beta.threads.retrieve(threadId);
-    const threadAge = Date.now() - new Date(thread.created_at * 1000).getTime();
-    
-    // 如果线程时间过长，返回true以创建新线程
-    if (threadAge > THREAD_MAX_AGE) {
-      console.log('[DEBUG] 线程时间超过限制，将创建新线程');
-      return true;
-    }
-
-    return false;
-  } catch (error) {
-    console.error('[ERROR] 检查线程状态失败:', error);
-    return true;  // 出错时创建新线程
-  }
-}
-
 // 修改现有的 getUserActiveThread 函数
-async function getUserActiveThread(userId: string, openai: OpenAI): Promise<string> {
+async function getUserActiveThread(
+  userId: string, 
+  openai: OpenAI,
+  assistantId: string  // 新增参数
+): Promise<string> {
   try {
     const docClient = await createDynamoDBClient();
     const command = new QueryCommand({
       TableName: CONFIG.tableName,
-      IndexName: 'UserTypeIndex',  // 使用 GSI
+      IndexName: 'UserTypeIndex',
       KeyConditionExpression: 'UserId = :userId AND #type = :type',
       ExpressionAttributeNames: {
         '#type': 'Type'
@@ -207,14 +118,17 @@ async function getUserActiveThread(userId: string, openai: OpenAI): Promise<stri
     });
 
     const response = await docClient.send(command);
-    
-    // 获取最新的线程
     const latestThread = response.Items?.[0];
     const threadId = latestThread?.threadId;
     
     if (!threadId) {
-      // 如果没有现有线程，创建新线程
+      // 创建新线程时关联 assistantId
       const newThread = await openai.beta.threads.create();
+      
+      // 创建 run 来关联 assistant
+      await openai.beta.threads.runs.create(newThread.id, {
+        assistant_id: assistantId
+      });
       
       await docClient.send(new PutCommand({
         TableName: CONFIG.tableName,
@@ -222,11 +136,15 @@ async function getUserActiveThread(userId: string, openai: OpenAI): Promise<stri
           UserId: String(userId),
           Type: 'thread',
           threadId: newThread.id,
+          assistantId: assistantId,  // 保存 assistantId
           Timestamp: new Date().toISOString()
         }
       }));
       
-      console.log('[DEBUG] 创建首个线程:', newThread.id);
+      console.log('[DEBUG] 创建新线程:', {
+        threadId: newThread.id,
+        assistantId
+      });
       return newThread.id;
     }
 
@@ -242,6 +160,22 @@ async function waitForCompletion(openai: OpenAI, threadId: string, runId: string
   let attempts = 0;
   let runStatus = await openai.beta.threads.runs.retrieve(threadId, runId);
   
+  console.log('[DEBUG] OpenAI Run 配置详情:', {
+    threadId,
+    runId,
+    assistant: {
+      id: runStatus.assistant_id,
+      model: runStatus.model,
+      instructions: runStatus.instructions,
+      tools: runStatus.tools?.map(t => t.type)
+    },
+    metadata: {
+      status: runStatus.status,
+      startTime: new Date(runStatus.created_at * 1000).toISOString(),
+      completionTime: runStatus.completed_at ? new Date(runStatus.completed_at * 1000).toISOString() : null
+    }
+  });
+
   while (runStatus.status !== 'completed' && attempts < maxAttempts) {
     if (runStatus.status === 'failed') {
       throw new Error('Assistant run failed');
@@ -254,6 +188,34 @@ async function waitForCompletion(openai: OpenAI, threadId: string, runId: string
     attempts++;
     runStatus = await openai.beta.threads.runs.retrieve(threadId, runId);
     console.log(`[DEBUG] Run status: ${runStatus.status}, attempt: ${attempts}`);
+  }
+  
+  if (runStatus.status === 'completed') {
+    console.log('[DEBUG] OpenAI Run 完成配置:', {
+      threadId,
+      runId,
+      finalStatus: runStatus.status,
+      completionTime: runStatus.completed_at ? new Date(runStatus.completed_at * 1000).toISOString() : null,
+      usedTools: runStatus.tools?.map(t => t.type)
+    });
+
+    // 获取运行步骤以检查检索操作
+    const steps = await openai.beta.threads.runs.steps.list(threadId, runId);
+    const retrievalSteps = steps.data.filter(step => 
+      (step.step_details as any).type === 'retrieval'
+    );
+
+    console.log('[DEBUG] Vector Store 检索详情:', {
+      threadId,
+      runId,
+      retrievalStepsCount: retrievalSteps.length,
+      retrievalSteps: retrievalSteps.map(step => ({
+        id: step.id,
+        type: (step.step_details as any).type,
+        status: step.status,
+        tokens: step.usage?.total_tokens
+      }))
+    });
   }
   
   if (attempts >= maxAttempts) {
@@ -269,99 +231,105 @@ const openai = new OpenAI({
 
 export async function POST(request: Request) {
   try {
-    const { userId, message, threadId, assistantId, type = 'general' } = await request.json();
+    const { message, threadId, userId, config } = await request.json();
     
-    console.log('[DEBUG] 接收到聊天请求:', { 
-      userId, 
-      messageLength: message.length, 
+    console.log('[DEBUG] 收到聊天请求:', {
+      messageLength: message.length,
       threadId,
-      type,
-      assistantId
+      userId,
+      config
     });
 
-    // 验证必要参数
-    if (!message) {
-      return NextResponse.json({ error: '消息不能为空' }, { status: 400 });
+    if (!message || !userId || !config?.assistantId) {
+      return NextResponse.json({ 
+        error: '缺少必要参数' 
+      }, { status: 400 });
     }
 
-    // 如果没有 userId，从 ChatContext 获取
-    const effectiveUserId = userId || (await request.headers.get('user-id'));
-    
-    console.log('[DEBUG] 使用的用户ID:', {
-      originalUserId: userId,
-      effectiveUserId,
-      headers: Object.fromEntries(request.headers)
-    });
-
-    // 如果没有 threadId，创建新的线程并保存到 DynamoDB
     let activeThreadId = threadId;
-    if (!activeThreadId) {
-      console.log('[DEBUG] 未提供 threadId，创建新线程');
-      const newThread = await openai.beta.threads.create();
-      activeThreadId = newThread.id;
+    let thread;
 
-      const timestamp = new Date().toISOString();
-      const threadData = {
-        UserId: String(effectiveUserId),
-        Timestamp: timestamp,
-        Type: type,
-        threadId: activeThreadId,
-        Status: 'active',
-        LastMessage: message.substring(0, 100)
-      };
-
-      console.log('[DEBUG] 准备保存线程数据:', threadData);
-
-      const docClient = await createDynamoDBClient();
-      await docClient.send(new PutCommand({
-        TableName: CONFIG.tableName,
-        Item: threadData
-      }));
-      
-      console.log('[DEBUG] 新线程已创建并保存:', { threadId: activeThreadId });
+    // 如果提供了现有线程ID，先尝试获取
+    if (threadId) {
+      try {
+        console.log('[DEBUG] 尝试获取现有线程:', threadId);
+        thread = await openai.beta.threads.retrieve(threadId);
+        activeThreadId = threadId;
+        console.log('[DEBUG] 成功获取现有线程:', {
+          threadId: thread.id,
+          created: thread.created_at,
+          metadata: thread.metadata
+        });
+      } catch (error) {
+        console.warn('[WARN] 获取现有线程失败，将创建新线程:', error);
+      }
     }
 
-    // 发送消息到 OpenAI
+    // 如果没有现有线程或获取失败，创建新线程
+    if (!thread) {
+      console.log('[DEBUG] 创建新线程');
+      thread = await openai.beta.threads.create({
+        metadata: {
+          userId,
+          type: config.type,
+          assistantId: config.assistantId,
+          vectorStoreId: config.vectorStoreId
+        }
+      });
+      activeThreadId = thread.id;
+      console.log('[DEBUG] 新线程创建成功:', {
+        threadId: thread.id,
+        metadata: thread.metadata
+      });
+    }
+
+    // 添加用户消息
+    console.log('[DEBUG] 添加用户消息到线程:', {
+      threadId: activeThreadId,
+      messageLength: message.length
+    });
+
     await openai.beta.threads.messages.create(activeThreadId, {
       role: 'user',
       content: message
     });
 
-    // 运行助手并获取使用情况
+    // 运行助手
+    console.log('[DEBUG] 开始运行助手:', {
+      threadId: activeThreadId,
+      assistantId: config.assistantId
+    });
+
     const run = await openai.beta.threads.runs.create(activeThreadId, {
-      assistant_id: assistantId || ASSISTANT_IDS.GENERAL
+      assistant_id: config.assistantId
     });
 
     // 等待运行完成
-    let runStatus = await waitForCompletion(openai, activeThreadId, run.id);
+    let runStatus = await openai.beta.threads.runs.retrieve(
+      activeThreadId,
+      run.id
+    );
 
-    // 获取所有运行步骤的使用情况
-    const runSteps = await openai.beta.threads.runs.steps.list(activeThreadId, run.id);
-    
-    // 累计所有步骤的 token 使用情况
-    let totalTokenUsage = {
-      prompt_tokens: 0,
-      completion_tokens: 0,
-      total_tokens: 0,
-      retrieval_tokens: 0,  // 新增：检索相关的 token
-    };
+    console.log('[DEBUG] 等待助手响应:', {
+      runId: run.id,
+      status: runStatus.status
+    });
 
-    // 遍历所有步骤，累计 token 使用情况
-    for (const step of runSteps.data) {
-      if (step.step_details.type === 'message_creation') {
-        totalTokenUsage.prompt_tokens += step.usage?.prompt_tokens || 0;
-        totalTokenUsage.completion_tokens += step.usage?.completion_tokens || 0;
-        totalTokenUsage.total_tokens += step.usage?.total_tokens || 0;
-      }
-      
-      // 记录检索相关的 token
-      if ((step.step_details as any).type === 'retrieval') {
-        totalTokenUsage.retrieval_tokens += step.usage?.total_tokens || 0;
-        console.log('[DEBUG] 文件检索 Token:', {
-          stepId: step.id,
-          retrievalTokens: step.usage?.total_tokens || 0
-        });
-      }
+    while (runStatus.status === 'in_progress' || runStatus.status === 'queued') {
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      runStatus = await openai.beta.threads.runs.retrieve(
+        activeThreadId,
+        run.id
+      );
+      console.log('[DEBUG] 运行状态更新:', {
+        runId: run.id,
+        status: runStatus.status
+      });
+    }
+
+    if (runStatus.status !== 'completed') {
+      console.error('[ERROR] 助手运行失败:', runStatus);
+      throw new Error(`Assistant run failed with status: ${runStatus.status}`);
     }
 
     // 获取助手的回复
@@ -372,173 +340,32 @@ export async function POST(request: Request) {
       .map(content => (content.type === 'text' ? content.text.value : ''))
       .join('\n');
 
-    // 保存完整的 token 使用记录
-    await saveTokenUsage(effectiveUserId, activeThreadId, {
-      prompt_tokens: totalTokenUsage.prompt_tokens,
-      completion_tokens: totalTokenUsage.completion_tokens,
-      total_tokens: totalTokenUsage.total_tokens + totalTokenUsage.retrieval_tokens,
-      retrieval_tokens: totalTokenUsage.retrieval_tokens
+    console.log('[DEBUG] 获取到助手回复:', {
+      threadId: activeThreadId,
+      replyLength: assistantReply.length,
+      messageId: lastMessage.id
     });
 
-    // 更新月度使用统计
-    await updateMonthlyTokenUsage(effectiveUserId, totalTokenUsage);
-    
-    console.log('[DEBUG] 完整Token使用情况:', totalTokenUsage);
-    
     return NextResponse.json({
+      success: true,
       reply: assistantReply,
-      threadId: activeThreadId,  // 返回可能是新创建的 threadId
-      usage: totalTokenUsage
+      threadId: activeThreadId,
+      debug: {
+        runStatus: runStatus.status,
+        messageCount: messages.data.length
+      }
     });
 
   } catch (error) {
-    // 增强错误日志
-    console.error('[ERROR] 处理聊天请求失败:', {
-      error,
-      message: error instanceof Error ? error.message : '未知错误',
-      stack: error instanceof Error ? error.stack : undefined,
-      type: error instanceof Error ? error.constructor.name : typeof error
-    });
-    
+    console.error('[ERROR] Chat API error:', error);
     return NextResponse.json({ 
-      error: '发送失败',
-      details: error instanceof Error ? error.message : '未知错误'
+      error: error instanceof Error ? error.message : '未知错误',
+      details: error instanceof Error ? error.stack : undefined
     }, { status: 500 });
   }
 }
 
-// 添加新的消息获取函数
-async function getThreadMessages(threadId: string, openai: OpenAI) {
-  try {
-    console.log('[DEBUG] 开始获取OpenAI消息:', { threadId });
-    
-    const messages = await openai.beta.threads.messages.list(threadId);
-    
-    console.log('[DEBUG] 获取到原始消息:', { 
-      count: messages.data.length 
-    });
-    
-    const sortedMessages = messages.data.sort((a, b) => 
-      new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-    );
-    
-    const formattedMessages = sortedMessages.map(msg => ({
-      role: msg.role,
-      content: msg.content[0].type === 'text' 
-        ? msg.content[0].text.value 
-        : '',
-      timestamp: new Date(msg.created_at * 1000).toISOString()
-    }));
-
-    console.log('[DEBUG] 消息格式化完成:', { 
-      formattedCount: formattedMessages.length 
-    });
-
-    return formattedMessages;
-  } catch (error) {
-    console.error('[ERROR] 获取Thread消息失败:', error);
-    throw error;
-  }
-}
-
-// 使用已创建的实例
-async function getOpenAIHistory(userId: string) {
-  try {
-    console.log('[DEBUG] 开始获取OpenAI历史记录:', { userId });
-    
-    const threadId = await getUserActiveThread(userId, openai);
-    if (!threadId) {
-      console.log('[DEBUG] 未找到活动线程');
-      return [];
-    }
-    
-    const messages = await getThreadMessages(threadId, openai);
-    
-    // 转换为应用程序使用的格式
-    const formattedMessages = messages.map(msg => ({
-      Message: JSON.stringify({
-        userMessage: msg.role === 'user' ? msg.content : '',
-        botReply: msg.role === 'assistant' ? msg.content : ''
-      }),
-      Timestamp: msg.timestamp,
-      UserId: userId
-    }));
-
-    console.log('[DEBUG] 历史记录格式化完成:', { 
-      count: formattedMessages.length 
-    });
-
-    return formattedMessages;
-  } catch (error) {
-    console.error('[ERROR] 获取OpenAI历史记录失败:', error);
-    throw error;
-  }
-}
-
-// 修改现有的 GET 处理函数
-export async function GET(request: Request) {
-  const origin = request.headers.get('origin');
-  const headers = setCORSHeaders(origin);
-  
-  try {
-    const { searchParams } = new URL(request.url);
-    const userId = searchParams.get("userId");
-
-    if (!userId) {
-      return new Response(JSON.stringify({ error: "UserId is required" }), {
-        status: 400,
-        headers
-      });
-    }
-
-    // 添加详细的错误日志
-    console.log('[DEBUG] 开始获取聊天历史:', {
-      userId,
-      tableName: CONFIG.tableName
-    });
-
-    const docClient = await createDynamoDBClient();
-    
-    // 修改查询逻辑
-    const command = new QueryCommand({
-      TableName: CONFIG.tableName,
-      IndexName: 'UserTypeIndex',  // 使用 GSI
-      KeyConditionExpression: 'UserId = :userId AND #type = :type',
-      ExpressionAttributeNames: {
-        '#type': 'Type'
-      },
-      ExpressionAttributeValues: {
-        ':userId': String(userId),
-        ':type': 'thread'
-      }
-    });
-
-    const response = await docClient.send(command);
-    
-    console.log('[DEBUG] DynamoDB响应:', {
-      itemCount: response.Items?.length,
-      scannedCount: response.ScannedCount
-    });
-
-    return new Response(JSON.stringify(response.Items || []), { headers });
-    
-  } catch (error) {
-    console.error('[ERROR] 获取聊天历史失败:', {
-      error: error instanceof Error ? error.message : '未知错误',
-      stack: error instanceof Error ? error.stack : undefined
-    });
-    
-    return new Response(JSON.stringify({
-      error: '获取聊天历史失败',
-      details: error instanceof Error ? error.message : '未知错误'
-    }), {
-      status: 500,
-      headers
-    });
-  }
-}
-
-// 添加 OPTIONS 处理
+// 保留 OPTIONS 方法用于 CORS
 export async function OPTIONS(request: Request) {
   const origin = request.headers.get('origin');
   const headers = setCORSHeaders(origin);

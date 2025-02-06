@@ -8,6 +8,13 @@ export async function GET(request: Request) {
   const userId = searchParams.get('userId');
   const type = searchParams.get('type') || 'general';
 
+  console.log('[DEBUG] API收到获取对话列表请求:', {
+    userId,
+    type,
+    url: request.url,
+    headers: Object.fromEntries(request.headers)
+  });
+
   if (!userId) {
     return NextResponse.json({ error: 'UserId is required' }, { status: 400 });
   }
@@ -21,8 +28,7 @@ export async function GET(request: Request) {
       tableName: process.env.NEXT_PUBLIC_DYNAMODB_TABLE_NAME
     });
 
-    // 使用 UserId 作为分区键进行查询
-    const response = await docClient.send(new QueryCommand({
+    const queryParams = {
       TableName: process.env.NEXT_PUBLIC_DYNAMODB_TABLE_NAME!,
       KeyConditionExpression: 'UserId = :userId',
       FilterExpression: '#type = :type',
@@ -33,9 +39,19 @@ export async function GET(request: Request) {
         ':userId': String(userId),
         ':type': type
       }
-    }));
+    };
 
-    console.log('[DEBUG] 查询结果:', response);
+    console.log('[DEBUG] DynamoDB查询参数:', queryParams);
+    
+    const response = await docClient.send(new QueryCommand(queryParams));
+    
+    console.log('[DEBUG] DynamoDB响应详情:', {
+      itemCount: response.Items?.length,
+      scannedCount: response.ScannedCount,
+      lastEvaluatedKey: response.LastEvaluatedKey,
+      items: response.Items,
+      consumedCapacity: response.ConsumedCapacity
+    });
 
     const conversations = response.Items?.map(item => ({
       threadId: item.threadId,

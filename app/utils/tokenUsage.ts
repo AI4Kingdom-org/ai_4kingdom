@@ -18,7 +18,7 @@ export async function saveTokenUsage(userId: string | undefined, threadId: strin
     
     const timestamp = new Date().toISOString();
     const item = {
-      UserId: effectiveUserId,  // 主键
+      UserId: String(effectiveUserId),  // 确保 UserId 是字符串类型
       Timestamp: timestamp,     // 排序键
       ThreadId: threadId,
       PromptTokens: usage.prompt_tokens,

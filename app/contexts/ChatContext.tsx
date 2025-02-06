@@ -2,17 +2,25 @@
 
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import { ASSISTANT_IDS, VECTOR_STORE_IDS } from '../config/constants';
+import { ChatType } from '../config/chatTypes';
+import { useAuth } from '../contexts/AuthContext';
 
 interface ChatConfig {
-  type: string;
+  type: ChatType;
   assistantId: string;
   vectorStoreId: string;
   userId?: string;
+  systemPrompt?: string;
 }
 
 interface ChatContextType {
-  config: ChatConfig;
-  setConfig: (config: Partial<ChatConfig>) => void;
+  config: {
+    type: ChatType;
+    assistantId?: string;
+    vectorStoreId?: string;
+    userId?: string;
+  } | null;
+  setConfig: (config: ChatContextType['config']) => void;
   messages: Array<{ sender: string; text: string }>;
   setMessages: React.Dispatch<React.SetStateAction<Array<{ sender: string; text: string }>>>;
   currentThreadId: string | null;
@@ -20,6 +28,9 @@ interface ChatContextType {
   sendMessage: (message: string) => Promise<void>;
   isLoading: boolean;
   error: string | null;
+  setError: (error: string | null) => void;
+  loadChatHistory: (userId: string) => Promise<void>;
+  setIsLoading: (loading: boolean) => void;
 }
 
 const ChatContext = createContext<ChatContextType | null>(null);
@@ -30,75 +41,178 @@ export function ChatProvider({
     assistantId: ASSISTANT_IDS.GENERAL,
     vectorStoreId: VECTOR_STORE_IDS.GENERAL,
     type: 'general'
-  }
+  },
+  user
 }: {
   children: React.ReactNode;
   initialConfig?: ChatConfig;
+  user?: any;
 }) {
-  const [config, setConfigState] = useState<ChatConfig>(initialConfig);
+  const { user: authUser } = useAuth();  // 获取认证用户
+  const [config, setConfigState] = useState<ChatContextType['config']>(initialConfig || null);
   const [messages, setMessages] = useState<Array<{ sender: string; text: string }>>([]);
   const [currentThreadId, setCurrentThreadId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const setConfig = useCallback((newConfig: Partial<ChatConfig>) => {
-    setConfigState(prev => ({
-      ...prev,
-      ...newConfig
-    }));
+  const setConfig = useCallback((newConfig: ChatContextType['config']) => {
+    setConfigState(newConfig);
   }, []);
+
+  useEffect(() => {
+    if (!config || config.type !== initialConfig?.type) {
+      console.log('[DEBUG] ChatProvider 初始化配置:', {
+        user,
+        initialConfig,
+        type: initialConfig?.type
+      });
+      
+      setConfig({
+        ...config,
+        type: initialConfig?.type,
+        assistantId: ASSISTANT_IDS[initialConfig?.type.toUpperCase() as keyof typeof ASSISTANT_IDS],
+        vectorStoreId: VECTOR_STORE_IDS[initialConfig?.type.toUpperCase() as keyof typeof VECTOR_STORE_IDS],
+        userId: user?.user_id || authUser?.user_id
+      });
+    }
+  }, [initialConfig?.type, user, authUser]);
 
   useEffect(() => {
     setMessages([]);
     setCurrentThreadId(null);
     setError(null);
-  }, [config.assistantId, config.vectorStoreId, config.type]);
+  }, [config?.assistantId, config?.vectorStoreId, config?.type]);
 
   const sendMessage = useCallback(async (message: string) => {
-    if (!message.trim() || isLoading) return;
-    
     setIsLoading(true);
     setError(null);
+    
+    console.log('[DEBUG] ChatContext 发送消息:', {
+        message,
+        config,
+        currentThreadId,
+        configDetails: {
+            type: config?.type,
+            assistantId: config?.assistantId,
+            vectorStoreId: config?.vectorStoreId,
+            userId: config?.userId
+        }
+    });
 
     try {
-      const response = await fetch('/api/chat', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          message,
-          threadId: currentThreadId,
-          assistantId: config.assistantId,
-          vectorStoreId: config.vectorStoreId,
-          type: config.type
-        })
-      });
+        const response = await fetch('/api/chat', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                message,
+                threadId: currentThreadId,
+                userId: config?.userId,
+                config: {
+                    type: config?.type,
+                    assistantId: config?.assistantId,
+                    vectorStoreId: config?.vectorStoreId
+                }
+            })
+        });
 
-      if (!response.ok) {
-        throw new Error('发送消息失败');
-      }
+        if (!response.ok) {
+            const errorData = await response.json();
+            console.error('[ERROR] 发送消息失败:', {
+                status: response.status,
+                error: errorData
+            });
+            throw new Error(errorData.error || '发送失败');
+        }
 
-      const data = await response.json();
-      
-      setMessages(prev => [
-        ...prev,
-        { sender: 'user', text: message },
-        { sender: 'bot', text: data.reply }
-      ]);
-      
-      if (data.threadId && !currentThreadId) {
-        setCurrentThreadId(data.threadId);
-      }
+        const data = await response.json();
+        console.log('[DEBUG] 收到响应:', {
+            success: data.success,
+            threadId: data.threadId,
+            replyLength: data.reply?.length,
+            config: data.config,
+            debug: data.debug
+        });
 
-    } catch (err) {
-      setError(err instanceof Error ? err.message : '发送失败');
+        if (data.success) {
+            setMessages(prev => [
+                ...prev,
+                { sender: 'user', text: message },
+                { sender: 'bot', text: data.reply }
+            ]);
+            setCurrentThreadId(data.threadId);
+        }
+
+        return data;
+    } catch (error) {
+        console.error('[ERROR] 发送消息失败:', error);
+        setError(error instanceof Error ? error.message : '发送消息失败');
+        throw error;
     } finally {
-      setIsLoading(false);
+        setIsLoading(false);
     }
-  }, [currentThreadId, config, isLoading]);
+}, [currentThreadId, config]);
 
-  const value = {
+  const loadChatHistory = useCallback(async (userId: string) => {
+    console.log('[DEBUG] ChatContext开始加载历史:', {
+        currentThreadId,
+        userId,
+        config,
+        timestamp: new Date().toISOString()
+    });
+    
+    try {
+        const response = await fetch(`/api/messages?threadId=${currentThreadId}&userId=${userId}`, {
+            credentials: 'include'
+        });
+        
+        console.log('[DEBUG] 历史记录响应状态:', {
+            status: response.status,
+            ok: response.ok,
+            headers: Object.fromEntries(response.headers)
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json();
+            console.error('[ERROR] 加载历史消息失败:', {
+                status: response.status,
+                error: errorData
+            });
+            throw new Error(errorData.error || '加载失败');
+        }
+
+        const data = await response.json();
+        console.log('[DEBUG] 获取到的历史数据:', {
+            success: data.success,
+            messageCount: data.messages?.length,
+            firstMessage: data.messages?.[0]
+        });
+
+        if (data.success && Array.isArray(data.messages)) {
+            const formattedMessages = data.messages.map((msg: any) => ({
+                sender: msg.role === 'user' ? 'user' : 'bot',
+                text: msg.content
+            }));
+            
+            setMessages(formattedMessages);
+            console.log('[DEBUG] 历史消息加载完成:', {
+                messageCount: formattedMessages.length,
+                threadId: currentThreadId,
+                firstMessagePreview: formattedMessages[0]
+            });
+        }
+    } catch (error) {
+        console.error('[ERROR] 加载历史消息失败:', {
+            error,
+            threadId: currentThreadId,
+            errorMessage: error instanceof Error ? error.message : '未知错误'
+        });
+        setError(error instanceof Error ? error.message : '加载历史消息失败');
+    }
+}, [currentThreadId, config]);
+
+  const value: ChatContextType = {
     config,
     setConfig,
     messages,
@@ -107,7 +221,10 @@ export function ChatProvider({
     setCurrentThreadId,
     sendMessage,
     isLoading,
-    error
+    error,
+    setError,
+    loadChatHistory,
+    setIsLoading
   };
 
   return <ChatContext.Provider value={value}>{children}</ChatContext.Provider>;
