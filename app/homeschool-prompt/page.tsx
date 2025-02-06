@@ -70,7 +70,10 @@ function HomeschoolPromptContent() {
         const data = await response.json();
         if (data.assistantId) {
           // 更新 Chat Context 中的 assistantId
-          setConfig({ assistantId: data.assistantId });
+          setConfig({ 
+            type: 'homeschool',
+            assistantId: data.assistantId 
+          });
         }
         setMessage('保存成功');
       } else {
