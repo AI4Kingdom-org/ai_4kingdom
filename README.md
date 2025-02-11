@@ -41,6 +41,11 @@
 6. **访问应用**
    打开浏览器访问 `http://localhost:3000`
 
+## 创建Assistant的流程
+
+1. **创建Assistant**
+   在 https://platform.openai.com/assistants 中创建新的 OpenAI Assistant。
+
 ## 创建新页面的流程
 
 1. **定义页面类型**
@@ -80,24 +85,77 @@
    ```
 
 3. **创建新的聊天页面**
-   创建文件 `app/new-chat/page.tsx`：  // 将 new-chat 替换为你的路由名称
+   
+   a. 创建页面组件文件 `app/new-chat/page.tsx`：
    ```typescript
    'use client';
 
    import WithChat from '../components/layouts/WithChat';
    import Chat from '../components/Chat/Chat';
    import { ASSISTANT_IDS, VECTOR_STORE_IDS } from '../config/constants';
+   import styles from './page.module.css';  // 导入样式
 
-   export default function NewChatPage() {  // 将函数名改为符合你的页面名称
+   export default function NewChatPage() {
      return (
-       <WithChat chatType="new-chat">  // 确保这里的 chatType 与 CHAT_TYPES 中定义的一致
-         <Chat
-           type="new-chat"  // 确保这里的 type 与 CHAT_TYPES 中定义的一致
-           assistantId={ASSISTANT_IDS.NEW_CHAT}  // 确保这里的键名与 ASSISTANT_IDS 中定义的一致
-           vectorStoreId={VECTOR_STORE_IDS.NEW_CHAT}  // 确保这里的键名与 VECTOR_STORE_IDS 中定义的一致
-         />
-       </WithChat>
+       <div className={styles.container}>
+         <div className={styles.content}>
+           <div className={styles.chatContainer}>
+             <WithChat chatType="new-chat">
+               <Chat
+                 type="new-chat"
+                 assistantId={ASSISTANT_IDS.NEW_CHAT}
+                 vectorStoreId={VECTOR_STORE_IDS.NEW_CHAT}
+               />
+             </WithChat>
+           </div>
+         </div>
+       </div>
      );
+   }
+   ```
+
+   b. 创建样式文件 `app/new-chat/page.module.css`：
+   ```css
+   .container {
+     display: flex;
+     flex-direction: column;
+     height: 100vh;
+     width: 100%;
+     padding: 1rem;
+     background-color: #ffffff;
+   }
+
+   .content {
+     display: flex;
+     flex-direction: column;
+     gap: 20px;
+     flex: 1;
+     min-height: 0;
+   }
+
+   .chatContainer {
+     flex: 1;
+     display: flex;
+     min-height: 400px;
+     background: white;
+     border-radius: 12px;
+     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+     overflow: hidden;
+   }
+
+   .chatContainer > div {
+     flex: 1;
+     display: flex;
+     width: 100%;
+     height: 100%;
+   }
+
+   /* 适配移动端 */
+   @media (max-width: 768px) {
+     .container {
+       height: calc(100vh - 56px);
+       padding: 0.5rem;
+     }
    }
    ```
 
@@ -111,7 +169,10 @@
    };
    ```
 
-5. **添加 WordPress Shortcode**
+5. **连接到WordPress服务器**
+   credentials能在aws lightsail中找到
+
+6. **添加 WordPress Shortcode**
    在服务器的 `/bitnami/wordpress/wp-content/themes/hello-biz/function.php` 中添加：
    ```php
    // 注册新的 iframe shortcode
@@ -141,7 +202,7 @@
    > - 将 `/new-chat` 替换为你的新页面路径
    > - 将 `new-chat-module` 替换为你的模块名称
 
-6. **使用 Shortcode**
+7. **使用 Shortcode**
    在 WordPress 页面中使用：
    ```
    [new_chat_iframe]
