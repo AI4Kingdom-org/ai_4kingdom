@@ -63,3 +63,11 @@
   background-color: #f8d7da;
   color: #721c24;
 } 
+
+/* 适配移动端 */
+@media (max-width: 768px) {
+  .container {
+    height: calc(100vh - 56px);
+    padding: 0.5rem;
+  }
+}

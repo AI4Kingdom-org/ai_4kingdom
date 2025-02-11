@@ -216,3 +216,11 @@
   margin: 0.3em 0;
   padding-left: 1.5em;
 } 
+
+/* 适配移动端 */
+@media (max-width: 768px) {
+  .container {
+    height: calc(100vh - 56px);
+    padding: 0.5rem;
+  }
+}
