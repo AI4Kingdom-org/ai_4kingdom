@@ -6,9 +6,10 @@ import { CHAT_CONFIGS, ChatType } from '../config/chatTypes';
 
 interface Conversation {
   threadId: string;
+  title?: string;
   createdAt: string;
-  UserId: string;
   type: string;
+  UserId: string;
 }
 
 interface ConversationListProps {
@@ -73,10 +74,16 @@ export default function ConversationList({
 
         const formattedConversations = validConversations.map((conv: any) => ({
             threadId: conv.threadId,
-            createdAt: conv.createdAt || conv.Timestamp,
+            createdAt: conv.Timestamp || conv.timestamp || conv.createdAt || new Date().toISOString(),
             UserId: conv.UserId,
-            type: conv.Type || conv.type
+            type: conv.Type || conv.type,
+            title: conv.title || '新对话'
         }));
+
+        console.log('[DEBUG] 格式化会话数据:', {
+            原始数据: validConversations[0],
+            格式化后: formattedConversations[0]
+        });
 
         setConversations(formattedConversations);
         console.log('[DEBUG] 最终处理后的对话列表:', {
@@ -146,6 +153,50 @@ export default function ConversationList({
     onSelectThread(threadId);
   };
 
+  // 添加日期格式化函数
+  const formatDate = (dateString: string) => {
+    console.log('[DEBUG] 格式化日期:', {
+      输入: dateString,
+      类型: typeof dateString
+    });
+
+    try {
+      const date = new Date(dateString);
+      console.log('[DEBUG] 日期解析结果:', {
+        输入: dateString,
+        解析结果: date,
+        时间戳: date.getTime(),
+        ISO字符串: date.toISOString()
+      });
+
+      // 如果是今天的日期，只显示时间
+      const today = new Date();
+      const isToday = date.toDateString() === today.toDateString();
+      
+      if (isToday) {
+        return date.toLocaleTimeString('zh-CN', {
+          hour: '2-digit',
+          minute: '2-digit'
+        });
+      }
+
+      // 其他日期显示完整日期
+      return date.toLocaleDateString('zh-CN', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    } catch (error) {
+      console.error('[ERROR] 日期格式化失败:', {
+        输入: dateString,
+        错误: error instanceof Error ? error.message : String(error)
+      });
+      return '时间未知';
+    }
+  };
+
   if (loading) return <div className={styles.loading}>加载中...</div>;
   
   if (error) {
@@ -197,22 +248,12 @@ export default function ConversationList({
               onClick={() => handleThreadSelect(conv.threadId)}
             >
               <div className={styles.itemContent}>
-                <svg 
-                  className={styles.chatIcon}
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"
-                  />
-                </svg>
-                <span className={styles.title}>
-                  对话 {new Date(conv.createdAt).toLocaleDateString()}
-                </span>
+                <div className={styles.itemTitle} style={{ whiteSpace: 'nowrap' }}>
+                  {conv.title || '新对话'}
+                </div>
+                <div className={styles.itemTime}>
+                  {formatDate(conv.createdAt)}
+                </div>
               </div>
               <button
                 className={styles.deleteButton}

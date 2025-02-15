@@ -22,57 +22,115 @@ export async function GET(request: Request) {
   try {
     const docClient = await createDynamoDBClient();
     
-    console.log('[DEBUG] 开始查询用户线程:', {
-      userId,
-      type,
-      tableName: process.env.NEXT_PUBLIC_DYNAMODB_TABLE_NAME
-    });
-
-    const queryParams = {
-      TableName: process.env.NEXT_PUBLIC_DYNAMODB_TABLE_NAME!,
-      KeyConditionExpression: 'UserId = :userId',
-      FilterExpression: '#type = :type',
+    // 使用 Query 而不是 Scan 来提高效率
+    const command = new QueryCommand({
+      TableName: "ChatHistory",
+      KeyConditionExpression: "UserId = :userId",
+      FilterExpression: "#type = :type",
       ExpressionAttributeNames: {
-        '#type': 'Type'
+        "#type": "Type"
       },
       ExpressionAttributeValues: {
-        ':userId': String(userId),
-        ':type': type
+        ":userId": userId,
+        ":type": type
       }
-    };
-
-    console.log('[DEBUG] DynamoDB查询参数:', queryParams);
-    
-    const response = await docClient.send(new QueryCommand(queryParams));
-    
-    console.log('[DEBUG] DynamoDB响应详情:', {
-      itemCount: response.Items?.length,
-      scannedCount: response.ScannedCount,
-      lastEvaluatedKey: response.LastEvaluatedKey,
-      items: response.Items,
-      consumedCapacity: response.ConsumedCapacity
     });
 
-    const conversations = response.Items?.map(item => ({
-      threadId: item.threadId,
-      createdAt: item.Timestamp,
-      UserId: item.UserId,
-      Type: item.Type
-    })) || [];
+    const response = await docClient.send(command);
+    
+    console.log('[DEBUG] DynamoDB原始响应:', {
+      Items: response.Items,
+      首条记录: response.Items?.[0]
+    });
 
-    return NextResponse.json(conversations);
+    // 确保返回的数据格式正确，并处理时间戳
+    const threads = (response.Items || []).map(item => {
+      console.log('[DEBUG] 处理单条记录:', {
+        原始数据: item,
+        原始时间戳: item.Timestamp
+      });
+
+      // 确保时间戳是有效的ISO格式
+      let timestamp = item.Timestamp;
+      let formattedTimestamp;
+
+      try {
+        if (!timestamp) {
+          console.warn('[WARN] 时间戳为空，使用当前时间');
+          formattedTimestamp = new Date().toISOString();
+        } else if (typeof timestamp === 'number') {
+          console.log('[DEBUG] 数字类型时间戳，转换为ISO');
+          formattedTimestamp = new Date(timestamp).toISOString();
+        } else if (typeof timestamp === 'string') {
+          if (timestamp.includes('T')) {
+            console.log('[DEBUG] 已是ISO格式时间戳');
+            formattedTimestamp = timestamp;
+          } else {
+            console.log('[DEBUG] 非ISO格式字符串时间戳，尝试转换');
+            formattedTimestamp = new Date(timestamp).toISOString();
+          }
+        } else {
+          console.warn('[WARN] 未知时间戳格式，使用当前时间');
+          formattedTimestamp = new Date().toISOString();
+        }
+
+        console.log('[DEBUG] 时间戳处理结果:', {
+          输入: timestamp,
+          输出: formattedTimestamp,
+          类型: typeof timestamp
+        });
+
+      } catch (e) {
+        console.error('[ERROR] 时间戳处理失败:', {
+          输入: timestamp,
+          错误: e instanceof Error ? e.message : String(e)
+        });
+        formattedTimestamp = new Date().toISOString();
+      }
+
+      const thread = {
+        id: item.threadId,
+        userId: item.UserId,
+        type: item.Type,
+        timestamp: formattedTimestamp,
+        threadId: item.threadId,
+        title: item.title || '新对话',
+        lastUpdated: formattedTimestamp
+      };
+
+      console.log('[DEBUG] 格式化后的记录:', thread);
+
+      return thread;
+    });
+    
+    // 按时间戳降序排序
+    threads.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+    
+    console.log('[DEBUG] 最终返回数据:', {
+      总数: threads.length,
+      示例: threads[0],
+      所有时间戳: threads.map(t => t.timestamp)
+    });
+
+    return NextResponse.json(threads);
 
   } catch (error) {
     console.error('[ERROR] 获取线程列表失败:', {
       error,
       message: error instanceof Error ? error.message : '未知错误',
-      stack: error instanceof Error ? error.stack : undefined
+      stack: error instanceof Error ? error.stack : undefined,
+      type: error instanceof Error ? error.name : typeof error
     });
     
     return NextResponse.json(
       { 
         error: '获取线程列表失败',
-        details: error instanceof Error ? error.message : '未知错误'
+        details: error instanceof Error ? error.message : '未知错误',
+        env: {
+          hasRegion: !!process.env.NEXT_PUBLIC_AWS_REGION,
+          hasIdentityPool: !!process.env.NEXT_PUBLIC_IDENTITY_POOL_ID,
+          hasUserPool: !!process.env.NEXT_PUBLIC_USER_POOL_ID
+        }
       },
       { status: 500 }
     );
