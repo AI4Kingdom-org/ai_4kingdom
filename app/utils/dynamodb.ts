@@ -3,31 +3,31 @@ import { DynamoDBDocumentClient, PutCommand, ScanCommand } from "@aws-sdk/lib-dy
 import { fromCognitoIdentityPool } from "@aws-sdk/credential-providers";
 
 // 配置常量
-const CONFIG = {
+export const getDynamoDBConfig = () => ({
   region: process.env.NEXT_PUBLIC_REGION || 'us-east-2',
   identityPoolId: process.env.NEXT_PUBLIC_IDENTITY_POOL_ID!,
+  credentials: {
+    accessKeyId: process.env.NEXT_PUBLIC_ACCESS_KEY_ID!,
+    secretAccessKey: process.env.NEXT_PUBLIC_SECRET_ACCESS_KEY!
+  },
   tables: {
     sundayGuide: process.env.NEXT_PUBLIC_SUNDAY_GUIDE_TABLE || 'SundayGuide',
     chatHistory: process.env.NEXT_PUBLIC_DYNAMODB_TABLE_NAME || 'ChatHistory'
   }
-};
+});
 
 export async function createDynamoDBClient() {
   try {
-    const credentials = {
-      accessKeyId: process.env.NEXT_PUBLIC_ACCESS_KEY_ID!,
-      secretAccessKey: process.env.NEXT_PUBLIC_SECRET_ACCESS_KEY!
-    };
-
+    const config = getDynamoDBConfig();
     console.log('[DEBUG] DynamoDB初始化配置:', {
-      region: process.env.NEXT_PUBLIC_REGION,
-      hasAccessKey: !!credentials.accessKeyId,
-      hasSecretKey: !!credentials.secretAccessKey
+      region: config.region,
+      hasAccessKey: !!config.credentials.accessKeyId,
+      hasSecretKey: !!config.credentials.secretAccessKey
     });
 
     const client = new DynamoDBClient({
-      region: process.env.NEXT_PUBLIC_REGION || 'us-east-2',
-      credentials: credentials
+      region: config.region,
+      credentials: config.credentials
     });
 
     return DynamoDBDocumentClient.from(client, {
