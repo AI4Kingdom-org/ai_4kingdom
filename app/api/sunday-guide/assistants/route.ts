@@ -4,6 +4,7 @@ import { ScanCommand } from "@aws-sdk/lib-dynamodb";
 import OpenAI from 'openai';
 
 const openai = new OpenAI();
+const SUNDAY_GUIDE_TABLE = 'SundayGuide';  // 硬编码表名
 
 export async function GET(request: Request) {
   try {
@@ -13,7 +14,8 @@ export async function GET(request: Request) {
     console.log('[DEBUG] GET 请求开始:', {
       mode,
       环境: process.env.NODE_ENV,
-      region: process.env.NEXT_PUBLIC_AWS_REGION,
+      region: process.env.NEXT_PUBLIC_REGION,
+      tableName: SUNDAY_GUIDE_TABLE,
       hasIdentityPool: !!process.env.NEXT_PUBLIC_IDENTITY_POOL_ID,
       hasUserPool: !!process.env.NEXT_PUBLIC_USER_POOL_ID
     });
@@ -23,7 +25,7 @@ export async function GET(request: Request) {
 
     // 使用 Scan 操作，只过滤 status
     const command = new ScanCommand({
-      TableName: 'SundayGuide',
+      TableName: SUNDAY_GUIDE_TABLE,  // 使用硬编码的表名
       ...(mode === 'active' ? {
         FilterExpression: '#status = :status',
         ExpressionAttributeNames: {
@@ -48,8 +50,15 @@ export async function GET(request: Request) {
       hasItems: !!response.Items
     });
 
+    if (!response.Items) {
+      return NextResponse.json({ 
+        error: '未找到助手数据',
+        tableName: SUNDAY_GUIDE_TABLE 
+      }, { status: 404 });
+    }
+
     // 按时间戳排序
-    const sortedItems = (response.Items || []).sort((a, b) => 
+    const sortedItems = response.Items.sort((a, b) => 
       b.Timestamp.localeCompare(a.Timestamp)
     );
 
@@ -76,22 +85,15 @@ export async function GET(request: Request) {
   } catch (error) {
     console.error('[ERROR] 获取助手列表失败:', {
       error,
-      message: error instanceof Error ? error.message : '未知错误',
-      stack: error instanceof Error ? error.stack : undefined,
-      type: error instanceof Error ? error.name : typeof error
+      tableName: SUNDAY_GUIDE_TABLE,
+      message: error instanceof Error ? error.message : '未知错误'
     });
     
     return NextResponse.json(
       { 
-        error: '获取助手列表失败', 
+        error: '获取助手列表失败',
         details: error instanceof Error ? error.message : '未知错误',
-        type: error instanceof Error ? error.name : typeof error,
-        env: {
-          hasRegion: !!process.env.NEXT_PUBLIC_AWS_REGION,
-          hasIdentityPool: !!process.env.NEXT_PUBLIC_IDENTITY_POOL_ID,
-          hasUserPool: !!process.env.NEXT_PUBLIC_USER_POOL_ID,
-          environment: process.env.NODE_ENV
-        }
+        tableName: SUNDAY_GUIDE_TABLE
       },
       { status: 500 }
     );
