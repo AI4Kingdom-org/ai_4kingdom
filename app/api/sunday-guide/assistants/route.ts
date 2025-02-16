@@ -4,7 +4,13 @@ import { ScanCommand } from "@aws-sdk/lib-dynamodb";
 import OpenAI from 'openai';
 
 const openai = new OpenAI();
-const SUNDAY_GUIDE_TABLE = process.env.SUNDAY_GUIDE_TABLE_NAME || 'SundayGuide'; 
+const SUNDAY_GUIDE_TABLE = process.env.NEXT_PUBLIC_SUNDAY_GUIDE_TABLE || 'SundayGuide';
+const CHAT_HISTORY_TABLE = process.env.NEXT_PUBLIC_DYNAMODB_TABLE_NAME || 'ChatHistory';
+
+console.log('[DEBUG] 表名配置:', {
+  sundayGuideTable: SUNDAY_GUIDE_TABLE,
+  chatHistoryTable: CHAT_HISTORY_TABLE
+});
 
 export async function GET(request: Request) {
   try {
@@ -31,7 +37,7 @@ export async function GET(request: Request) {
 
     // 使用 Scan 操作，只过滤 status
     const command = new ScanCommand({
-      TableName: SUNDAY_GUIDE_TABLE,  // 使用环境变量配置的表名
+      TableName: SUNDAY_GUIDE_TABLE,
       ...(mode === 'active' ? {
         FilterExpression: '#status = :status',
         ExpressionAttributeNames: {
