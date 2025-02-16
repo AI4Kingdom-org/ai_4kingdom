@@ -2,24 +2,57 @@ import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocumentClient, PutCommand } from "@aws-sdk/lib-dynamodb";
 
 export async function getDynamoDBConfig() {
-  if (process.env.NODE_ENV === 'development') {
-    return {
-      region: process.env.NEXT_PUBLIC_REGION || "us-east-2",
-      credentials: {
-        accessKeyId: process.env.NEXT_PUBLIC_AWS_ACCESS_KEY!,
-        secretAccessKey: process.env.NEXT_PUBLIC_AWS_SECRET_KEY!
-      }
-    };
-  }
-
-  const { fromCognitoIdentityPool } = await import("@aws-sdk/credential-providers");
-  return {
-    region: process.env.NEXT_PUBLIC_REGION || "us-east-2",
-    credentials: await fromCognitoIdentityPool({
-      clientConfig: { region: process.env.NEXT_PUBLIC_REGION || "us-east-2" },
-      identityPoolId: process.env.NEXT_PUBLIC_IDENTITY_POOL_ID!
-    })()
+  const envVars = {
+    accessKeyId: process.env.NEXT_PUBLIC_ACCESS_KEY_ID,
+    secretKey: process.env.NEXT_PUBLIC_SECRET_ACCESS_KEY,
+    region: process.env.NEXT_PUBLIC_REGION,
+    identityPoolId: process.env.NEXT_PUBLIC_IDENTITY_POOL_ID,
+    env: process.env.NODE_ENV
   };
+  
+  console.log('[DEBUG] DynamoDB配置初始化:', {
+    ...envVars,
+    hasAccessKey: !!envVars.accessKeyId,
+    hasSecretKey: !!envVars.secretKey
+  });
+
+  try {
+    if (process.env.NODE_ENV === 'development') {
+      if (!envVars.accessKeyId || !envVars.secretKey) {
+        throw new Error('开发环境需要设置 ACCESS_KEY_ID 和 SECRET_ACCESS_KEY');
+      }
+      
+      const config = {
+        region: envVars.region || "us-east-2",
+        credentials: {
+          accessKeyId: envVars.accessKeyId,
+          secretAccessKey: envVars.secretKey
+        }
+      };
+      console.log('[DEBUG] 使用开发环境配置:', {
+        region: config.region,
+        hasCredentials: !!config.credentials
+      });
+      return config;
+    }
+
+    const { fromCognitoIdentityPool } = await import("@aws-sdk/credential-providers");
+    const config = {
+      region: envVars.region || "us-east-2",
+      credentials: fromCognitoIdentityPool({
+        clientConfig: { region: envVars.region || "us-east-2" },
+        identityPoolId: envVars.identityPoolId!
+      })
+    };
+    console.log('[DEBUG] 使用生产环境配置:', {
+      region: config.region,
+      identityPoolId: envVars.identityPoolId
+    });
+    return config;
+  } catch (error) {
+    console.error('[ERROR] DynamoDB配置失败:', error);
+    throw error;
+  }
 }
 
 // 添加创建 DynamoDB 客户端的函数
