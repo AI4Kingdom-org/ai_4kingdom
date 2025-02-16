@@ -1,71 +1,34 @@
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
-import { DynamoDBDocumentClient, PutCommand } from "@aws-sdk/lib-dynamodb";
+import { DynamoDBDocumentClient, PutCommand, ScanCommand } from "@aws-sdk/lib-dynamodb";
+import { fromCognitoIdentityPool } from "@aws-sdk/credential-providers";
 
-export async function getDynamoDBConfig() {
-  const envVars = {
-    accessKeyId: process.env.NEXT_PUBLIC_ACCESS_KEY_ID,
-    secretKey: process.env.NEXT_PUBLIC_SECRET_ACCESS_KEY,
-    region: process.env.NEXT_PUBLIC_REGION,
-    identityPoolId: process.env.NEXT_PUBLIC_IDENTITY_POOL_ID,
-    env: process.env.NODE_ENV
-  };
-  
-  console.log('[DEBUG] DynamoDB配置初始化:', {
-    ...envVars,
-    hasAccessKey: !!envVars.accessKeyId,
-    hasSecretKey: !!envVars.secretKey
-  });
-
-  try {
-    if (process.env.NODE_ENV === 'development') {
-      if (!envVars.accessKeyId || !envVars.secretKey) {
-        throw new Error('开发环境需要设置 ACCESS_KEY_ID 和 SECRET_ACCESS_KEY');
-      }
-      
-      const config = {
-        region: envVars.region || "us-east-2",
-        credentials: {
-          accessKeyId: envVars.accessKeyId,
-          secretAccessKey: envVars.secretKey
-        }
-      };
-      console.log('[DEBUG] 使用开发环境配置:', {
-        region: config.region,
-        hasCredentials: !!config.credentials
-      });
-      return config;
-    }
-
-    const { fromCognitoIdentityPool } = await import("@aws-sdk/credential-providers");
-    const config = {
-      region: envVars.region || "us-east-2",
-      credentials: fromCognitoIdentityPool({
-        clientConfig: { region: envVars.region || "us-east-2" },
-        identityPoolId: envVars.identityPoolId!
-      })
-    };
-    console.log('[DEBUG] 使用生产环境配置:', {
-      region: config.region,
-      identityPoolId: envVars.identityPoolId
-    });
-    return config;
-  } catch (error) {
-    console.error('[ERROR] DynamoDB配置失败:', error);
-    throw error;
+// 配置常量
+const CONFIG = {
+  region: process.env.NEXT_PUBLIC_REGION || 'us-east-2',
+  identityPoolId: process.env.NEXT_PUBLIC_IDENTITY_POOL_ID!,
+  tables: {
+    sundayGuide: process.env.NEXT_PUBLIC_SUNDAY_GUIDE_TABLE || 'SundayGuide',
+    chatHistory: process.env.NEXT_PUBLIC_DYNAMODB_TABLE_NAME || 'ChatHistory'
   }
-}
+};
 
-// 添加创建 DynamoDB 客户端的函数
 export async function createDynamoDBClient() {
   try {
-    const config = await getDynamoDBConfig();
-    console.log('[DYNAMODB CONFIG] 完整配置:', {
-      ...config,
-      sundayGuideTable: process.env.SUNDAY_GUIDE_TABLE_NAME,
-      mainTable: process.env.NEXT_PUBLIC_DYNAMODB_TABLE_NAME
+    const credentials = {
+      accessKeyId: process.env.NEXT_PUBLIC_ACCESS_KEY_ID!,
+      secretAccessKey: process.env.NEXT_PUBLIC_SECRET_ACCESS_KEY!
+    };
+
+    console.log('[DEBUG] DynamoDB初始化配置:', {
+      region: process.env.NEXT_PUBLIC_REGION,
+      hasAccessKey: !!credentials.accessKeyId,
+      hasSecretKey: !!credentials.secretAccessKey
     });
-    
-    const client = new DynamoDBClient(config);
+
+    const client = new DynamoDBClient({
+      region: process.env.NEXT_PUBLIC_REGION || 'us-east-2',
+      credentials: credentials
+    });
 
     return DynamoDBDocumentClient.from(client, {
       marshallOptions: {
@@ -73,7 +36,7 @@ export async function createDynamoDBClient() {
       },
     });
   } catch (error) {
-    console.error('[ERROR] 创建DynamoDB客户端失败:', error);
+    console.error('[ERROR] DynamoDB客户端创建失败:', error);
     throw error;
   }
 }
@@ -97,4 +60,13 @@ export async function updateUserActiveThread(userId: string, threadId: string, t
     console.error('[ERROR] 更新用户活动线程失败:', error);
     throw error;
   }
-} 
+}
+
+// 添加环境检查日志
+console.log('[DEBUG] 部署环境检查:', {
+  NODE_ENV: process.env.NODE_ENV,
+  REGION: process.env.NEXT_PUBLIC_REGION,
+  TABLE_NAME: process.env.NEXT_PUBLIC_DYNAMODB_TABLE_NAME,
+  hasAccessKey: !!process.env.NEXT_PUBLIC_ACCESS_KEY_ID,
+  hasSecretKey: !!process.env.NEXT_PUBLIC_SECRET_ACCESS_KEY
+});
