@@ -57,14 +57,25 @@ export async function getDynamoDBConfig() {
 
 // 添加创建 DynamoDB 客户端的函数
 export async function createDynamoDBClient() {
-  const config = await getDynamoDBConfig();
-  const client = new DynamoDBClient(config);
+  try {
+    const config = await getDynamoDBConfig();
+    console.log('[DYNAMODB CONFIG] 完整配置:', {
+      ...config,
+      sundayGuideTable: process.env.SUNDAY_GUIDE_TABLE_NAME,
+      mainTable: process.env.NEXT_PUBLIC_DYNAMODB_TABLE_NAME
+    });
+    
+    const client = new DynamoDBClient(config);
 
-  return DynamoDBDocumentClient.from(client, {
-    marshallOptions: {
-      removeUndefinedValues: true,
-    },
-  });
+    return DynamoDBDocumentClient.from(client, {
+      marshallOptions: {
+        removeUndefinedValues: true,
+      },
+    });
+  } catch (error) {
+    console.error('[ERROR] 创建DynamoDB客户端失败:', error);
+    throw error;
+  }
 }
 
 // 添加更新用户活动线程的函数

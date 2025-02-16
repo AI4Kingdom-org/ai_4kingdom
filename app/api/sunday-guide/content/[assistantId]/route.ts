@@ -2,11 +2,15 @@ import { NextResponse } from 'next/server';
 import { createDynamoDBClient } from '../../../../utils/dynamodb';
 import { ScanCommand } from "@aws-sdk/lib-dynamodb";
 
+const SUNDAY_GUIDE_TABLE = process.env.SUNDAY_GUIDE_TABLE_NAME || 'SundayGuide';
+
 export async function GET(
   request: Request,
   { params }: { params: { assistantId: string } }
 ) {
   try {
+    console.log('[DEBUG] 使用表名:', SUNDAY_GUIDE_TABLE);
+    
     const { assistantId } = params;
     const { searchParams } = new URL(request.url);
     const type = searchParams.get('type');  // 获取内容类型
@@ -14,7 +18,7 @@ export async function GET(
     const docClient = await createDynamoDBClient();
     
     const command = new ScanCommand({
-      TableName: 'SundayGuide',
+      TableName: SUNDAY_GUIDE_TABLE,
       FilterExpression: 'assistantId = :assistantId',
       ExpressionAttributeValues: {
         ':assistantId': assistantId

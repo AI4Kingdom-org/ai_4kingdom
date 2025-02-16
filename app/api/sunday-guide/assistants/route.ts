@@ -4,10 +4,16 @@ import { ScanCommand } from "@aws-sdk/lib-dynamodb";
 import OpenAI from 'openai';
 
 const openai = new OpenAI();
-const SUNDAY_GUIDE_TABLE = 'SundayGuide';  // 硬编码表名
+const SUNDAY_GUIDE_TABLE = process.env.SUNDAY_GUIDE_TABLE_NAME || 'SundayGuide'; 
 
 export async function GET(request: Request) {
   try {
+    console.log('[ENV CHECK] 环境变量:', {
+      sundayGuideTable: process.env.SUNDAY_GUIDE_TABLE_NAME,
+      nodeEnv: process.env.NODE_ENV,
+      region: process.env.NEXT_PUBLIC_AWS_REGION
+    });
+
     const { searchParams } = new URL(request.url);
     const mode = searchParams.get('mode'); // 'active' 或 undefined
     
@@ -25,7 +31,7 @@ export async function GET(request: Request) {
 
     // 使用 Scan 操作，只过滤 status
     const command = new ScanCommand({
-      TableName: SUNDAY_GUIDE_TABLE,  // 使用硬编码的表名
+      TableName: SUNDAY_GUIDE_TABLE,  // 使用环境变量配置的表名
       ...(mode === 'active' ? {
         FilterExpression: '#status = :status',
         ExpressionAttributeNames: {
