@@ -5,13 +5,6 @@ import { createDynamoDBClient } from '../../../utils/dynamodb';
 export async function POST(request: Request) {
   try {
     const { userId, type, assistantId, vectorStoreId } = await request.json();
-    
-    console.log('[DEBUG] 更新线程配置:', {
-      userId,
-      type,
-      assistantId,
-      vectorStoreId
-    });
 
     const docClient = DynamoDBDocumentClient.from(await createDynamoDBClient());
     

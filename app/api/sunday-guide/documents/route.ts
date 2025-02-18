@@ -92,7 +92,6 @@ export async function POST(request: Request) {
     });
 
     await docClient.send(command);
-    console.log('4. DynamoDB 更新成功');
 
     return NextResponse.json({
       success: true,

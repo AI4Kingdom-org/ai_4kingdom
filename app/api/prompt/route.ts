@@ -79,7 +79,6 @@ const docClient = DynamoDBDocumentClient.from(client);
 // 获取当前Prompt
 export async function GET(request: Request) {
   try {
-    console.log('[DEBUG] 开始获取 Prompt');
     const { searchParams } = new URL(request.url);
     const vectorStoreId = searchParams.get('vectorStoreId') || VECTOR_STORE_IDS.GENERAL;
     
@@ -88,13 +87,7 @@ export async function GET(request: Request) {
       Key: { id: vectorStoreId }
     });
 
-    console.log('[DEBUG] DynamoDB 命令:', {
-      TableName: command.input.TableName,
-      Key: command.input.Key
-    });
-
     const response = await docClient.send(command);
-    console.log('[DEBUG] DynamoDB 响应:', response);
     
     if (!response.Item) {
       console.log('[DEBUG] 未找到 Prompt，返回默认值');
@@ -133,7 +126,6 @@ export async function GET(request: Request) {
 // 更新Prompt
 export async function PUT(request: Request) {
   try {
-    console.log('[DEBUG] 开始更新 Prompt');
     const { content, vectorStoreId = VECTOR_STORE_IDS.GENERAL } = await request.json();
     
     // 1. 更新 OpenAI Assistant 的 instructions
@@ -144,7 +136,6 @@ export async function PUT(request: Request) {
           instructions: content
         }
       );
-      console.log('[DEBUG] OpenAI Assistant instructions 更新成功');
     } catch (error) {
       console.error('[ERROR] 更新 OpenAI Assistant 失败:', error);
       throw error;
@@ -160,13 +151,8 @@ export async function PUT(request: Request) {
       }
     });
 
-    console.log('[DEBUG] DynamoDB 更新命令:', {
-      TableName: command.input.TableName,
-      Item: command.input.Item
-    });
 
     await docClient.send(command);
-    console.log('[DEBUG] Prompt 更新成功');
     
     return NextResponse.json({ 
       message: 'Prompt更新成功',

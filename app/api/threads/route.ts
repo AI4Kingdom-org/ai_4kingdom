@@ -8,13 +8,6 @@ export async function GET(request: Request) {
   const userId = searchParams.get('userId');
   const type = searchParams.get('type') || 'general';
 
-  console.log('[DEBUG] API收到获取对话列表请求:', {
-    userId,
-    type,
-    url: request.url,
-    headers: Object.fromEntries(request.headers)
-  });
-
   if (!userId) {
     return NextResponse.json({ error: 'UserId is required' }, { status: 400 });
   }
@@ -37,18 +30,9 @@ export async function GET(request: Request) {
     });
 
     const response = await docClient.send(command);
-    
-    console.log('[DEBUG] DynamoDB原始响应:', {
-      Items: response.Items,
-      首条记录: response.Items?.[0]
-    });
 
     // 确保返回的数据格式正确，并处理时间戳
     const threads = (response.Items || []).map(item => {
-      console.log('[DEBUG] 处理单条记录:', {
-        原始数据: item,
-        原始时间戳: item.Timestamp
-      });
 
       // 确保时间戳是有效的ISO格式
       let timestamp = item.Timestamp;
@@ -56,29 +40,18 @@ export async function GET(request: Request) {
 
       try {
         if (!timestamp) {
-          console.warn('[WARN] 时间戳为空，使用当前时间');
           formattedTimestamp = new Date().toISOString();
         } else if (typeof timestamp === 'number') {
-          console.log('[DEBUG] 数字类型时间戳，转换为ISO');
           formattedTimestamp = new Date(timestamp).toISOString();
         } else if (typeof timestamp === 'string') {
           if (timestamp.includes('T')) {
-            console.log('[DEBUG] 已是ISO格式时间戳');
             formattedTimestamp = timestamp;
           } else {
-            console.log('[DEBUG] 非ISO格式字符串时间戳，尝试转换');
             formattedTimestamp = new Date(timestamp).toISOString();
           }
         } else {
-          console.warn('[WARN] 未知时间戳格式，使用当前时间');
           formattedTimestamp = new Date().toISOString();
         }
-
-        console.log('[DEBUG] 时间戳处理结果:', {
-          输入: timestamp,
-          输出: formattedTimestamp,
-          类型: typeof timestamp
-        });
 
       } catch (e) {
         console.error('[ERROR] 时间戳处理失败:', {
@@ -98,7 +71,6 @@ export async function GET(request: Request) {
         lastUpdated: formattedTimestamp
       };
 
-      console.log('[DEBUG] 格式化后的记录:', thread);
 
       return thread;
     });
@@ -106,21 +78,10 @@ export async function GET(request: Request) {
     // 按时间戳降序排序
     threads.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
     
-    console.log('[DEBUG] 最终返回数据:', {
-      总数: threads.length,
-      示例: threads[0],
-      所有时间戳: threads.map(t => t.timestamp)
-    });
 
     return NextResponse.json(threads);
 
   } catch (error) {
-    console.error('[ERROR] 获取线程列表失败:', {
-      error,
-      message: error instanceof Error ? error.message : '未知错误',
-      stack: error instanceof Error ? error.stack : undefined,
-      type: error instanceof Error ? error.name : typeof error
-    });
     
     return NextResponse.json(
       { 

@@ -4,7 +4,6 @@ import { useAuth } from '../contexts/AuthContext';
 import { useState, useEffect, useRef } from 'react';
 import styles from './Chat.module.css';
 import ConversationList from '../components/ConversationList';
-import { updateUserActiveThread } from '../utils/dynamodb';
 import OpenAI from 'openai';
 import { CHAT_TYPES, ChatType } from '../config/chatTypes';
 import { useChat } from '../contexts/ChatContext';
@@ -47,14 +46,12 @@ interface ChatProps {
 export default function Chat({ type, assistantId, vectorStoreId }: ChatProps) {
   const { user, loading, error: authError } = useAuth();
   const { 
-    setConfig,
     messages,
     currentThreadId,
     setCurrentThreadId,
     sendMessage,
     isLoading,
     error,
-    loadChatHistory,
     setMessages,
     setError,
     setIsLoading
@@ -65,65 +62,6 @@ export default function Chat({ type, assistantId, vectorStoreId }: ChatProps) {
   const [isFetchingHistory, setIsFetchingHistory] = useState(false);
   const [isCreatingThread, setIsCreatingThread] = useState(false);
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
-
-  const parseHistoryMessage = (messageStr: string) => {
-    try {
-      const parsed = JSON.parse(messageStr);
-      const messages = [];
-      
-      if (parsed.userMessage?.trim()) {
-        messages.push({ sender: 'user', text: parsed.userMessage.trim() });
-      }
-      if (parsed.botReply?.trim()) {
-        messages.push({ sender: 'bot', text: parsed.botReply.trim() });
-      }
-      
-      return messages;
-    } catch (e) {
-      console.error('[ERROR] 解析消息失败:', e);
-      return [];
-    }
-  };
-
-  const fetchHistory = async (threadId?: string) => {
-    if (!threadId) {
-      setMessages([]);
-      return;
-    }
-    
-    setIsFetchingHistory(true);
-    setError('');
-    
-    try {
-      console.log('[DEBUG] 开始获取历史记录:', { threadId });
-      
-      const messages = await openai.beta.threads.messages.list(threadId);
-      
-      const formattedMessages = messages.data
-        .map(message => ({
-          sender: message.role === 'user' ? 'user' : 'bot',
-          text: message.content
-            .filter(content => content.type === 'text')
-            .map(content => (content.type === 'text' ? content.text.value : ''))
-            .join('\n')
-        }))
-        .reverse();
-
-      console.log('[DEBUG] 获取到的消息数量:', formattedMessages.length);
-      setMessages(formattedMessages);
-      scrollToBottom();
-
-    } catch (err) {
-      console.error('[ERROR] 获取历史记录失败:', err);
-      setError(err instanceof Error ? err.message : '获取历史记录失败');
-      setMessages([]);
-    } finally {
-      setIsFetchingHistory(false);
-    }
-  };
 
   useEffect(() => {
     if (user && !currentThreadId) {

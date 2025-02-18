@@ -3,9 +3,6 @@ import { DynamoDBDocumentClient, PutCommand, QueryCommand, GetCommand } from "@a
 import { fromCognitoIdentityPool } from "@aws-sdk/credential-providers";
 import OpenAI from 'openai';
 import { NextResponse } from 'next/server';
-import { ASSISTANT_IDS, VECTOR_STORE_IDS } from '@/app/config/constants';
-import { saveTokenUsage } from '@/app/utils/tokenUsage';
-import { updateMonthlyTokenUsage } from '@/app/utils/monthlyTokenUsage';
 
 // 统一环境变量配置
 const CONFIG = {
@@ -26,6 +23,12 @@ console.log('[DEBUG] AWS 配置:', {
   isDev: CONFIG.isDev,
   hasAccessKey: !!process.env.NEXT_PUBLIC_ACCESS_KEY_ID,
   hasSecretKey: !!process.env.NEXT_PUBLIC_SECRET_ACCESS_KEY
+});
+
+console.log('[DEBUG] OpenAI配置:', {
+  hasApiKey: !!process.env.OPENAI_API_KEY,
+  apiKeyPrefix: process.env.OPENAI_API_KEY?.substring(0, 4),
+  environment: process.env.NODE_ENV
 });
 
 async function getDynamoDBConfig() {
@@ -233,18 +236,73 @@ export async function POST(request: Request) {
   try {
     const { message, threadId, userId, config } = await request.json();
     
-    console.log('[DEBUG] 收到聊天请求:', {
-      messageLength: message.length,
+    console.log('[DEBUG] 聊天请求参数:', {
+      messageLength: message?.length,
       threadId,
       userId,
-      config
+      config: {
+        type: config?.type,
+        assistantId: config?.assistantId,
+        vectorStoreId: config?.vectorStoreId
+      }
     });
 
-    if (!message || !userId || !config?.assistantId) {
+    // 验证助手前
+    console.log('[DEBUG] 开始验证助手:', {
+      assistantId: config?.assistantId,
+      apiKey: process.env.OPENAI_API_KEY?.substring(0, 4) + '...'
+    });
+
+    // 验证助手
+    try {
+      const assistant = await openai.beta.assistants.retrieve(config.assistantId);
+      console.log('[DEBUG] 助手验证成功:', {
+        id: assistant.id,
+        name: assistant.name,
+        model: assistant.model,
+        created_at: new Date(assistant.created_at * 1000).toISOString()
+      });
+    } catch (error) {
+      console.error('[ERROR] 助手验证失败:', {
+        error,
+        assistantId: config?.assistantId,
+        errorType: error instanceof Error ? error.name : typeof error,
+        errorMessage: error instanceof Error ? error.message : String(error),
+        statusCode: (error as any)?.status || 'unknown'
+      });
       return NextResponse.json({ 
-        error: '缺少必要参数' 
+        error: '助手ID无效',
+        details: {
+          message: error instanceof Error ? error.message : '未知错误',
+          assistantId: config?.assistantId,
+          type: error instanceof Error ? error.name : typeof error
+        }
       }, { status: 400 });
     }
+
+    // 创建或获取线程前
+    console.log('[DEBUG] 准备处理线程:', {
+      existingThreadId: threadId,
+      userId,
+      configType: config?.type
+    });
+
+    // 发送消息前
+    console.log('[DEBUG] 准备发送消息:', {
+      threadId,
+      messageLength: message?.length,
+      assistantId: config?.assistantId
+    });
+
+    // 运行助手前
+    console.log('[DEBUG] 准备运行助手:', {
+      threadId,
+      assistantId: config?.assistantId,
+      runConfig: {
+        model: config?.model,
+        tools: config?.tools
+      }
+    });
 
     let activeThreadId = threadId;
     let thread;
@@ -357,7 +415,12 @@ export async function POST(request: Request) {
     });
 
   } catch (error) {
-    console.error('[ERROR] Chat API error:', error);
+    console.error('[ERROR] 聊天API错误:', {
+      error,
+      type: error instanceof Error ? error.name : typeof error,
+      message: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined
+    });
     return NextResponse.json({ 
       error: error instanceof Error ? error.message : '未知错误',
       details: error instanceof Error ? error.stack : undefined

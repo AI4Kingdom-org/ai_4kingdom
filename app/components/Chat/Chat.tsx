@@ -34,12 +34,6 @@ export default function Chat({ type, assistantId, vectorStoreId, userId }: ChatP
   const [isCreatingThread, setIsCreatingThread] = useState(false);
 
   useEffect(() => {
-    console.log('[DEBUG] Chat组件认证状态:', {
-      authLoading,
-      userId: user?.user_id,
-      providedUserId: userId,
-      hasConfig: !!config
-    });
 
     if (!authLoading && (userId || user?.user_id)) {
       setConfig({
@@ -52,17 +46,7 @@ export default function Chat({ type, assistantId, vectorStoreId, userId }: ChatP
   }, [authLoading, user, userId, type, assistantId, vectorStoreId]);
 
   useEffect(() => {
-    console.log('[DEBUG] Chat组件加载状态:', {
-      currentThreadId,
-      userId: config?.userId,
-      isConfigReady: !!config
-    });
-    
     if (currentThreadId && config?.userId) {
-      console.log('[DEBUG] 准备加载聊天历史:', {
-        threadId: currentThreadId,
-        userId: config.userId
-      });
       loadChatHistory(config.userId as string);
     }
   }, [currentThreadId, loadChatHistory, config]);
@@ -72,7 +56,6 @@ export default function Chat({ type, assistantId, vectorStoreId, userId }: ChatP
     
     try {
       setIsCreatingThread(true);
-      console.log('[DEBUG] 创建新对话:', { type });
       
       const response = await fetch('/api/threads/create', {
         method: 'POST',
@@ -104,11 +87,6 @@ export default function Chat({ type, assistantId, vectorStoreId, userId }: ChatP
   };
 
   const handleSendMessage = async (message: string) => {
-    console.log('[DEBUG] 准备发送消息:', {
-      message,
-      currentConfig: config,
-      threadId: currentThreadId
-    });
 
     if (!config?.assistantId) {
       console.error('[ERROR] 缺少助手ID配置');

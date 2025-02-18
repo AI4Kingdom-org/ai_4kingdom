@@ -35,7 +35,6 @@ export default function AssistantManager({ onAssistantSelect }: AssistantManager
       
       // 确保返回的数据是数组
       const assistantList = Array.isArray(data.assistants) ? data.assistants : [];
-      console.log('[DEBUG] 获取到助手列表:', assistantList);
       
       setAssistants(assistantList);
     } catch (error) {
@@ -60,11 +59,9 @@ export default function AssistantManager({ onAssistantSelect }: AssistantManager
 
       // 如果已经有 vectorStoreId，直接返回成功
       if (assistant.vectorStoreId) {
-        console.log('[DEBUG] 使用现有的 vector store:', assistant.vectorStoreId);
         return true;
       }
 
-      console.error('[ERROR] 助手没有关联的 vector store');
       return false;
     } catch (error) {
       console.error('[ERROR] 选择助手失败:', error);
@@ -74,7 +71,6 @@ export default function AssistantManager({ onAssistantSelect }: AssistantManager
 
   const handleSelectChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const value = e.target.value;
-    console.log('[DEBUG] 选择助手:', value);
     setSelectedId(value);
   };
 

@@ -41,7 +41,6 @@ export async function DELETE(
     // 2. 删除 OpenAI thread
     try {
       await openai.beta.threads.del(threadId);
-      console.log('[DEBUG] OpenAI thread 删除成功:', threadId);
     } catch (error) {
       console.error('[ERROR] OpenAI thread 删除失败:', error);
     }
@@ -55,10 +54,7 @@ export async function DELETE(
           Timestamp: item.Timestamp  // Sort key
         }
       }));
-      console.log('[DEBUG] 删除记录:', { userId, timestamp: item.Timestamp });
     }
-
-    console.log('[DEBUG] 数据库记录删除成功:', { userId, threadId });
     return NextResponse.json({ success: true });
 
   } catch (error) {

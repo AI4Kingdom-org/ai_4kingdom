@@ -86,18 +86,6 @@ export function ChatProvider({
   const sendMessage = useCallback(async (message: string) => {
     setIsLoading(true);
     setError(null);
-    
-    console.log('[DEBUG] ChatContext 发送消息:', {
-        message,
-        config,
-        currentThreadId,
-        configDetails: {
-            type: config?.type,
-            assistantId: config?.assistantId,
-            vectorStoreId: config?.vectorStoreId,
-            userId: config?.userId
-        }
-    });
 
     try {
         const response = await fetch('/api/chat', {
@@ -127,13 +115,6 @@ export function ChatProvider({
         }
 
         const data = await response.json();
-        console.log('[DEBUG] 收到响应:', {
-            success: data.success,
-            threadId: data.threadId,
-            replyLength: data.reply?.length,
-            config: data.config,
-            debug: data.debug
-        });
 
         if (data.success) {
             setMessages(prev => [
@@ -155,22 +136,10 @@ export function ChatProvider({
 }, [currentThreadId, config]);
 
   const loadChatHistory = useCallback(async (userId: string) => {
-    console.log('[DEBUG] ChatContext开始加载历史:', {
-        currentThreadId,
-        userId,
-        config,
-        timestamp: new Date().toISOString()
-    });
-    
+
     try {
         const response = await fetch(`/api/messages?threadId=${currentThreadId}&userId=${userId}`, {
             credentials: 'include'
-        });
-        
-        console.log('[DEBUG] 历史记录响应状态:', {
-            status: response.status,
-            ok: response.ok,
-            headers: Object.fromEntries(response.headers)
         });
 
         if (!response.ok) {
@@ -183,11 +152,6 @@ export function ChatProvider({
         }
 
         const data = await response.json();
-        console.log('[DEBUG] 获取到的历史数据:', {
-            success: data.success,
-            messageCount: data.messages?.length,
-            firstMessage: data.messages?.[0]
-        });
 
         if (data.success && Array.isArray(data.messages)) {
             const formattedMessages = data.messages.map((msg: any) => ({
@@ -196,11 +160,6 @@ export function ChatProvider({
             }));
             
             setMessages(formattedMessages);
-            console.log('[DEBUG] 历史消息加载完成:', {
-                messageCount: formattedMessages.length,
-                threadId: currentThreadId,
-                firstMessagePreview: formattedMessages[0]
-            });
         }
     } catch (error) {
         console.error('[ERROR] 加载历史消息失败:', {

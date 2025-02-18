@@ -12,13 +12,6 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const threadId = searchParams.get('threadId');
     const userId = searchParams.get('userId');
-    
-    console.log('[DEBUG] 开始获取消息记录:', { 
-      threadId, 
-      userId,
-      headers: Object.fromEntries(request.headers),
-      url: request.url
-    });
 
     if (!threadId || !userId) {
       console.warn('[WARN] 缺少必要参数:', { threadId, userId });
@@ -40,44 +33,17 @@ export async function GET(request: Request) {
       });
       
       const response = await docClient.send(command);
-      console.log('[DEBUG] DynamoDB 线程配置:', {
-        userId,
-        threadId,
-        config: response.Items?.[0],
-        assistantId: response.Items?.[0]?.assistantId,
-        vectorStoreId: response.Items?.[0]?.vectorStoreId
-      });
     } catch (error) {
       console.error('[ERROR] 获取 DynamoDB 配置失败:', error);
     }
 
     // 从 OpenAI 获取线程信息
     try {
-      console.log('[DEBUG] 开始调用 OpenAI API:', {
-        threadId,
-        apiKey: !!process.env.OPENAI_API_KEY // 只记录是否存在
-      });
-
       const thread = await openai.beta.threads.retrieve(threadId);
-      console.log('[DEBUG] 获取到线程信息:', {
-        threadId: thread.id,
-        created: thread.created_at,
-        metadata: thread.metadata
-      });
 
       const messages = await openai.beta.threads.messages.list(threadId);
-      console.log('[DEBUG] OpenAI 原始消息:', {
-        hasData: !!messages.data,
-        count: messages.data?.length || 0,
-        firstMessage: messages.data?.[0] ? {
-          id: messages.data[0].id,
-          role: messages.data[0].role,
-          created: messages.data[0].created_at
-        } : null
-      });
 
       if (!messages.data || messages.data.length === 0) {
-        console.log('[INFO] 线程中没有消息');
         return NextResponse.json({
           success: true,
           messages: []
@@ -92,13 +58,6 @@ export async function GET(request: Request) {
             .filter(c => c.type === 'text')
             .map(c => (c.type === 'text' ? c.text.value : ''))
             .join('\n');
-            
-          console.log('[DEBUG] 消息格式化:', {
-            id: message.id,
-            role: message.role,
-            contentLength: content.length,
-            timestamp: message.created_at
-          });
 
           return {
             id: message.id,
@@ -107,12 +66,6 @@ export async function GET(request: Request) {
             createdAt: message.created_at
           };
         });
-
-      console.log('[DEBUG] 最终格式化消息:', {
-        count: formattedMessages.length,
-        threadId,
-        firstMessagePreview: formattedMessages[0]
-      });
 
       return NextResponse.json({
         success: true,

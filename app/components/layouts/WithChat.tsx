@@ -30,12 +30,6 @@ function ChatWrapper({ children, chatType = 'general' }: { children: ReactNode, 
     };
   }, [user, chatType]);
 
-  console.log('[DEBUG] WithChat配置:', {
-    chatType,
-    config,
-    userId: user?.user_id
-  });
-
   useEffect(() => {
     if (user) {
       setIsReady(true);

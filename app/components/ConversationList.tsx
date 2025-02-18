@@ -36,39 +36,18 @@ export default function ConversationList({
 
   // 获取对话列表
   const fetchConversations = async () => {
-    console.log('[DEBUG] 开始获取对话列表:', { 
-        userId, 
-        type,
-        currentThreadId  // 添加当前线程ID
-    });
     
     try {
         const response = await fetch(`/api/threads?userId=${userId}&type=${type}`, {
             credentials: 'include'
         });
         
-        console.log('[DEBUG] 对话列表响应状态:', {
-            status: response.status,
-            ok: response.ok,
-            headers: Object.fromEntries(response.headers)  // 添加响应头信息
-        });
-        
         const data = await response.json();
-        console.log('[DEBUG] 获取到的原始对话数据:', {
-            dataLength: data.length,
-            firstItem: data[0],
-            allData: data
-        });
 
         // 添加数据验证日志
         const validConversations = data.filter((conv: any) => {
             const convType = conv.Type || conv.type;
             const isValid = conv.threadId && convType === type;
-            console.log('[DEBUG] 验证对话项:', {
-                threadId: conv.threadId,
-                type: convType,
-                isValid
-            });
             return isValid;
         });
 
@@ -80,16 +59,7 @@ export default function ConversationList({
             title: conv.title || '新对话'
         }));
 
-        console.log('[DEBUG] 格式化会话数据:', {
-            原始数据: validConversations[0],
-            格式化后: formattedConversations[0]
-        });
-
         setConversations(formattedConversations);
-        console.log('[DEBUG] 最终处理后的对话列表:', {
-            count: formattedConversations.length,
-            conversations: formattedConversations
-        });
         
         setError(null);
     } catch (err) {
@@ -155,20 +125,8 @@ export default function ConversationList({
 
   // 添加日期格式化函数
   const formatDate = (dateString: string) => {
-    console.log('[DEBUG] 格式化日期:', {
-      输入: dateString,
-      类型: typeof dateString
-    });
-
     try {
       const date = new Date(dateString);
-      console.log('[DEBUG] 日期解析结果:', {
-        输入: dateString,
-        解析结果: date,
-        时间戳: date.getTime(),
-        ISO字符串: date.toISOString()
-      });
-
       // 如果是今天的日期，只显示时间
       const today = new Date();
       const isToday = date.toDateString() === today.toDateString();
