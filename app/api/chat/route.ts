@@ -27,7 +27,7 @@ console.log('[DEBUG] AWS 配置:', {
 
 console.log('[DEBUG] OpenAI配置:', {
   hasApiKey: !!process.env.OPENAI_API_KEY,
-  apiKeyPrefix: process.env.OPENAI_API_KEY?.substring(0, 4),
+  apiKeySuffix: process.env.OPENAI_API_KEY?.slice(-4),
   environment: process.env.NODE_ENV
 });
 
@@ -250,7 +250,7 @@ export async function POST(request: Request) {
     // 验证助手前
     console.log('[DEBUG] 开始验证助手:', {
       assistantId: config?.assistantId,
-      apiKey: process.env.OPENAI_API_KEY?.substring(0, 4) + '...'
+      apiKeySuffix: process.env.OPENAI_API_KEY?.slice(-4)
     });
 
     // 验证助手
