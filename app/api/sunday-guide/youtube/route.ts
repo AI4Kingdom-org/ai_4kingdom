@@ -137,45 +137,32 @@ interface TranscriptionResult {
 }
 
 async function transcribeYouTube(url: string): Promise<string> {
-  // 修改临时目录路径
-  const tempDir = '/tmp/youtube-temp';  // 使用根级临时目录
+  const tempDir = '/tmp/youtube-temp';
   const outputPath = join(tempDir, `${Date.now()}.mp3`);
   const scriptPath = join(tempDir, 'youtube_downloader.py');
   const jsonPath = join(tempDir, `${Date.now()}.json`);
   
   try {
-    // 添加错误处理和日志
-    console.log('[DEBUG] 创建临时目录:', tempDir);
-    try {
-      await mkdir(tempDir, { recursive: true });
-      console.log('[DEBUG] 临时目录创建成功');
-    } catch (error) {
-      console.error('[ERROR] 创建临时目录失败:', error);
-      throw new Error(`无法创建临时目录: ${error instanceof Error ? error.message : '未知错误'}`);
-    }
-
+    // 创建临时目录
+    await mkdir(tempDir, { recursive: true });
+    
     // 写入Python脚本
-    try {
-      await writeFile(scriptPath, PYTHON_SCRIPT);
-      console.log('[DEBUG] Python脚本写入成功:', scriptPath);
-    } catch (error) {
-      console.error('[ERROR] 写入Python脚本失败:', error);
-      throw new Error(`无法写入Python脚本: ${error instanceof Error ? error.message : '未知错误'}`);
-    }
-
+    await writeFile(scriptPath, PYTHON_SCRIPT);
+    
     // 下载并转录 YouTube 音频
     console.log('[DEBUG] 开始处理视频');
     const result = await new Promise<TranscriptionResult>((resolve, reject) => {
       const pyshell = new PythonShell(scriptPath, {
         args: [url, outputPath, jsonPath],
-        pythonPath: 'python',
+        pythonPath: '/usr/bin/python3',  // 使用完整的 Python 路径
         pythonOptions: ['-u'],
         mode: 'text',
         env: {
           ...process.env,
           PYTHONIOENCODING: 'utf-8',
           PYTHONUNBUFFERED: '1',
-          OPENAI_API_KEY: process.env.OPENAI_API_KEY
+          OPENAI_API_KEY: process.env.OPENAI_API_KEY,
+          PATH: process.env.PATH || '/usr/local/bin:/usr/bin:/bin'  // 添加默认PATH
         }
       });
 
@@ -184,11 +171,10 @@ async function transcribeYouTube(url: string): Promise<string> {
         console.log('[DEBUG] Python 脚本执行超时');
         pyshell.terminate();
         reject(new Error('Python 脚本执行超时'));
-      }, 900000);  // 15分钟
+      }, 900000);
 
-      // 添加更多日志
       pyshell.on('stderr', (stderr) => {
-        console.log('[Python stderr]:', Buffer.from(stderr).toString('utf8'));  // 正确处理编码
+        console.log('[Python stderr]:', Buffer.from(stderr).toString('utf8'));
       });
 
       pyshell.on('stdout', (stdout) => {
@@ -209,10 +195,8 @@ async function transcribeYouTube(url: string): Promise<string> {
         }
         
         try {
-          // 等待文件写入完成
-          await new Promise(resolve => setTimeout(resolve, 2000));  // 增加等待时间到 2 秒
+          await new Promise(resolve => setTimeout(resolve, 2000));
           
-          // 检查文件是否存在
           if (!existsSync(jsonPath)) {
             console.error('[ERROR] JSON 文件不存在:', jsonPath);
             reject(new Error('JSON 文件不存在'));
@@ -234,7 +218,6 @@ async function transcribeYouTube(url: string): Promise<string> {
           console.error('[ERROR] 处理 Python 输出失败:', e);
           reject(e);
         } finally {
-          // 只清理 Python 脚本文件
           await cleanupFiles([scriptPath]);
         }
       });
@@ -247,7 +230,6 @@ async function transcribeYouTube(url: string): Promise<string> {
     return result.transcription;
   } catch (error) {
     console.error('[ERROR] 处理失败:', error);
-    // 清理临时文件
     await cleanupFiles([jsonPath, outputPath, scriptPath]);
     throw error;
   }
@@ -421,8 +403,43 @@ const executePythonScript = (url: string, outputPath: string) => {
   });
 };
 
+// 添加一个函数来检查 Python 环境
+async function checkPythonEnvironment() {
+  return new Promise((resolve, reject) => {
+    const pythonProcess = spawn('/usr/bin/python3', ['--version']);
+    
+    pythonProcess.stdout.on('data', (data) => {
+      console.log('[DEBUG] Python 版本:', data.toString());
+    });
+
+    pythonProcess.stderr.on('data', (data) => {
+      console.error('[ERROR] Python 检查错误:', data.toString());
+    });
+
+    pythonProcess.on('close', (code) => {
+      if (code === 0) {
+        resolve(true);
+      } else {
+        reject(new Error(`Python 检查失败，退出代码: ${code}`));
+      }
+    });
+  });
+}
+
 export async function POST(request: Request) {
   try {
+    // 检查 Python 环境
+    try {
+      await checkPythonEnvironment();
+      console.log('[DEBUG] Python 环境检查通过');
+    } catch (error) {
+      console.error('[ERROR] Python 环境检查失败:', error);
+      return NextResponse.json({
+        error: 'Python 环境检查失败',
+        details: error instanceof Error ? error.message : '未知错误'
+      }, { status: 500 });
+    }
+
     const { url, userId } = await request.json();
     const timestamp = new Date().toISOString();
     
