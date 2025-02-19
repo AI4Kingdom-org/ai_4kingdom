@@ -6,6 +6,7 @@ import { PythonShell } from 'python-shell';
 import { join } from 'path';
 import { unlink, writeFile, mkdir, readFile } from 'fs/promises';
 import { existsSync } from 'fs';
+import { spawn } from 'child_process';
 
 
 const openai = new OpenAI({
@@ -362,6 +363,50 @@ async function waitForFileProcessing(vectorStoreId: string, maxAttempts = 10) {
 
   throw new Error('文件处理超时');
 }
+
+const executePythonScript = (url: string, outputPath: string) => {
+  return new Promise((resolve, reject) => {
+    // 使用python3而不是python
+    const pythonProcess = spawn('/usr/bin/python3', [
+      '-u',  // 使用无缓冲输出
+      join(process.cwd(), 'app/scripts/youtube_downloader.py'),
+      url,
+      outputPath
+    ]);
+
+    let stdout = '';
+    let stderr = '';
+
+    pythonProcess.stdout.on('data', (data) => {
+      stdout += data.toString();
+      console.log('[Python stdout]:', data.toString());
+    });
+
+    pythonProcess.stderr.on('data', (data) => {
+      stderr += data.toString();
+      console.error('[Python stderr]:', data.toString());
+    });
+
+    pythonProcess.on('error', (error) => {
+      console.error('[Python process error]:', error);
+      reject(error);
+    });
+
+    pythonProcess.on('close', (code) => {
+      if (code !== 0) {
+        console.error(`Python进程退出，代码: ${code}`);
+        reject(new Error(`Python进程失败: ${stderr}`));
+        return;
+      }
+      try {
+        const result = JSON.parse(stdout);
+        resolve(result);
+      } catch (e) {
+        reject(new Error(`解析Python输出失败: ${stdout}`));
+      }
+    });
+  });
+};
 
 export async function POST(request: Request) {
   try {

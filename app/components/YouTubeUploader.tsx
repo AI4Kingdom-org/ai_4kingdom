@@ -19,25 +19,36 @@ export default function YouTubeUploader({ onVectorStoreCreated }: YouTubeUploade
       setIsLoading(true);
       setError('');
       
-      // 直接上传 YouTube URL
+      console.log('[DEBUG] 开始处理YouTube链接:', { url });
+      
       const response = await fetch('/api/sunday-guide/youtube', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ url })  // 不再传入 vectorStoreId
+        body: JSON.stringify({ url })
       });
 
+      const data = await response.json();
+      
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || '上传失败');
+        console.error('[ERROR] 上传失败:', data);
+        throw new Error(data.error || `上传失败 (${response.status})`);
       }
 
-      const data = await response.json();
-      console.log('上传成功:', data);
+      console.log('[DEBUG] 上传成功:', data);
       
-      // 3. 绑定 Assistant 和 Vector Store
+      // 添加更详细的错误检查
+      if (!data.vectorStoreId) {
+        throw new Error('未收到有效的vectorStoreId');
+      }
+
       if (data.assistantId) {
+        console.log('[DEBUG] 开始绑定Vector Store:', {
+          assistantId: data.assistantId,
+          vectorStoreId: data.vectorStoreId
+        });
+        
         const bindResponse = await fetch(`/api/sunday-guide/assistants/${data.assistantId}/bind-vector-store`, {
           method: 'POST',
           headers: {
@@ -48,7 +59,10 @@ export default function YouTubeUploader({ onVectorStoreCreated }: YouTubeUploade
           })
         });
 
+        const bindData = await bindResponse.json();
+        
         if (!bindResponse.ok) {
+          console.error('[ERROR] 绑定失败:', bindData);
           throw new Error('绑定 Vector Store 失败');
         }
       }
@@ -68,8 +82,8 @@ export default function YouTubeUploader({ onVectorStoreCreated }: YouTubeUploade
         console.warn('警告: Vector Store 中没有找到文件');
       }
     } catch (error) {
-      console.error('处理失败:', error);
-      setError(error instanceof Error ? error.message : '上传失败');
+      console.error('[ERROR] 处理失败:', error);
+      setError(error instanceof Error ? error.message : '处理失败');
     } finally {
       setIsLoading(false);
     }
