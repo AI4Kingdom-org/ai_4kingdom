@@ -149,20 +149,32 @@ async function transcribeYouTube(url: string): Promise<string> {
     // 写入Python脚本
     await writeFile(scriptPath, PYTHON_SCRIPT);
     
+    // 设置 Python 环境
+    const pythonPath = process.env.LAMBDA_TASK_ROOT 
+      ? join(process.env.LAMBDA_TASK_ROOT, 'opt/python/python3')
+      : '/opt/python/python3';
+    
+    const pythonLibPath = process.env.LAMBDA_TASK_ROOT 
+      ? join(process.env.LAMBDA_TASK_ROOT, 'opt/python')
+      : '/opt/python';
+
+    console.log('[DEBUG] Python路径:', pythonPath);
+    console.log('[DEBUG] Python库路径:', pythonLibPath);
+
     // 下载并转录 YouTube 音频
-    console.log('[DEBUG] 开始处理视频');
     const result = await new Promise<TranscriptionResult>((resolve, reject) => {
       const pyshell = new PythonShell(scriptPath, {
         args: [url, outputPath, jsonPath],
-        pythonPath: '/usr/bin/python3',  // 使用完整的 Python 路径
+        pythonPath: pythonPath,
         pythonOptions: ['-u'],
         mode: 'text',
         env: {
           ...process.env,
+          PYTHONPATH: pythonLibPath,
           PYTHONIOENCODING: 'utf-8',
           PYTHONUNBUFFERED: '1',
           OPENAI_API_KEY: process.env.OPENAI_API_KEY,
-          PATH: process.env.PATH || '/usr/local/bin:/usr/bin:/bin'  // 添加默认PATH
+          PATH: `${pythonLibPath}/bin:${process.env.PATH || '/usr/local/bin:/usr/bin:/bin'}`
         }
       });
 
@@ -403,10 +415,14 @@ const executePythonScript = (url: string, outputPath: string) => {
   });
 };
 
-// 添加一个函数来检查 Python 环境
+// 修改环境检查函数
 async function checkPythonEnvironment() {
+  const pythonPath = process.env.LAMBDA_TASK_ROOT 
+    ? join(process.env.LAMBDA_TASK_ROOT, 'opt/python/python3')
+    : '/opt/python/python3';
+
   return new Promise((resolve, reject) => {
-    const pythonProcess = spawn('/usr/bin/python3', ['--version']);
+    const pythonProcess = spawn(pythonPath, ['--version']);
     
     pythonProcess.stdout.on('data', (data) => {
       console.log('[DEBUG] Python 版本:', data.toString());
