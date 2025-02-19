@@ -137,16 +137,32 @@ interface TranscriptionResult {
 }
 
 async function transcribeYouTube(url: string): Promise<string> {
-  const tempDir = join(process.cwd(), 'app', 'temp');
+  // 修改临时目录路径
+  const tempDir = '/tmp/youtube-temp';  // 使用根级临时目录
   const outputPath = join(tempDir, `${Date.now()}.mp3`);
   const scriptPath = join(tempDir, 'youtube_downloader.py');
   const jsonPath = join(tempDir, `${Date.now()}.json`);
   
   try {
-    await mkdir(tempDir, { recursive: true });
-    await writeFile(scriptPath, PYTHON_SCRIPT);
-    console.log('[DEBUG] Python 脚本已写入:', scriptPath);
-    
+    // 添加错误处理和日志
+    console.log('[DEBUG] 创建临时目录:', tempDir);
+    try {
+      await mkdir(tempDir, { recursive: true });
+      console.log('[DEBUG] 临时目录创建成功');
+    } catch (error) {
+      console.error('[ERROR] 创建临时目录失败:', error);
+      throw new Error(`无法创建临时目录: ${error instanceof Error ? error.message : '未知错误'}`);
+    }
+
+    // 写入Python脚本
+    try {
+      await writeFile(scriptPath, PYTHON_SCRIPT);
+      console.log('[DEBUG] Python脚本写入成功:', scriptPath);
+    } catch (error) {
+      console.error('[ERROR] 写入Python脚本失败:', error);
+      throw new Error(`无法写入Python脚本: ${error instanceof Error ? error.message : '未知错误'}`);
+    }
+
     // 下载并转录 YouTube 音频
     console.log('[DEBUG] 开始处理视频');
     const result = await new Promise<TranscriptionResult>((resolve, reject) => {
@@ -240,15 +256,12 @@ async function transcribeYouTube(url: string): Promise<string> {
 async function cleanupFiles(files: string[]) {
   for (const file of files) {
     try {
-      // 只清理 Python 脚本文件，因为其他文件由 Python 的 tempfile 模块管理
-      if (file.endsWith('youtube_downloader.py') && existsSync(file)) {
+      if (existsSync(file)) {
         await unlink(file);
+        console.log('[DEBUG] 成功删除文件:', file);
       }
     } catch (e) {
-      // 忽略文件不存在的错误
-      if ((e as NodeJS.ErrnoException).code !== 'ENOENT') {
-        console.error(`[ERROR] 清理文件失败 ${file}:`, e);
-      }
+      console.error(`[ERROR] 清理文件失败 ${file}:`, e);
     }
   }
 }
