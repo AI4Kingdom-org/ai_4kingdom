@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import styles from './ChatInput.module.css';
+import { useChat } from '../../contexts/ChatContext';
 
 interface ChatInputProps {
   onSend: (message: string) => Promise<void>;
@@ -10,6 +11,7 @@ interface ChatInputProps {
 
 export default function ChatInput({ onSend, isLoading }: ChatInputProps) {
   const [input, setInput] = useState('');
+  const { currentThreadId } = useChat();
 
   const handleSend = async () => {
     if (!input.trim() || isLoading) return;
@@ -29,14 +31,20 @@ export default function ChatInput({ onSend, isLoading }: ChatInputProps) {
             handleSend();
           }
         }}
-        placeholder={isLoading ? "发送中..." : "输入消息..."}
-        disabled={isLoading}
+        placeholder={
+          !currentThreadId 
+            ? "请点击左上角创建新对话" 
+            : isLoading 
+              ? "发送中..." 
+              : "输入消息..."
+        }
+        disabled={isLoading || !currentThreadId}
         rows={2}
       />
       <button
         className={styles.button}
         onClick={handleSend}
-        disabled={!input.trim() || isLoading}
+        disabled={!input.trim() || isLoading || !currentThreadId}
       >
         {isLoading ? "发送中..." : "发送"}
       </button>

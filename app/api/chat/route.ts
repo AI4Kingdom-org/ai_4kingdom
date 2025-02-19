@@ -14,23 +14,6 @@ const CONFIG = {
   isDev: process.env.NODE_ENV === 'development'
 };
 
-// 添加调试日志
-console.log('[DEBUG] AWS 配置:', {
-  region: CONFIG.region,
-  identityPoolId: CONFIG.identityPoolId,
-  userPoolId: CONFIG.userPoolId,
-  tableName: CONFIG.tableName,
-  isDev: CONFIG.isDev,
-  hasAccessKey: !!process.env.NEXT_PUBLIC_ACCESS_KEY_ID,
-  hasSecretKey: !!process.env.NEXT_PUBLIC_SECRET_ACCESS_KEY
-});
-
-console.log('[DEBUG] OpenAI配置:', {
-  hasApiKey: !!process.env.OPENAI_API_KEY,
-  apiKeySuffix: process.env.OPENAI_API_KEY?.slice(-4),
-  environment: process.env.NODE_ENV
-});
-
 async function getDynamoDBConfig() {
   if (CONFIG.isDev) {
     return {
@@ -62,10 +45,6 @@ async function getDynamoDBConfig() {
 async function createDynamoDBClient() {
   try {
     const config = await getDynamoDBConfig();
-    console.log('[DEBUG] DynamoDB 配置:', {
-      region: config.region,
-      hasCredentials: !!config.credentials
-    });
     
     const client = new DynamoDBClient(config);
     return DynamoDBDocumentClient.from(client);
@@ -143,11 +122,6 @@ async function getUserActiveThread(
           Timestamp: new Date().toISOString()
         }
       }));
-      
-      console.log('[DEBUG] 创建新线程:', {
-        threadId: newThread.id,
-        assistantId
-      });
       return newThread.id;
     }
 
@@ -194,31 +168,12 @@ async function waitForCompletion(openai: OpenAI, threadId: string, runId: string
   }
   
   if (runStatus.status === 'completed') {
-    console.log('[DEBUG] OpenAI Run 完成配置:', {
-      threadId,
-      runId,
-      finalStatus: runStatus.status,
-      completionTime: runStatus.completed_at ? new Date(runStatus.completed_at * 1000).toISOString() : null,
-      usedTools: runStatus.tools?.map(t => t.type)
-    });
 
     // 获取运行步骤以检查检索操作
     const steps = await openai.beta.threads.runs.steps.list(threadId, runId);
     const retrievalSteps = steps.data.filter(step => 
       (step.step_details as any).type === 'retrieval'
     );
-
-    console.log('[DEBUG] Vector Store 检索详情:', {
-      threadId,
-      runId,
-      retrievalStepsCount: retrievalSteps.length,
-      retrievalSteps: retrievalSteps.map(step => ({
-        id: step.id,
-        type: (step.step_details as any).type,
-        status: step.status,
-        tokens: step.usage?.total_tokens
-      }))
-    });
   }
   
   if (attempts >= maxAttempts) {
@@ -235,33 +190,10 @@ const openai = new OpenAI({
 export async function POST(request: Request) {
   try {
     const { message, threadId, userId, config } = await request.json();
-    
-    console.log('[DEBUG] 聊天请求参数:', {
-      messageLength: message?.length,
-      threadId,
-      userId,
-      config: {
-        type: config?.type,
-        assistantId: config?.assistantId,
-        vectorStoreId: config?.vectorStoreId
-      }
-    });
-
-    // 验证助手前
-    console.log('[DEBUG] 开始验证助手:', {
-      assistantId: config?.assistantId,
-      apiKeySuffix: process.env.OPENAI_API_KEY?.slice(-4)
-    });
 
     // 验证助手
     try {
       const assistant = await openai.beta.assistants.retrieve(config.assistantId);
-      console.log('[DEBUG] 助手验证成功:', {
-        id: assistant.id,
-        name: assistant.name,
-        model: assistant.model,
-        created_at: new Date(assistant.created_at * 1000).toISOString()
-      });
     } catch (error) {
       console.error('[ERROR] 助手验证失败:', {
         error,
@@ -280,44 +212,14 @@ export async function POST(request: Request) {
       }, { status: 400 });
     }
 
-    // 创建或获取线程前
-    console.log('[DEBUG] 准备处理线程:', {
-      existingThreadId: threadId,
-      userId,
-      configType: config?.type
-    });
-
-    // 发送消息前
-    console.log('[DEBUG] 准备发送消息:', {
-      threadId,
-      messageLength: message?.length,
-      assistantId: config?.assistantId
-    });
-
-    // 运行助手前
-    console.log('[DEBUG] 准备运行助手:', {
-      threadId,
-      assistantId: config?.assistantId,
-      runConfig: {
-        model: config?.model,
-        tools: config?.tools
-      }
-    });
-
     let activeThreadId = threadId;
     let thread;
 
     // 如果提供了现有线程ID，先尝试获取
     if (threadId) {
       try {
-        console.log('[DEBUG] 尝试获取现有线程:', threadId);
         thread = await openai.beta.threads.retrieve(threadId);
         activeThreadId = threadId;
-        console.log('[DEBUG] 成功获取现有线程:', {
-          threadId: thread.id,
-          created: thread.created_at,
-          metadata: thread.metadata
-        });
       } catch (error) {
         console.warn('[WARN] 获取现有线程失败，将创建新线程:', error);
       }
@@ -325,7 +227,6 @@ export async function POST(request: Request) {
 
     // 如果没有现有线程或获取失败，创建新线程
     if (!thread) {
-      console.log('[DEBUG] 创建新线程');
       thread = await openai.beta.threads.create({
         metadata: {
           userId,
@@ -335,27 +236,11 @@ export async function POST(request: Request) {
         }
       });
       activeThreadId = thread.id;
-      console.log('[DEBUG] 新线程创建成功:', {
-        threadId: thread.id,
-        metadata: thread.metadata
-      });
     }
-
-    // 添加用户消息
-    console.log('[DEBUG] 添加用户消息到线程:', {
-      threadId: activeThreadId,
-      messageLength: message.length
-    });
 
     await openai.beta.threads.messages.create(activeThreadId, {
       role: 'user',
       content: message
-    });
-
-    // 运行助手
-    console.log('[DEBUG] 开始运行助手:', {
-      threadId: activeThreadId,
-      assistantId: config.assistantId
     });
 
     const run = await openai.beta.threads.runs.create(activeThreadId, {
@@ -368,21 +253,12 @@ export async function POST(request: Request) {
       run.id
     );
 
-    console.log('[DEBUG] 等待助手响应:', {
-      runId: run.id,
-      status: runStatus.status
-    });
-
     while (runStatus.status === 'in_progress' || runStatus.status === 'queued') {
       await new Promise(resolve => setTimeout(resolve, 1000));
       runStatus = await openai.beta.threads.runs.retrieve(
         activeThreadId,
         run.id
       );
-      console.log('[DEBUG] 运行状态更新:', {
-        runId: run.id,
-        status: runStatus.status
-      });
     }
 
     if (runStatus.status !== 'completed') {
@@ -397,13 +273,7 @@ export async function POST(request: Request) {
       .filter(content => content.type === 'text')
       .map(content => (content.type === 'text' ? content.text.value : ''))
       .join('\n');
-
-    console.log('[DEBUG] 获取到助手回复:', {
-      threadId: activeThreadId,
-      replyLength: assistantReply.length,
-      messageId: lastMessage.id
-    });
-
+    
     return NextResponse.json({
       success: true,
       reply: assistantReply,

@@ -34,7 +34,16 @@ export default function Chat({ type, assistantId, vectorStoreId, userId }: ChatP
   const [isCreatingThread, setIsCreatingThread] = useState(false);
 
   useEffect(() => {
+    if (error) {
+      const timer = setTimeout(() => {
+        setError('');
+      }, 10000); // 3秒后自动清除错误消息
 
+      return () => clearTimeout(timer);
+    }
+  }, [error, setError]);
+
+  useEffect(() => {
     if (!authLoading && (userId || user?.user_id)) {
       setConfig({
         type,
