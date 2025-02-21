@@ -15,9 +15,10 @@ interface ChatProps {
   assistantId: string;
   vectorStoreId: string;
   userId?: string;
+  threadId?: string | null;
 }
 
-export default function Chat({ type, assistantId, vectorStoreId, userId }: ChatProps) {
+export default function Chat({ type, assistantId, vectorStoreId, userId, threadId }: ChatProps) {
   const { user, loading: authLoading } = useAuth();
   const { 
     setConfig,

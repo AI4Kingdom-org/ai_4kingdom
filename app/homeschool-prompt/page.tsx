@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useChat, ChatProvider } from '../contexts/ChatContext';
 import { ASSISTANT_IDS, VECTOR_STORE_IDS } from '../config/constants';
+import { CHAT_TYPES } from '../config/chatTypes';
 import styles from './HomeschoolPrompt.module.css';
 
 interface PromptData {
@@ -68,13 +69,13 @@ function HomeschoolPromptContent() {
 
       if (response.ok) {
         const data = await response.json();
-        if (data.assistantId) {
-          // 更新 Chat Context 中的 assistantId
-          setConfig({ 
-            type: 'homeschool',
-            assistantId: data.assistantId 
-          });
-        }
+        // 更新 Chat Context 中的配置，现在包含 threadId
+        setConfig({ 
+          type: CHAT_TYPES.HOMESCHOOL,
+          assistantId: ASSISTANT_IDS.HOMESCHOOL,
+          threadId: data.threadId,
+          vectorStoreId: VECTOR_STORE_IDS.HOMESCHOOL
+        });
         setMessage('保存成功');
       } else {
         throw new Error('保存失败');

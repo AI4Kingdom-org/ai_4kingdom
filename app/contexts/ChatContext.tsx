@@ -11,6 +11,7 @@ interface ChatConfig {
   vectorStoreId: string;
   userId?: string;
   systemPrompt?: string;
+  threadId?: string;
 }
 
 interface ChatContextType {
@@ -19,6 +20,7 @@ interface ChatContextType {
     assistantId?: string;
     vectorStoreId?: string;
     userId?: string;
+    threadId?: string;
   } | null;
   setConfig: (config: ChatContextType['config']) => void;
   messages: Array<{ sender: string; text: string }>;

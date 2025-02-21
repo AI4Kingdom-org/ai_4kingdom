@@ -11,36 +11,37 @@ import styles from './Homeschool.module.css';
 function HomeschoolContent() {
     const { user, loading: authLoading } = useAuth();
     const { setConfig } = useChat();
-    const [assistantId, setAssistantId] = useState(ASSISTANT_IDS.HOMESCHOOL);
+    const [threadId, setThreadId] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(true);
 
     useEffect(() => {
-        async function fetchAssistantId() {
+        async function fetchThreadId() {
             if (!user?.user_id) return;
 
             try {
                 const response = await fetch(`/api/homeschool-prompt?userId=${user.user_id}`);
                 if (response.ok) {
                     const data = await response.json();
-                    if (data.assistantId) {
-                        setAssistantId(data.assistantId);
+                    if (data.threadId) {
+                        setThreadId(data.threadId);
                         setConfig({
                             type: CHAT_TYPES.HOMESCHOOL,
-                            assistantId: data.assistantId,
+                            assistantId: ASSISTANT_IDS.HOMESCHOOL,
                             vectorStoreId: VECTOR_STORE_IDS.HOMESCHOOL,
+                            threadId: data.threadId,
                             userId: user?.user_id
                         });
                     }
                 }
             } catch (error) {
-                console.error('获取 Assistant ID 失败:', error);
+                console.error('获取 Thread ID 失败:', error);
             } finally {
                 setIsLoading(false);
             }
         }
 
         if (user?.user_id) {
-            fetchAssistantId();
+            fetchThreadId();
         }
     }, [user?.user_id, setConfig]);
 
@@ -56,8 +57,9 @@ function HomeschoolContent() {
         <div className={styles.container}>
             <Chat 
                 type={CHAT_TYPES.HOMESCHOOL}
-                assistantId={assistantId}
+                assistantId={ASSISTANT_IDS.HOMESCHOOL}
                 vectorStoreId={VECTOR_STORE_IDS.HOMESCHOOL}
+                threadId={threadId}
             />
         </div>
     );
