@@ -55,7 +55,7 @@ export const CHAT_TYPE_CONFIGS: Record<ChatType, ChatTypeConfig> = {
   },
   'children-mental': {
     type: 'children-mental',
-    title: '儿童心理',
+    title: '对话',
     description: '儿童心理咨询',
     assistantId: ASSISTANT_IDS.CHILDREN_MENTAL,
     vectorStoreId: VECTOR_STORE_IDS.CHILDREN_MENTAL
@@ -93,7 +93,7 @@ export const CHAT_CONFIGS: Record<ChatType, ChatConfig> = {
     description: '灵修伙伴'
   },
   'children-mental': {
-    title: '儿童心理',
+    title: '对话',
     description: '儿童心理咨询'
   }
 
