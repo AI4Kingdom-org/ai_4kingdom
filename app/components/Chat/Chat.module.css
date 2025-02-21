@@ -95,4 +95,19 @@
 
 .loginButton:hover {
   background: #0056b3;
+}
+
+@media (max-width: 768px) {
+  .container {
+    flex-direction: column;
+  }
+
+  .chatWindow {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .conversationListContainer {
+    display: none; /* 隐藏原有的对话列表容器 */
+  }
 } 

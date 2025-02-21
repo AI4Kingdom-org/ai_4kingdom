@@ -10,6 +10,60 @@
   overflow-x: hidden;
 }
 
+/* 添加移动端下拉菜单样式 */
+.mobileDropdown {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .container {
+    display: none;
+  }
+
+  .mobileDropdown {
+    display: block;
+    position: relative;
+    width: 100%;
+    background: #ffffff;
+    z-index: 1000;
+  }
+
+  .dropdownButton {
+    width: 100%;
+    padding: 0.75rem 1rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: #4F46E5;
+    color: white;
+    border: none;
+    border-bottom: 1px solid #e5e7eb;
+    cursor: pointer;
+    font-weight: 500;
+  }
+
+  .dropdownButton svg {
+    color: white;
+  }
+
+  .dropdownContent {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: #ffffff;
+    border-bottom: 1px solid #e5e7eb;
+    max-height: 300px;
+    overflow-y: auto;
+    display: none;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  }
+
+  .dropdownContent.open {
+    display: block;
+  }
+}
+
 .header {
   padding: 1rem;
   border-bottom: 1px solid #e5e7eb;
@@ -142,8 +196,26 @@
   stroke-width: 2px;
 }
 
-.item:hover .deleteButton {
-  opacity: 1;
+/* 桌面端hover显示删除按钮 */
+@media (min-width: 769px) {
+  .item:hover .deleteButton {
+    opacity: 1;
+  }
+}
+
+/* 移动端始终显示删除按钮 */
+@media (max-width: 768px) {
+  .deleteButton {
+    opacity: 1;
+    padding: 4px 8px;
+    min-width: 32px;
+    min-height: 32px;
+  }
+
+  .deleteIcon {
+    width: 16px;
+    height: 16px;
+  }
 }
 
 .deleteButton:hover {

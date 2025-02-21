@@ -18,7 +18,7 @@ interface ConversationListProps {
   onSelectThread: (threadId: string) => void;
   type: ChatType;
   isCreating: boolean;
-  onCreateNewThread: () => void;
+  onCreateNewThread: (e: React.MouseEvent) => void;
 }
 
 export default function ConversationList({
@@ -32,6 +32,7 @@ export default function ConversationList({
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const config = CHAT_CONFIGS[type];
 
   // 获取对话列表
@@ -98,7 +99,7 @@ export default function ConversationList({
   const handleCreateNewThread = async (e: React.MouseEvent) => {
     e.preventDefault();
     if (isCreating || !onCreateNewThread) return;
-    await onCreateNewThread();
+    await onCreateNewThread(e);
     await fetchConversations();
   };
 
@@ -155,89 +156,111 @@ export default function ConversationList({
     }
   };
 
-  if (loading) return <div className={styles.loading}>加载中...</div>;
-  
-  if (error) {
-    return (
-      <div className={styles.container}>
-        <div className={styles.errorContainer}>
-          <div className={styles.error}>{error}</div>
-          <button 
-            className={styles.createFirstThreadButton}
-            onClick={onCreateNewThread}
-          >
-            <svg 
-              viewBox="0 0 24 24" 
-              className={styles.plusIcon}
-            >
-              <path fill="currentColor" d="M12 4v16m-8-8h16"/>
-            </svg>
-            创建第一个对话
-          </button>
+  const renderConversationList = () => (
+    <div className={styles.list}>
+      {error ? (
+        <div className={styles.error}>{error}</div>
+      ) : conversations.length === 0 ? (
+        <div className={styles.emptyState}>
+          <p>还没有对话，开始创建一个吧！</p>
         </div>
-      </div>
-    );
-  }
+      ) : (
+        conversations.map((conv) => (
+          <div 
+            key={conv.threadId}
+            className={`${styles.item} ${currentThreadId === conv.threadId ? styles.active : ''}`}
+            onClick={() => {
+              handleThreadSelect(conv.threadId);
+              setIsDropdownOpen(false); // 选择后关闭下拉菜单
+            }}
+          >
+            <div className={styles.itemContent}>
+              <div className={styles.itemTitle} style={{ whiteSpace: 'nowrap' }}>
+                {conv.title || '新对话'}
+              </div>
+              <div className={styles.itemTime}>
+                {formatDate(conv.createdAt)}
+              </div>
+            </div>
+            <button
+              className={styles.deleteButton}
+              onClick={(e) => {
+                e.stopPropagation();
+                handleDelete(conv.threadId);
+              }}
+            >
+              <svg 
+                viewBox="0 0 24 24" 
+                fill="none" 
+                stroke="currentColor" 
+                className={styles.deleteIcon}
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                />
+              </svg>
+            </button>
+          </div>
+        ))
+      )}
+    </div>
+  );
 
   return (
-    <div className={styles.container}>
-      <div className={styles.header}>
-        <button
-          className={styles.newButton}
-          onClick={handleCreateNewThread}
-          disabled={isCreating}
+    <>
+      {/* 桌面版视图 */}
+      <div className={styles.container}>
+        <div className={styles.header}>
+          <button
+            className={styles.newButton}
+            onClick={handleCreateNewThread}
+            disabled={isCreating}
+          >
+            {isCreating ? '创建中...' : `+ 新建${config.title}`}
+          </button>
+        </div>
+        {renderConversationList()}
+      </div>
+
+      {/* 移动端下拉菜单 */}
+      <div className={styles.mobileDropdown}>
+        <button 
+          className={styles.dropdownButton}
+          onClick={() => setIsDropdownOpen(!isDropdownOpen)}
         >
-          {isCreating ? '创建中...' : `+ 新建${config.title}`}
+          <span>
+            {currentThreadId 
+              ? (conversations.find(c => c.threadId === currentThreadId)?.title || '当前对话')
+              : '选择或创建对话'}
+          </span>
+          <svg 
+            viewBox="0 0 24 24" 
+            width="20" 
+            height="20" 
+            stroke="currentColor" 
+            strokeWidth="2" 
+            fill="none"
+          >
+            <path d={isDropdownOpen ? "M18 15l-6-6-6 6" : "M6 9l6 6 6-6"} />
+          </svg>
         </button>
+        <div className={`${styles.dropdownContent} ${isDropdownOpen ? styles.open : ''}`}>
+          <button
+            className={styles.newButton}
+            onClick={(e) => {
+              handleCreateNewThread(e);
+              setIsDropdownOpen(false);
+            }}
+            disabled={isCreating}
+          >
+            {isCreating ? '创建中...' : `+ 新建${config.title}`}
+          </button>
+          {renderConversationList()}
+        </div>
       </div>
-      
-      <div className={styles.list}>
-        {error ? (
-          <div className={styles.error}>{error}</div>
-        ) : conversations.length === 0 ? (
-          <div className={styles.emptyState}>
-            <p>还没有对话，开始创建一个吧！</p>
-          </div>
-        ) : (
-          conversations.map((conv) => (
-            <div 
-              key={conv.threadId}
-              className={`${styles.item} ${currentThreadId === conv.threadId ? styles.active : ''}`}
-              onClick={() => handleThreadSelect(conv.threadId)}
-            >
-              <div className={styles.itemContent}>
-                <div className={styles.itemTitle} style={{ whiteSpace: 'nowrap' }}>
-                  {conv.title || '新对话'}
-                </div>
-                <div className={styles.itemTime}>
-                  {formatDate(conv.createdAt)}
-                </div>
-              </div>
-              <button
-                className={styles.deleteButton}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleDelete(conv.threadId);
-                }}
-              >
-                <svg 
-                  viewBox="0 0 24 24" 
-                  fill="none" 
-                  stroke="currentColor" 
-                  className={styles.deleteIcon}
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                  />
-                </svg>
-              </button>
-            </div>
-          ))
-        )}
-      </div>
-    </div>
+    </>
   );
 } 
