@@ -55,7 +55,8 @@ export async function POST(request: Request) {
         const run = await openai.beta.threads.runs.create(
           thread.id,
           { 
-            assistant_id: ASSISTANT_IDS.HOMESCHOOL
+            assistant_id: ASSISTANT_IDS.HOMESCHOOL,
+            max_completion_tokens: 1000
           }
         );
 

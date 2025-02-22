@@ -244,7 +244,8 @@ export async function POST(request: Request) {
     });
 
     const run = await openai.beta.threads.runs.create(activeThreadId, {
-      assistant_id: config.assistantId
+      assistant_id: config.assistantId,
+      max_completion_tokens: 1000
     });
 
     // 等待运行完成
