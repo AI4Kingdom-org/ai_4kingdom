@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import styles from './ChatInput.module.css';
 import { useChat } from '../../contexts/ChatContext';
 
@@ -12,6 +12,11 @@ interface ChatInputProps {
 export default function ChatInput({ onSend, isLoading }: ChatInputProps) {
   const [input, setInput] = useState('');
   const { currentThreadId } = useChat();
+
+  // Clear input when thread changes
+  useEffect(() => {
+    setInput('');
+  }, [currentThreadId]);
 
   const handleSend = async () => {
     if (!input.trim() || isLoading) return;
