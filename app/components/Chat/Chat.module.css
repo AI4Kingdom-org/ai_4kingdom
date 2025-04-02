@@ -11,7 +11,7 @@
   position: absolute; /* 可拖動位置 */
   border-radius: 12px;
   box-shadow: 0 4px 8px rgba(0,0,0,0.2);
-  background-color: black; /* 更改背景顏色為黑色 */
+  background-color: rgb(43, 41, 41); /* 更改背景顏色為黑色 */
   overflow: hidden;
   border: 1px solid #ddd;
 }
