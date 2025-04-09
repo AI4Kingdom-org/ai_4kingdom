@@ -43,6 +43,9 @@ ENV XDG_CACHE_HOME=/tmp
 ENV HF_HOME=/tmp/huggingface
 ENV TRANSFORMERS_CACHE=/tmp/huggingface
 ENV WHISPER_CACHE=/tmp/whisper
+ENV HOME=/tmp
+ENV USERPROFILE=/tmp
+ENV USER=lambda
 
 # 提高Lambda超时时间和内存设置
 ENV AWS_LAMBDA_FUNCTION_TIMEOUT=900
@@ -54,8 +57,12 @@ ENV AWS_LAMBDA_INITIALIZATION_TIMEOUT=300
 COPY requirements.txt ${LAMBDA_TASK_ROOT}/
 RUN pip install --no-cache-dir -r ${LAMBDA_TASK_ROOT}/requirements.txt
 
-# 创建Whisper缓存目录并预下载模型
-RUN mkdir -p /tmp/whisper
+# 创建必要的目录并设置权限
+RUN mkdir -p /tmp/whisper /tmp/huggingface && \
+    chmod -R 777 /tmp/whisper /tmp/huggingface
+
+# 预加载步骤移除，将在运行时加载模型
+# 这里不预加载，让函数在第一次调用时加载
 
 # 复制Lambda函数代码
 COPY lambda_function.py ${LAMBDA_TASK_ROOT}/
