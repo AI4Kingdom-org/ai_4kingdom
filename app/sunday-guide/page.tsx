@@ -27,10 +27,8 @@ export default function SundayGuide() {
   return (
     <WithChat>
       <div className={styles.container}>
-        <h1 className={styles.title}>主日信息管理</h1>
-
         <section className={styles.section}>
-          <h2 className={styles.sectionTitle}>文件上傳與處理</h2>
+          <h2 className={styles.sectionTitle}>“文件上传与处理</h2>
           <AssistantManager 
             onFileProcessed={handleFileProcessed} 
             setIsProcessing={setIsProcessing} 
@@ -39,17 +37,17 @@ export default function SundayGuide() {
           />
           {uploadTime && (
             <div className={styles.uploadTimeContainer}>
-              <p>處理完成時間: {uploadTime}</p>
+              <p>处理完成时间: {uploadTime}</p>
             </div>
           )}
         </section>
 
         {processedContent && !isProcessing && (
           <section className={styles.section}>
-            <h2 className={styles.sectionTitle}>處理結果預覽</h2>
+            <h2 className={styles.sectionTitle}>处理结果预览</h2>
             <div className={styles.previewContainer}>
               <div className={styles.previewSection}>
-                <h3>信息總結</h3>
+                <h3>信息总结</h3>
                 <div className={styles.previewContent}>{processedContent.summary}</div>
               </div>
               <div className={styles.previewSection}>
@@ -57,11 +55,11 @@ export default function SundayGuide() {
                 <div className={styles.previewContent}>{processedContent.fullText}</div>
               </div>
               <div className={styles.previewSection}>
-                <h3>每日靈修</h3>
+                <h3>每日灵修</h3>
                 <div className={styles.previewContent}>{processedContent.devotional}</div>
               </div>
               <div className={styles.previewSection}>
-                <h3>查經指引</h3>
+                <h3>查经指引</h3>
                 <div className={styles.previewContent}>{processedContent.bibleStudy}</div>
               </div>
             </div>

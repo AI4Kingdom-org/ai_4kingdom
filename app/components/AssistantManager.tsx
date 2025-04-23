@@ -279,7 +279,7 @@ export default function AssistantManager({
               <span className={stylesGuide.spinnerIcon}>⟳</span>
             ) : null}
           </div>
-          <div className={stylesGuide.taskName}>上傳文件</div>
+          <div className={stylesGuide.taskName}>上传文件</div>
         </div>
         
         <div className={`${stylesGuide.taskItem} ${stylesGuide[taskStatus.summary]}`}>
@@ -290,7 +290,7 @@ export default function AssistantManager({
               <span className={stylesGuide.spinnerIcon}>⟳</span>
             ) : null}
           </div>
-          <div className={stylesGuide.taskName}>生成信息總結</div>
+          <div className={stylesGuide.taskName}>生成信息总结</div>
         </div>
         
         <div className={`${stylesGuide.taskItem} ${stylesGuide[taskStatus.fullText]}`}>
@@ -312,7 +312,7 @@ export default function AssistantManager({
               <span className={stylesGuide.spinnerIcon}>⟳</span>
             ) : null}
           </div>
-          <div className={stylesGuide.taskName}>生成每日靈修</div>
+          <div className={stylesGuide.taskName}>生成每日灵修</div>
         </div>
         
         <div className={`${stylesGuide.taskItem} ${stylesGuide[taskStatus.bibleStudy]}`}>
@@ -323,12 +323,12 @@ export default function AssistantManager({
               <span className={stylesGuide.spinnerIcon}>⟳</span>
             ) : null}
           </div>
-          <div className={stylesGuide.taskName}>生成查經指引</div>
+          <div className={stylesGuide.taskName}>生成查经指引</div>
         </div>
         
         {timeSpent && (
           <div className={stylesGuide.timeSpent}>
-            <span><span className={stylesGuide.timeIcon}>⏱</span> 處理時間：{timeSpent}</span>
+            <span><span className={stylesGuide.timeIcon}>⏱</span> 处理时间：{timeSpent}</span>
           </div>
         )}
       </div>
@@ -339,7 +339,7 @@ export default function AssistantManager({
     <div className={styles.container}>
       {error && <div className={styles.error}>{error}</div>}
       <div className={styles.uploadSection}>
-        <h3>上傳文件 <span className={styles.fileTypes}>.pdf,.txt,.doc,.docx</span></h3>
+        <h3>上传文件 <span className={styles.fileTypes}>.pdf,.txt,.doc,.docx</span></h3>
         <div className={styles.uploadForm}>
           <input
             type="file"
@@ -356,7 +356,7 @@ export default function AssistantManager({
       
       {currentProgress > 0 && currentProgress < 100 && (
         <div className={stylesGuide.progressContainer}>
-          <div className={stylesGuide.progressLabel}>處理進度: {Math.round(currentProgress)}%</div>
+          <div className={stylesGuide.progressLabel}>处理进度: {Math.round(currentProgress)}%</div>
           <div className={stylesGuide.progressBar}>
             <div 
               className={stylesGuide.progressBarFill} 
@@ -370,7 +370,7 @@ export default function AssistantManager({
         <div className={stylesGuide.timeSpent}>
           <span>
             <span className={stylesGuide.timeIcon}>⏱</span> 
-            文件：{fileName} | 處理完成，耗時：{timeSpent}
+            文件：{fileName} | 处理完成，耗时：{timeSpent}
           </span>
         </div>
       )}

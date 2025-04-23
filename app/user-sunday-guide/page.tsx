@@ -49,14 +49,14 @@ function SundayGuideContent() {
   };
 
   const renderContent = () => {
-    if (loading) return <div className={styles.loading}>加載中...</div>;
+    if (loading) return <div className={styles.loading}>Loading, please wait...</div>;
     if (!sermonContent) return null;
 
     const titles = {
-      summary: '講道總結',
+      summary: '讲道总结',
       text: '信息文字',
-      devotional: '每日靈修',
-      bible: '查經指引'
+      devotional: '每日灵修',
+      bible: '查经指引'
     };
 
     return (
@@ -71,13 +71,13 @@ function SundayGuideContent() {
 
   return (
     <div className={styles.container}>
-      <h1 className={styles.title}>主日信息導覽</h1>
+      <h1 className={styles.title}>主日信息导航</h1>
       <div className={styles.buttonGroup}>
         <button 
           className={`${styles.modeButton} ${selectedMode === 'summary' ? styles.active : ''}`}
           onClick={() => handleModeSelect('summary')}
         >
-          信息總結
+          信息总结
         </button>
         <button 
           className={`${styles.modeButton} ${selectedMode === 'text' ? styles.active : ''}`}
@@ -89,13 +89,13 @@ function SundayGuideContent() {
           className={`${styles.modeButton} ${selectedMode === 'devotional' ? styles.active : ''}`}
           onClick={() => handleModeSelect('devotional')}
         >
-          每日靈修
+          每日灵修
         </button>
         <button 
           className={`${styles.modeButton} ${selectedMode === 'bible' ? styles.active : ''}`}
           onClick={() => handleModeSelect('bible')}
         >
-          查經指引
+          查经指引
         </button>
       </div>
 
@@ -119,7 +119,7 @@ function SundayGuideContent() {
         </>
       ) : (
         <div className={styles.emptyState}>
-          <p>請選擇要查看的內容類型</p>
+          <p>请选择要查看的内容类型</p>
         </div>
       )}
     </div>
@@ -130,11 +130,11 @@ export default function UserSundayGuide() {
   const { user, loading } = useAuth();
 
   if (loading) {
-    return <div>加載中...</div>;
+    return <div>Loading, please wait...</div>;
   }
 
   if (!user) {
-    return <div>請先登錄</div>;
+    return <div>请先登录</div>;
   }
 
   return (
