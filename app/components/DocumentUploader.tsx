@@ -50,13 +50,13 @@ export default function DocumentUploader({ onUpload, isProcessing }: DocumentUpl
       // 檢查文件大小（限制為 20MB）
       const maxSize = 20 * 1024 * 1024; // 20MB
       if (file.size > maxSize) {
-        throw new Error('文件大小不能超過 20MB');
+        throw new Error('文件大小不能超过 20MB');
       }
 
       await onUpload(file);
-      setSummary(`文件 ${file.name} 上傳成功！`);
+      setSummary(`文件 ${file.name} 上传成功！`);
     } catch (error) {
-      setError(error instanceof Error ? error.message : '上傳失敗');
+      setError(error instanceof Error ? error.message : '上传失败');
     }
   };
 
@@ -79,10 +79,10 @@ export default function DocumentUploader({ onUpload, isProcessing }: DocumentUpl
         />
         <label htmlFor="document-upload" className={styles.uploadLabel}>
           {isProcessing ? (
-            <span>處理中...</span>
+            <span>处理中...</span>
           ) : (
             <div>
-              <p>點擊或拖拽文件到此處上傳</p>
+              <p>点击或拖拽文件到此处上传</p>
               <p className={styles.supportedFormats}>
                 支援格式：PDF、Word、TXT、Markdown、RTF、CSV、JSON、XML、HTML 等
               </p>
