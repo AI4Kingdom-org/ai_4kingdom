@@ -74,19 +74,31 @@ export async function POST(request: Request) {
     const buffer = await file.arrayBuffer();
     const blob = new Blob([buffer]);
     
-    // 创建 vector store
+    // 1. 创建 vector store
+    const vectorStore = await openai.beta.vectorStores.create({
+      name: `Vector Store ${new Date().toISOString()}`
+    });
+    
+    // 2. 创建文件
     const openaiFile = await openai.files.create({
       file: new File([blob], file.name, { type: file.type }),
       purpose: "assistants"
     });
 
-    // 2. 更新 DynamoDB 记录
+    // 3. 添加文件到 vector store
+    await openai.beta.vectorStores.files.create(
+      vectorStore.id,
+      { file_id: openaiFile.id }
+    );
+
+    // 4. 更新 DynamoDB 记录
     const docClient = await createDynamoDBClient();
     const command = new PutCommand({
       TableName: 'SundayGuide',
       Item: {
         assistantId,
-        vectorStoreId: openaiFile.id,
+        vectorStoreId: vectorStore.id, // 使用 vector store ID 而不是文件 ID
+        fileId: openaiFile.id, // 保存文件 ID 以便后续管理
         updatedAt: new Date().toISOString()
       }
     });
@@ -95,7 +107,8 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       success: true,
-      vectorStoreId: openaiFile.id
+      vectorStoreId: vectorStore.id,
+      fileId: openaiFile.id
     });
   } catch (error) {
     console.error('详细错误:', error);

@@ -27,23 +27,32 @@ print(f"HOME: {os.environ.get('HOME')}")
 print(f"USERPROFILE: {os.environ.get('USERPROFILE')}")
 print(f"USER: {os.environ.get('USER')}")
 
+# 改进Whisper导入逻辑
+whisper = None
 try:
-    # 尝试导入OpenAI的whisper
-    import openai.whisper as whisper
-    print("[INFO] 使用OpenAI whisper模块")
+    # 直接尝试导入whisper包
+    import whisper
+    print("[INFO] 使用标准whisper模块")
 except ImportError:
     try:
-        # 或者尝试直接导入
+        # 如果导入失败，尝试安装并导入
+        print("[INFO] 尝试安装whisper包...")
+        import subprocess
+        subprocess.check_call([sys.executable, "-m", "pip", "install", "--no-cache-dir", "openai-whisper"])
         import whisper
-        if not hasattr(whisper, 'load_model'):
-            print("[ERROR] 导入的whisper模块不包含load_model方法，可能不是OpenAI的Whisper")
-            # 尝试pip安装正确的包
-            import subprocess
-            subprocess.check_call([sys.executable, "-m", "pip", "install", "--no-cache-dir", "git+https://github.com/openai/whisper.git"])
-            import whisper
-        print("[INFO] 使用标准whisper模块")
-    except ImportError as e:
+        print("[INFO] 成功安装并导入whisper模块")
+    except Exception as e:
         print(f"[ERROR] 无法导入whisper模块: {str(e)}")
+        # 设置一个标志，表示whisper不可用
+        whisper_available = False
+    else:
+        whisper_available = True
+else:
+    whisper_available = True
+
+# 检查whisper是否可用
+if not whisper_available:
+    print("[ERROR] Whisper模块不可用，语音转文字功能将无法使用")
 
 from pydub.utils import which
 import subprocess
@@ -142,6 +151,9 @@ def convert_audio_with_ffmpeg(input_path, output_path, format="mp3"):
 # 加载 Whisper 模型
 def load_whisper_model(model_size="base"):
     """加载 Whisper 模型"""
+    if not whisper_available:
+        raise Exception("Whisper模块不可用，无法加载模型")
+        
     print(f"[DEBUG] 加载 Whisper {model_size} 模型...")
     
     # 确保下载路径是可写的
@@ -230,6 +242,16 @@ def lambda_handler(event, context):
     """AWS Lambda 入口点"""
     try:
         print("[INFO] 开始处理Lambda事件:", event)
+        
+        # 检查whisper是否可用
+        if not whisper_available:
+            return {
+                'statusCode': 500,
+                'body': json.dumps({
+                    'success': False,
+                    'error': "Whisper模块不可用，无法处理音频"
+                }, ensure_ascii=False)
+            }
         
         # 从事件中获取必要信息
         source_bucket = event['Records'][0]['s3']['bucket']['name']

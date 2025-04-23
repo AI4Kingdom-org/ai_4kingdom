@@ -22,6 +22,7 @@
     "@types/fluent-ffmpeg": "^2.1.27",
     "aws-amplify": "^6.10.0",
     "axios": "^1.7.9",
+    "dotenv": "^16.5.0",
     "json-schema-to-ts": "^3.1.1",
     "next": "^14.2.1",
     "openai": "^4.78.1",
@@ -44,6 +45,7 @@
     "aws-cdk-lib": "^2",
     "constructs": "^10.3.0",
     "esbuild": "^0.23.1",
+    "ts-node": "^10.9.2",
     "tsx": "^4.19.0",
     "typescript": "^5.6.2"
   }
