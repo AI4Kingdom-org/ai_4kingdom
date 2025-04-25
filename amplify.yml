@@ -5,6 +5,12 @@ backend:
       commands:
         - npm ci --cache .npm --prefer-offline
         - npx ampx pipeline-deploy --branch $AWS_BRANCH --app-id $AWS_APP_ID
+  function:
+    timeout: 180  # 增加超時時間至 3 分鐘 (180 秒)
+    memory: 1024  # 增加記憶體配置至 1024 MB (1 GB)
+    runtime:
+      name: nodejs
+      version: 18.x
 frontend:
   phases:
     preBuild:
