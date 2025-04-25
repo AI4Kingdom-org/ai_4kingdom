@@ -225,7 +225,7 @@ export async function POST(request: Request) {
       console.error(`[ERROR] 在步驟 "${currentStep}" 過程中出錯:`, errorDetails);
       
       // 重新拋出帶更多上下文的錯誤
-      const enhancedError = new Error(`處理失敗於步驟 "${currentStep}": ${processError.message || '未知錯誤'}`);
+      const enhancedError = new Error(`處理失敗於步驟 "${currentStep}": ${(processError as Error).message || '未知錯誤'}`);
       (enhancedError as any).originalError = processError;
       (enhancedError as any).errorDetails = errorDetails;
       throw enhancedError;
