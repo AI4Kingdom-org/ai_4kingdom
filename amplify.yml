@@ -10,7 +10,7 @@ backend:
     memory: 1024  # 增加記憶體配置至 1024 MB (1 GB)
     runtime:
       name: nodejs
-      version: 18.x
+      version: 20.x  # 從 18.x 更新到 20.x，因為 18.x 已接近生命週期結束
 frontend:
   phases:
     preBuild:

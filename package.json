@@ -36,13 +36,13 @@
     "yt-dlp-wrap": "^2.3.12"
   },
   "devDependencies": {
-    "@aws-amplify/backend": "^1.8.0",
-    "@aws-amplify/backend-cli": "^1.4.2",
+    "@aws-amplify/backend": "^1.11.0",
+    "@aws-amplify/backend-cli": "^1.11.0",
     "@types/node": "^20",
     "@types/react": "^18",
     "@types/react-dom": "^18",
-    "aws-cdk": "^2",
-    "aws-cdk-lib": "^2",
+    "aws-cdk": "^2.140.0",
+    "aws-cdk-lib": "^2.140.0",
     "constructs": "^10.3.0",
     "esbuild": "^0.25.3",
     "ts-node": "^10.9.2",
