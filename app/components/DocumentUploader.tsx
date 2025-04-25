@@ -178,10 +178,10 @@ export default function DocumentUploader({ onUpload, isProcessing }: DocumentUpl
         onDragOver={handleDrag}
         onDrop={handleDrop}
       >
-        <input
-          type="file"
+            <input
+              type="file"
           id="document-upload"
-          className={styles.fileInput}
+              className={styles.fileInput}
           onChange={handleFileChange}
           disabled={isProcessing}
           accept=".pdf,.doc,.docx,.txt,.md,.rtf,.csv,.json,.xml,.html,.md,.markdown,.tex"
@@ -195,11 +195,11 @@ export default function DocumentUploader({ onUpload, isProcessing }: DocumentUpl
               <p className={styles.supportedFormats}>
                 支援格式：PDF、Word、TXT、Markdown、RTF、CSV、JSON、XML、HTML 等
               </p>
-            </div>
+          </div>
           )}
-        </label>
-      </div>
-      
+              </label>
+            </div>
+            
       {error && (
         <div className={styles.error}>
           <div className={styles.errorMessage}>
@@ -220,4 +220,4 @@ export default function DocumentUploader({ onUpload, isProcessing }: DocumentUpl
       {summary && <div className={styles.success}>{summary}</div>}
     </div>
   );
-}
+} 
