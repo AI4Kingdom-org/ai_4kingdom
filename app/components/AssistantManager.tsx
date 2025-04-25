@@ -395,4 +395,4 @@ export default function AssistantManager({
       )}
     </div>
   );
-}
+} 
