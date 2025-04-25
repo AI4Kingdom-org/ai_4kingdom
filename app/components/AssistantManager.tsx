@@ -60,7 +60,26 @@ export default function AssistantManager({
   };
 
   // 計算處理時間
-  const calculateTimeSpent = (startDate: Date) => {
+  const calculateTimeSpent = (startDate: Date, serverProcessingTime?: number) => {
+    // 如果後端提供了處理時間，優先使用
+    if (serverProcessingTime) {
+      const diffInSec = Math.floor(serverProcessingTime / 1000);
+      
+      if (diffInSec < 60) {
+        return `${diffInSec} 秒`;
+      } else if (diffInSec < 3600) {
+        const minutes = Math.floor(diffInSec / 60);
+        const seconds = diffInSec % 60;
+        return `${minutes} 分 ${seconds} 秒`;
+      } else {
+        const hours = Math.floor(diffInSec / 3600);
+        const minutes = Math.floor((diffInSec % 3600) / 60);
+        const seconds = diffInSec % 60;
+        return `${hours} 小時 ${minutes} 分 ${seconds} 秒`;
+      }
+    }
+    
+    // 如果沒有後端處理時間，則使用前端計算的時間差
     const endDate = new Date();
     const diffInMs = endDate.getTime() - startDate.getTime();
     const diffInSec = Math.floor(diffInMs / 1000);
@@ -173,7 +192,7 @@ export default function AssistantManager({
       
       // 計算並設置處理時間
       if (startTime) {
-        const timeSpentStr = calculateTimeSpent(startTime);
+        const timeSpentStr = calculateTimeSpent(startTime, result.serverProcessingTime);
         setTimeSpent(timeSpentStr);
       }
       
