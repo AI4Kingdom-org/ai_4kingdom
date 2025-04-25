@@ -121,51 +121,129 @@ export async function POST(request: Request) {
     }
 
     // 转换文件格式
+    console.log('[DEBUG] 開始轉換文件格式');
     const buffer = await file.arrayBuffer();
     const blob = new Blob([buffer]);
+    console.log('[DEBUG] 文件格式轉換成功，大小:', buffer.byteLength, '字節');
     
-    // 1. 创建 vector store
-    const vectorStore = await openai.beta.vectorStores.create({
-      name: `Vector Store ${new Date().toISOString()}`
-    });
+    // 記錄操作開始時間，用於計算每步執行時間
+    const startTime = Date.now();
+    let stepStartTime = startTime;
+    let currentStep = '';
     
-    // 2. 创建文件
-    const openaiFile = await openai.files.create({
-      file: new File([blob], file.name, { type: file.type }),
-      purpose: "assistants"
-    });
+    try {
+      // 1. 创建 vector store
+      currentStep = '創建向量存儲';
+      stepStartTime = Date.now();
+      console.log(`[DEBUG] 步驟 1: 開始${currentStep}`);
+      
+      const vectorStore = await openai.beta.vectorStores.create({
+        name: `Vector Store ${new Date().toISOString()}`
+      });
+      
+      console.log(`[DEBUG] 步驟 1: ${currentStep}成功，ID: ${vectorStore.id}，耗時: ${Date.now() - stepStartTime}ms`);
+      
+      // 2. 创建文件
+      currentStep = '上傳文件到 OpenAI';
+      stepStartTime = Date.now();
+      console.log(`[DEBUG] 步驟 2: 開始${currentStep}，文件名: ${file.name}，大小: ${file.size} 字節`);
+      
+      const openaiFile = await openai.files.create({
+        file: new File([blob], file.name, { type: file.type }),
+        purpose: "assistants"
+      });
+      
+      console.log(`[DEBUG] 步驟 2: ${currentStep}成功，文件ID: ${openaiFile.id}，耗時: ${Date.now() - stepStartTime}ms`);
 
-    // 3. 添加文件到 vector store
-    await openai.beta.vectorStores.files.create(
-      vectorStore.id,
-      { file_id: openaiFile.id }
-    );
+      // 3. 添加文件到 vector store
+      currentStep = '將文件添加到向量存儲';
+      stepStartTime = Date.now();
+      console.log(`[DEBUG] 步驟 3: 開始${currentStep}`);
+      
+      await openai.beta.vectorStores.files.create(
+        vectorStore.id,
+        { file_id: openaiFile.id }
+      );
+      
+      console.log(`[DEBUG] 步驟 3: ${currentStep}成功，耗時: ${Date.now() - stepStartTime}ms`);
 
-    // 4. 更新 DynamoDB 记录
-    const docClient = await createDynamoDBClient();
-    const command = new PutCommand({
-      TableName: 'SundayGuide',
-      Item: {
-        assistantId,
-        vectorStoreId: vectorStore.id, // 使用 vector store ID 而不是文件 ID
-        fileId: openaiFile.id, // 保存文件 ID 以便后续管理
-        updatedAt: new Date().toISOString()
-      }
-    });
+      // 4. 更新 DynamoDB 记录
+      currentStep = '更新 DynamoDB 記錄';
+      stepStartTime = Date.now();
+      console.log(`[DEBUG] 步驟 4: 開始${currentStep}`);
+      
+      const docClient = await createDynamoDBClient();
+      const tableName = process.env.NEXT_PUBLIC_SUNDAY_GUIDE_TABLE || 'SundayGuide';
+      
+      console.log(`[DEBUG] 使用數據表: ${tableName}`);
+      
+      const command = new PutCommand({
+        TableName: tableName,
+        Item: {
+          assistantId,
+          vectorStoreId: vectorStore.id,
+          fileId: openaiFile.id,
+          fileName: file.name,
+          fileSize: file.size,
+          fileType: file.type,
+          uploadTimestamp: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        }
+      });
 
-    await docClient.send(command);
+      await docClient.send(command);
+      console.log(`[DEBUG] 步驟 4: ${currentStep}成功，耗時: ${Date.now() - stepStartTime}ms`);
+      console.log(`[DEBUG] 整個處理流程完成，總耗時: ${Date.now() - startTime}ms`);
 
-    return NextResponse.json({
-      success: true,
-      vectorStoreId: vectorStore.id,
-      fileId: openaiFile.id
-    });
+      return NextResponse.json({
+        success: true,
+        vectorStoreId: vectorStore.id,
+        fileId: openaiFile.id,
+        fileName: file.name,
+        processingTime: Date.now() - startTime
+      });
+    } catch (processError) {
+      // 詳細記錄處理過程中的錯誤
+      const errorTime = Date.now();
+      const errorDetails = {
+        step: currentStep,
+        errorMessage: processError instanceof Error ? processError.message : String(processError),
+        errorName: processError instanceof Error ? processError.name : typeof processError,
+        errorCode: (processError as any)?.status || (processError as any)?.code || 'unknown',
+        stackTrace: processError instanceof Error ? processError.stack : undefined,
+        elapsedTime: errorTime - startTime,
+        stepElapsedTime: errorTime - stepStartTime,
+        timeStamp: new Date().toISOString(),
+        requestHeaders: Object.fromEntries([...request.headers.entries()].map(([key, value]) => [key, value])),
+        environment: {
+          nodeEnv: process.env.NODE_ENV,
+          region: process.env.NEXT_PUBLIC_REGION,
+          apiBaseUrl: process.env.NEXT_PUBLIC_API_BASE_URL,
+        }
+      };
+      
+      console.error(`[ERROR] 在步驟 "${currentStep}" 過程中出錯:`, errorDetails);
+      
+      // 重新拋出帶更多上下文的錯誤
+      const enhancedError = new Error(`處理失敗於步驟 "${currentStep}": ${processError.message || '未知錯誤'}`);
+      (enhancedError as any).originalError = processError;
+      (enhancedError as any).errorDetails = errorDetails;
+      throw enhancedError;
+    }
   } catch (error) {
-    console.error('详细错误:', error);
-    return NextResponse.json({
+    // 最終捕獲所有錯誤並返回詳細信息
+    const errorResponse = {
       success: false,
-      error: error instanceof Error ? error.message : '未知错误',
-      details: error instanceof Error ? error.stack : undefined
-    }, { status: 500 });
+      error: error instanceof Error ? error.message : '未知錯誤',
+      errorType: error instanceof Error ? error.name : typeof error,
+      errorCode: (error as any)?.status || (error as any)?.code || 'unknown',
+      details: error instanceof Error ? error.stack : undefined,
+      context: (error as any)?.errorDetails || {},
+      timestamp: new Date().toISOString()
+    };
+    
+    console.error('[FATAL] 文件上傳處理失敗:', errorResponse);
+    
+    return NextResponse.json(errorResponse, { status: 500 });
   }
 }

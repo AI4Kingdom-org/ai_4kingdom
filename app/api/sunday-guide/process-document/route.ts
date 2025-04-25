@@ -13,6 +13,9 @@ export async function POST(request: Request) {
     const { assistantId, vectorStoreId, fileName } = await request.json();
     
     console.log('[DEBUG] 處理文件請求:', { assistantId, vectorStoreId, fileName });
+    
+    // 記錄處理開始時間
+    const processingStartTime = Date.now();
 
     // 獲取助手信息
     const assistant = await openai.beta.assistants.retrieve(assistantId);
@@ -209,6 +212,12 @@ export async function POST(request: Request) {
       console.log(`[DEBUG] ${type} 內容處理完成, 長度: ${content.length} 字元`);
     }
 
+    // 獲取處理結束時間並計算總處理時間（毫秒）
+    const processingEndTime = Date.now();
+    const serverProcessingTime = processingEndTime - processingStartTime;
+    
+    console.log(`[DEBUG] 文件處理完成，總耗時: ${serverProcessingTime / 1000} 秒`);
+
     // 保存處理結果到數據庫
     console.log('[DEBUG] 保存處理結果到數據庫');
     await docClient.send(new PutCommand({
@@ -222,12 +231,16 @@ export async function POST(request: Request) {
         fullText: results.fullText,
         devotional: results.devotional,
         bibleStudy: results.bibleStudy,
+        processingTime: serverProcessingTime, // 保存處理時間
         Timestamp: new Date().toISOString()
       }
     }));
 
     console.log('[DEBUG] 處理完成，返回結果');
-    return NextResponse.json(results);
+    return NextResponse.json({
+      ...results,
+      serverProcessingTime // 將處理時間一併返回給前端
+    });
 
   } catch (error) {
     console.error('[ERROR] 文件處理失敗:', error);

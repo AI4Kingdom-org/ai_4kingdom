@@ -55,6 +55,64 @@
   color: #c62828;
   border-radius: 4px;
   font-size: 0.9rem;
+  border: 1px solid #ef9a9a;
+}
+
+.errorMessage {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+
+.toggleDetailsBtn {
+  background-color: transparent;
+  border: 1px solid #c62828;
+  color: #c62828;
+  padding: 0.3rem 0.6rem;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.toggleDetailsBtn:hover {
+  background-color: #ffcdd2;
+}
+
+.errorDetails {
+  margin-top: 0.75rem;
+  padding: 0.75rem;
+  background-color: #fff;
+  border: 1px solid #ffcdd2;
+  border-radius: 4px;
+  font-size: 0.85rem;
+}
+
+.errorDetailItem {
+  margin-bottom: 0.5rem;
+  line-height: 1.4;
+}
+
+.stackTrace {
+  margin-top: 0.75rem;
+}
+
+.stackTrace summary {
+  cursor: pointer;
+  color: #c62828;
+  margin-bottom: 0.5rem;
+}
+
+.stackTrace pre {
+  white-space: pre-wrap;
+  font-size: 0.8rem;
+  background-color: #f8f8f8;
+  padding: 0.5rem;
+  border-radius: 4px;
+  overflow-x: auto;
+  max-height: 200px;
+  color: #333;
 }
 
 .success {
