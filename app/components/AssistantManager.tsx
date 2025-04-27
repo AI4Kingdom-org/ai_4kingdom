@@ -241,12 +241,14 @@ export default function AssistantManager({
   const handleProcessDocument = async () => {
     setIsProcessing(true);
     setProcessing(true);
-    setProcessingStatus('processing');
     setTaskStatus(prev => ({ ...prev, summary: 'processing' }));
     setProcessingComplete(false);
     setProcessingError(null);
     
     try {
+      // 記錄處理開始時間
+      const startProcessingTime = new Date();
+      
       // 啟動處理流程
       const processResponse = await fetch('/api/sunday-guide/process-document', {
         method: 'POST',
@@ -275,19 +277,95 @@ export default function AssistantManager({
         throw new Error(`文件處理失敗: ${processResponse.status} - ${errorText}`);
       }
       
-      // 獲取初始回應
-      const initialResponse = await processResponse.json();
-      
-      if (initialResponse.taskId) {
-        // 啟動輪詢以獲取處理進度
-        if (pollingIntervalRef.current) {
-          clearInterval(pollingIntervalRef.current);
+      // 處理已啟動，設置輪詢檢查
+      const checkResult = async () => {
+        try {
+          // 直接查詢數據庫結果
+          const resultResponse = await fetch(`/api/sunday-guide/check-result?vectorStoreId=${VECTOR_STORE_IDS.JOHNSUNG}&fileName=${encodeURIComponent(uploadedFileName)}`);
+          
+          if (!resultResponse.ok) {
+            // 如果請求失敗，等待後再試
+            setTimeout(checkResult, 5000);
+            return;
+          }
+          
+          const result = await resultResponse.json();
+          
+          if (result.found) {
+            // 處理完成，更新界面
+            setProcessingComplete(true);
+            setProcessing(false);
+            
+            // 設置處理時間
+            const pdtTime = getPDTTime();
+            setUploadTime(pdtTime);
+            
+            // 計算處理時間
+            const processingTime = calculateTimeSpent(startProcessingTime, result.processingTime);
+            setTimeSpent(processingTime);
+            
+            // 更新任務狀態
+            setTaskStatus({
+              upload: 'completed',
+              summary: 'completed',
+              fullText: 'completed',
+              devotional: 'completed',
+              bibleStudy: 'completed'
+            });
+            
+            // 設置完成進度
+            setUploadProgress(100);
+            
+            // 回調函數
+            if (onFileProcessed) {
+              onFileProcessed(result);
+            }
+          } else {
+            // 未找到處理結果，繼續輪詢
+            setTimeout(checkResult, 5000);
+          }
+        } catch (err) {
+          console.error('檢查處理結果錯誤:', err);
+          // 發生錯誤時，繼續輪詢
+          setTimeout(checkResult, 5000);
         }
-        
-        pollingIntervalRef.current = setInterval(checkProcessingStatus, 5000); // 每5秒檢查一次
-      } else if (initialResponse.error) {
-        throw new Error(initialResponse.error);
-      }
+      };
+      
+      // 開始輪詢檢查結果
+      setTimeout(checkResult, 5000);
+      
+      // 每 30 秒更新一次處理階段，讓用戶看到進展
+      let currentStage = 0;
+      const stages = ['summary', 'fullText', 'devotional', 'bibleStudy'];
+      
+      const updateStage = () => {
+        if (!processingComplete && processing) {
+          currentStage = (currentStage + 1) % stages.length;
+          setTaskStatus(prev => {
+            const newStatus = { ...prev };
+            
+            // 將前面的階段標記為完成
+            for (let i = 0; i < currentStage; i++) {
+              newStatus[stages[i] as keyof TaskStatus] = 'completed';
+            }
+            
+            // 將當前階段標記為處理中
+            newStatus[stages[currentStage] as keyof TaskStatus] = 'processing';
+            
+            // 將後面的階段標記為空閒
+            for (let i = currentStage + 1; i < stages.length; i++) {
+              newStatus[stages[i] as keyof TaskStatus] = 'idle';
+            }
+            
+            return newStatus;
+          });
+          
+          setTimeout(updateStage, 30000);
+        }
+      };
+      
+      setTimeout(updateStage, 30000);
+      
     } catch (err) {
       console.error('文件處理錯誤:', err);
       setError(err instanceof Error ? err.message : '未知錯誤');
