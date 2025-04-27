@@ -131,36 +131,7 @@ export async function POST(request: Request) {
       );
       console.log(`[DEBUG] 文件成功添加到 Vector Store`);
 
-      // 3. 等待文件處理完成
-      console.log('[DEBUG] 等待文件處理完成...');
-      await waitForFileProcessing(vectorStoreId);
-      console.log('[DEBUG] 文件處理完成');
-
-      // 4. 創建線程並處理內容
-      const thread = await openai.beta.threads.create();
-      console.log('[DEBUG] 線程創建成功:', thread.id);
-      
-      const content = await processDocumentContent(assistantId, thread.id);
-      console.log('[DEBUG] 內容處理完成');
-
-      // 5. 更新 DynamoDB
-      const timestamp = new Date().toISOString();
-      const docClient = await createDynamoDBClient();
-      await docClient.send(new PutCommand({
-        TableName: 'SundayGuide',
-        Item: {
-          assistantId,
-          Timestamp: timestamp,
-          sermon_summary: content.sermon_summary,
-          daily_devotion: content.daily_devotion,
-          bible_study_guide: content.bible_study_guide,
-          vectorStoreId,
-          fileId: uploadedFile.id,
-          status: 'active'
-        }
-      }));
-      console.log('[DEBUG] DynamoDB 更新成功');
-
+      // 此處移除等待文件處理完成的流程，直接返回成功
       return NextResponse.json({ 
         success: true,
         fileId: uploadedFile.id,

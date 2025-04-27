@@ -316,15 +316,15 @@ export default function AssistantManager({
           
           {uploading && (
             <div className={styles.loadingCircle}>
-              <span className={styles.spinner}>⟳</span> 上傳中...
+              <span className={styles.spinner}>⟳</span> 上传中...
             </div>
           )}
           
           {uploadSuccess && !processing && !processingComplete && (
             <div className={styles.successMsg}>
-              文件「{uploadedFileName}」上傳成功！
+              文件「{uploadedFileName}」上传成功！
               <button onClick={handleProcessDocument} disabled={processing} style={{marginLeft:8}}>
-                {processing ? '处理中...' : '处理Go'}
+                {processing ? '处理中...' : '开始处理GO'}
               </button>
             </div>
           )}
