@@ -180,7 +180,20 @@ export default function AssistantManager({
       });
       
       if (!processResponse.ok) {
-        throw new Error('文件處理失敗');
+        let errorText = "未知錯誤";
+        try { 
+          const errorResponse = await processResponse.json();
+          errorText = errorResponse.details || errorResponse.error || "處理過程中發生錯誤";
+        } catch (e) { 
+          console.error("無法解析錯誤響應:", e); 
+          try {
+            errorText = await processResponse.text();
+          } catch (e2) {
+            console.error("無法讀取錯誤響應文本:", e2);
+          }
+        }
+        console.error("處理失敗狀態碼:", processResponse.status, errorText);
+        throw new Error(`文件處理失敗: ${processResponse.status} - ${errorText}`);
       }
       
       const result = await processResponse.json();
