@@ -40,10 +40,12 @@ export default function AssistantManager({
   const [startTime, setStartTime] = useState<Date | null>(null);
   const [timeSpent, setTimeSpent] = useState<string>('');
   const [fileName, setFileName] = useState<string>('');
-  const [currentProgress, setCurrentProgress] = useState<number>(0);
-  const [processingFileId, setProcessingFileId] = useState<string | null>(null);
-  const progressIntervalRef = useRef<NodeJS.Timeout | null>(null);
-
+  const [uploadSuccess, setUploadSuccess] = useState<boolean>(false);
+  const [uploadedFileName, setUploadedFileName] = useState<string>('');
+  const [uploading, setUploading] = useState<boolean>(false);
+  const [processing, setProcessing] = useState<boolean>(false);
+  const [processingComplete, setProcessingComplete] = useState<boolean>(false);
+  
   // 獲取PDT時間的輔助函數
   const getPDTTime = () => {
     const now = new Date();
@@ -99,10 +101,9 @@ export default function AssistantManager({
   };
 
   const handleFileUpload = async (file: File) => {
-    // 重置所有狀態
     setIsProcessing(true);
     setUploadProgress(0);
-    setCurrentProgress(0);
+    setUploading(true);
     setTaskStatus({
       upload: 'processing',
       summary: 'idle',
@@ -110,119 +111,42 @@ export default function AssistantManager({
       devotional: 'idle',
       bibleStudy: 'idle'
     });
-    
-    // 記錄開始時間和文件名
-    const start = new Date();
-    setStartTime(start);
+    setStartTime(new Date());
     setFileName(file.name);
+    setUploadSuccess(false);
+    setUploadedFileName('');
+    setProcessingComplete(false);
     
     try {
       setError(null);
-
-      // 建立 FormData
       const formData = new FormData();
       formData.append('file', file);
       
-      // 初始階段完成 - 10%
-      setCurrentProgress(10);
-      setUploadProgress(10);
-
-      // 開始進度模擬
-      startProgressSimulation(10);
-
-      // 上傳文件到 vector store
+      // 開始上傳文件
       const uploadResponse = await fetch(`/api/vector-store/upload?vectorStoreId=${VECTOR_STORE_IDS.JOHNSUNG}&assistantId=${ASSISTANT_IDS.SUNDAY_GUIDE}`, {
         method: 'POST',
         body: formData
       });
-
+      
       if (!uploadResponse.ok) {
         let errorText = "未知錯誤";
-        try {
-          errorText = await uploadResponse.text();
-        } catch (e) {
-          console.error("無法讀取錯誤響應:", e);
-        }
+        try { errorText = await uploadResponse.text(); } catch (e) { console.error("無法讀取錯誤響應:", e); }
         console.error("上傳失敗狀態碼:", uploadResponse.status, errorText);
         throw new Error(`文件上傳失敗: ${uploadResponse.status} - ${errorText}`);
       }
       
-      // 標記上傳完成
-      setTaskStatus(prev => ({ ...prev, upload: 'completed', summary: 'processing' }));
+      // 上傳成功，更新狀態
+      setTaskStatus(prev => ({ ...prev, upload: 'completed' }));
+      setUploadSuccess(true);
+      setUploadedFileName(file.name);
+      setUploading(false);
+      setUploadProgress(20);
       
-      // 開始處理文件
-      const processResponse = await fetch('/api/sunday-guide/process-document', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          assistantId: ASSISTANT_IDS.SUNDAY_GUIDE,
-          vectorStoreId: VECTOR_STORE_IDS.JOHNSUNG,
-          fileName: file.name
-        })
-      });
-
-      if (!processResponse.ok) {
-        throw new Error('文件處理失敗');
-      }
-      
-      // 停止進度模擬
-      if (progressIntervalRef.current) {
-        clearInterval(progressIntervalRef.current);
-        progressIntervalRef.current = null;
-      }
-      
-      // 讀取處理結果
-      const result = await processResponse.json();
-      
-      // 查看結果中包含哪些部分，並相應更新任務狀態
-      if (result.summary) {
-        setTaskStatus(prev => ({ ...prev, summary: 'completed', fullText: 'processing' }));
-      }
-      
-      if (result.fullText) {
-        setTaskStatus(prev => ({ ...prev, fullText: 'completed', devotional: 'processing' }));
-      }
-      
-      if (result.devotional) {
-        setTaskStatus(prev => ({ ...prev, devotional: 'completed', bibleStudy: 'processing' }));
-      }
-      
-      if (result.bibleStudy) {
-        setTaskStatus(prev => ({ ...prev, bibleStudy: 'completed' }));
-      }
-      
-      // 設置PDT時間
-      const pdtTime = getPDTTime();
-      setUploadTime(pdtTime);
-      
-      // 計算並設置處理時間
-      if (startTime) {
-        const timeSpentStr = calculateTimeSpent(startTime, result.serverProcessingTime);
-        setTimeSpent(timeSpentStr);
-      }
-      
-      // 全部完成 - 100%
-      setCurrentProgress(100);
-      setUploadProgress(100);
-      
-      // 回傳處理結果
-      if (onFileProcessed) {
-        onFileProcessed(result);
-      }
-
     } catch (err) {
-      // 停止進度模擬
-      if (progressIntervalRef.current) {
-        clearInterval(progressIntervalRef.current);
-        progressIntervalRef.current = null;
-      }
-      
       console.error('文件處理錯誤:', err);
       setError(err instanceof Error ? err.message : '未知錯誤');
       setUploadProgress(0);
-      setCurrentProgress(0);
+      setUploading(false);
       setTaskStatus({
         upload: 'idle',
         summary: 'idle',
@@ -230,66 +154,78 @@ export default function AssistantManager({
         devotional: 'idle',
         bibleStudy: 'idle'
       });
+      setUploadSuccess(false);
+      setUploadedFileName('');
     } finally {
       setIsProcessing(false);
     }
   };
 
-  // 漸進式更新進度條
-  const startProgressSimulation = (initialProgress: number) => {
-    if (progressIntervalRef.current) {
-      clearInterval(progressIntervalRef.current);
-    }
-
-    // 設定初始進度
-    setCurrentProgress(initialProgress);
-    setUploadProgress(initialProgress);
-
-    // 定義每個階段的目標進度
-    const stages = [
-      { target: 20, increment: 0.1, delay: 200 },  // 上傳階段 10-20%
-      { target: 45, increment: 0.05, delay: 500 }, // 處理總結階段 20-45%
-      { target: 65, increment: 0.04, delay: 600 }, // 處理全文階段 45-65%
-      { target: 85, increment: 0.05, delay: 400 }, // 處理靈修階段 65-85%
-      { target: 95, increment: 0.03, delay: 500 }  // 處理查經階段 85-95%
-    ];
-
-    let currentStage = 0;
-
-    progressIntervalRef.current = setInterval(() => {
-      setCurrentProgress(prevProgress => {
-        // 如果已經達到當前階段的目標，進入下一階段
-        if (prevProgress >= stages[currentStage].target) {
-          currentStage++;
-          
-          // 如果所有階段都完成了，停止模擬
-          if (currentStage >= stages.length) {
-            if (progressIntervalRef.current) {
-              clearInterval(progressIntervalRef.current);
-              progressIntervalRef.current = null;
-            }
-            return prevProgress;
-          }
-        }
-
-        // 計算新的進度
-        const newProgress = prevProgress + stages[currentStage].increment;
-        const stageTarget = stages[currentStage].target;
-
-        // 確保不超過當前階段的目標進度
-        const progress = Math.min(newProgress, stageTarget);
-        setUploadProgress(progress);
-        return progress;
+  const handleProcessDocument = async () => {
+    setIsProcessing(true);
+    setProcessing(true);
+    setTaskStatus(prev => ({ ...prev, summary: 'processing' }));
+    setProcessingComplete(false);
+    
+    try {
+      setError(null);
+      const processResponse = await fetch('/api/sunday-guide/process-document', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          assistantId: ASSISTANT_IDS.SUNDAY_GUIDE,
+          vectorStoreId: VECTOR_STORE_IDS.JOHNSUNG,
+          fileName: uploadedFileName
+        })
       });
-    }, stages[currentStage].delay);
+      
+      if (!processResponse.ok) {
+        throw new Error('文件處理失敗');
+      }
+      
+      const result = await processResponse.json();
+      
+      if (result.summary) {
+        setTaskStatus(prev => ({ ...prev, summary: 'completed', fullText: 'processing' }));
+      }
+      if (result.fullText) {
+        setTaskStatus(prev => ({ ...prev, fullText: 'completed', devotional: 'processing' }));
+      }
+      if (result.devotional) {
+        setTaskStatus(prev => ({ ...prev, devotional: 'completed', bibleStudy: 'processing' }));
+      }
+      if (result.bibleStudy) {
+        setTaskStatus(prev => ({ ...prev, bibleStudy: 'completed' }));
+      }
+      
+      const pdtTime = getPDTTime();
+      setUploadTime(pdtTime);
+      
+      if (startTime) {
+        const timeSpentStr = calculateTimeSpent(startTime, result.serverProcessingTime);
+        setTimeSpent(timeSpentStr);
+      }
+      
+      setUploadProgress(100);
+      setProcessingComplete(true);
+      
+      if (onFileProcessed) {
+        onFileProcessed(result);
+      }
+    } catch (err) {
+      console.error('文件處理錯誤:', err);
+      setError(err instanceof Error ? err.message : '未知錯誤');
+      setTaskStatus(prev => ({ ...prev, summary: 'idle', fullText: 'idle', devotional: 'idle', bibleStudy: 'idle' }));
+    } finally {
+      setIsProcessing(false);
+      setProcessing(false);
+    }
   };
 
   // 清理定時器
   useEffect(() => {
     return () => {
-      if (progressIntervalRef.current) {
-        clearInterval(progressIntervalRef.current);
-      }
+      // 不再需要清理進度條的定時器
     };
   }, []);
 
@@ -377,26 +313,41 @@ export default function AssistantManager({
               }
             }}
           />
+          
+          {uploading && (
+            <div className={styles.loadingCircle}>
+              <span className={styles.spinner}>⟳</span> 上傳中...
+            </div>
+          )}
+          
+          {uploadSuccess && !processing && !processingComplete && (
+            <div className={styles.successMsg}>
+              文件「{uploadedFileName}」上傳成功！
+              <button onClick={handleProcessDocument} disabled={processing} style={{marginLeft:8}}>
+                {processing ? '处理中...' : '处理Go'}
+              </button>
+            </div>
+          )}
+          
+          {processing && (
+            <div className={styles.loadingCircle}>
+              <span className={styles.spinner}>⟳</span> 处理中...
+            </div>
+          )}
+          
+          {processingComplete && (
+            <div className={styles.successMsg}>
+              <span style={{color:'green'}}>✓</span> 文件处理完成！您可以在下方查看处理结果。
+            </div>
+          )}
         </div>
       </div>
       
-      {currentProgress > 0 && currentProgress < 100 && (
-        <div className={stylesGuide.progressContainer}>
-          <div className={stylesGuide.progressLabel}>处理进度: {Math.round(currentProgress)}%</div>
-          <div className={stylesGuide.progressBar}>
-            <div 
-              className={stylesGuide.progressBarFill} 
-              style={{ width: `${currentProgress}%` }}
-            />
-          </div>
-        </div>
-      )}
-      
-      {fileName && timeSpent && (
+      {fileName && timeSpent && processingComplete && (
         <div className={stylesGuide.timeSpent}>
           <span>
             <span className={stylesGuide.timeIcon}>⏱</span> 
-            文件：{fileName} | 处理完成，耗时：{timeSpent}
+            文件：{fileName} | 处理完成，耗時：{timeSpent}
           </span>
         </div>
       )}
