@@ -45,6 +45,9 @@ export default function AssistantManager({
   const [uploading, setUploading] = useState<boolean>(false);
   const [processing, setProcessing] = useState<boolean>(false);
   const [processingComplete, setProcessingComplete] = useState<boolean>(false);
+  const [processingError, setProcessingError] = useState<string | null>(null);
+  const [processingStatus, setProcessingStatus] = useState<string>('idle');
+  const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
   
   // 獲取PDT時間的輔助函數
   const getPDTTime = () => {
@@ -161,14 +164,90 @@ export default function AssistantManager({
     }
   };
 
+  const checkProcessingStatus = async () => {
+    try {
+      const statusResponse = await fetch(`/api/sunday-guide/progress?vectorStoreId=${VECTOR_STORE_IDS.JOHNSUNG}&fileName=${encodeURIComponent(uploadedFileName)}`);
+      
+      if (!statusResponse.ok) {
+        console.error('檢查處理狀態失敗:', statusResponse.status);
+        return;
+      }
+      
+      const statusData = await statusResponse.json();
+      
+      if (statusData.status === 'completed') {
+        // 處理完成，獲取結果
+        setProcessingStatus('completed');
+        setProcessingComplete(true);
+        setProcessing(false);
+        
+        if (pollingIntervalRef.current) {
+          clearInterval(pollingIntervalRef.current);
+          pollingIntervalRef.current = null;
+        }
+        
+        // 設置時間相關信息
+        const pdtTime = getPDTTime();
+        setUploadTime(pdtTime);
+        
+        if (startTime) {
+          const timeSpentStr = calculateTimeSpent(startTime, statusData.processingTime);
+          setTimeSpent(timeSpentStr);
+        }
+        
+        // 更新任務狀態
+        setTaskStatus({
+          upload: 'completed',
+          summary: 'completed',
+          fullText: 'completed',
+          devotional: 'completed',
+          bibleStudy: 'completed'
+        });
+        
+        // 設置處理結果
+        if (onFileProcessed && statusData.result) {
+          onFileProcessed(statusData.result);
+        }
+        
+        setUploadProgress(100);
+      } else if (statusData.status === 'failed') {
+        // 處理失敗
+        setProcessingStatus('failed');
+        setProcessingError(statusData.error || '文件處理失敗');
+        setProcessing(false);
+        
+        if (pollingIntervalRef.current) {
+          clearInterval(pollingIntervalRef.current);
+          pollingIntervalRef.current = null;
+        }
+      } else if (statusData.status === 'processing') {
+        // 更新處理階段
+        setProcessingStatus('processing');
+        if (statusData.stage === 'summary') {
+          setTaskStatus(prev => ({ ...prev, summary: 'processing' }));
+        } else if (statusData.stage === 'fullText') {
+          setTaskStatus(prev => ({ ...prev, summary: 'completed', fullText: 'processing' }));
+        } else if (statusData.stage === 'devotional') {
+          setTaskStatus(prev => ({ ...prev, summary: 'completed', fullText: 'completed', devotional: 'processing' }));
+        } else if (statusData.stage === 'bibleStudy') {
+          setTaskStatus(prev => ({ ...prev, summary: 'completed', fullText: 'completed', devotional: 'completed', bibleStudy: 'processing' }));
+        }
+      }
+    } catch (err) {
+      console.error('檢查處理狀態出錯:', err);
+    }
+  };
+
   const handleProcessDocument = async () => {
     setIsProcessing(true);
     setProcessing(true);
+    setProcessingStatus('processing');
     setTaskStatus(prev => ({ ...prev, summary: 'processing' }));
     setProcessingComplete(false);
+    setProcessingError(null);
     
     try {
-      setError(null);
+      // 啟動處理流程
       const processResponse = await fetch('/api/sunday-guide/process-document', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -196,49 +275,37 @@ export default function AssistantManager({
         throw new Error(`文件處理失敗: ${processResponse.status} - ${errorText}`);
       }
       
-      const result = await processResponse.json();
+      // 獲取初始回應
+      const initialResponse = await processResponse.json();
       
-      if (result.summary) {
-        setTaskStatus(prev => ({ ...prev, summary: 'completed', fullText: 'processing' }));
-      }
-      if (result.fullText) {
-        setTaskStatus(prev => ({ ...prev, fullText: 'completed', devotional: 'processing' }));
-      }
-      if (result.devotional) {
-        setTaskStatus(prev => ({ ...prev, devotional: 'completed', bibleStudy: 'processing' }));
-      }
-      if (result.bibleStudy) {
-        setTaskStatus(prev => ({ ...prev, bibleStudy: 'completed' }));
-      }
-      
-      const pdtTime = getPDTTime();
-      setUploadTime(pdtTime);
-      
-      if (startTime) {
-        const timeSpentStr = calculateTimeSpent(startTime, result.serverProcessingTime);
-        setTimeSpent(timeSpentStr);
-      }
-      
-      setUploadProgress(100);
-      setProcessingComplete(true);
-      
-      if (onFileProcessed) {
-        onFileProcessed(result);
+      if (initialResponse.taskId) {
+        // 啟動輪詢以獲取處理進度
+        if (pollingIntervalRef.current) {
+          clearInterval(pollingIntervalRef.current);
+        }
+        
+        pollingIntervalRef.current = setInterval(checkProcessingStatus, 5000); // 每5秒檢查一次
+      } else if (initialResponse.error) {
+        throw new Error(initialResponse.error);
       }
     } catch (err) {
       console.error('文件處理錯誤:', err);
       setError(err instanceof Error ? err.message : '未知錯誤');
+      setProcessingError(err instanceof Error ? err.message : '未知錯誤');
+      setProcessingStatus('failed');
       setTaskStatus(prev => ({ ...prev, summary: 'idle', fullText: 'idle', devotional: 'idle', bibleStudy: 'idle' }));
+      setProcessing(false);
     } finally {
       setIsProcessing(false);
-      setProcessing(false);
     }
   };
 
-  // 清理定時器
+  // 清理輪詢間隔
   useEffect(() => {
     return () => {
-      // 不再需要清理進度條的定時器
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current);
+      }
     };
   }, []);
 
@@ -337,7 +404,7 @@ export default function AssistantManager({
             <div className={styles.successMsg}>
               文件「{uploadedFileName}」上传成功！
               <button onClick={handleProcessDocument} disabled={processing} style={{marginLeft:8}}>
-                {processing ? '处理中...' : '开始处理GO'}
+                {processing ? '处理中...' : '开始处理'}
               </button>
             </div>
           )}
@@ -345,6 +412,20 @@ export default function AssistantManager({
           {processing && (
             <div className={styles.loadingCircle}>
               <span className={styles.spinner}>⟳</span> 处理中...
+              {processingStatus === 'processing' && (
+                <span style={{marginLeft: '10px'}}>
+                  {taskStatus.summary === 'processing' && '生成摘要中...'}
+                  {taskStatus.fullText === 'processing' && '整理文本中...'}
+                  {taskStatus.devotional === 'processing' && '生成靈修中...'}
+                  {taskStatus.bibleStudy === 'processing' && '生成查經指引中...'}
+                </span>
+              )}
+            </div>
+          )}
+          
+          {processingError && (
+            <div className={styles.error} style={{marginTop: '10px'}}>
+              處理失敗: {processingError}
             </div>
           )}
           

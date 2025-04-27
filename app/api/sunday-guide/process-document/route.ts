@@ -4,9 +4,224 @@ import { createDynamoDBClient } from '@/app/utils/dynamodb';
 import { PutCommand, ScanCommand } from '@aws-sdk/lib-dynamodb';
 
 const SUNDAY_GUIDE_TABLE = process.env.NEXT_PUBLIC_SUNDAY_GUIDE_TABLE || 'SundayGuide';
+const PROGRESS_TABLE = process.env.NEXT_PUBLIC_SUNDAY_GUIDE_PROGRESS || 'SundayGuideProgress';
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
 });
+
+// 更新處理進度的輔助函數
+async function updateProgress(data: {
+  vectorStoreId: string;
+  fileName: string;
+  taskId: string;
+  status: 'queued' | 'processing' | 'completed' | 'failed';
+  stage?: string;
+  progress?: number;
+  error?: string;
+}) {
+  try {
+    const docClient = await createDynamoDBClient();
+    await docClient.send(new PutCommand({
+      TableName: PROGRESS_TABLE,
+      Item: {
+        ...data,
+        updatedAt: new Date().toISOString()
+      }
+    }));
+    console.log(`[DEBUG] 進度更新成功: ${data.status} - ${data.stage || 'N/A'}`);
+  } catch (error) {
+    console.error('[ERROR] 進度更新失敗:', error);
+  }
+}
+
+// 非同步處理文件內容
+async function processDocumentAsync(params: {
+  assistantId: string;
+  vectorStoreId: string;
+  fileName: string;
+  taskId: string;
+  fileId?: string;
+}) {
+  const { assistantId, vectorStoreId, fileName, taskId, fileId } = params;
+  const processingStartTime = Date.now();
+  
+  try {
+    // 更新狀態為處理中
+    await updateProgress({
+      vectorStoreId,
+      fileName,
+      taskId,
+      status: 'processing',
+      stage: 'summary',
+      progress: 10
+    });
+    
+    // 創建一個新的線程
+    const thread = await openai.beta.threads.create();
+    console.log(`[DEBUG] 創建線程 ID: ${thread.id}`);
+    
+    // 發送一個初始消息，提供文件名信息
+    await openai.beta.threads.messages.create(thread.id, {
+      role: 'user',
+      content: `請幫我分析文件 "${fileName}"。我需要獲取文件內容的摘要、全文、靈修指引和查經指引。`
+    });
+    console.log('[DEBUG] 初始消息已發送到線程');
+
+    // 執行助手，使用明確的指示
+    const initialRun = await openai.beta.threads.runs.create(thread.id, {
+      assistant_id: assistantId,
+      instructions: `請使用文件搜索工具查詢並分析文件 "${fileName}"。你可以從vector store中獲取文件內容。請基於文件內容進行分析。如果找不到任何文件，請明確告知。`
+    });
+    
+    // 等待初始處理完成
+    let initialRunStatus = await openai.beta.threads.runs.retrieve(thread.id, initialRun.id);
+    console.log(`[DEBUG] 初始處理狀態: ${initialRunStatus.status}`);
+    
+    while (initialRunStatus.status === 'queued' || initialRunStatus.status === 'in_progress') {
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      initialRunStatus = await openai.beta.threads.runs.retrieve(thread.id, initialRun.id);
+      console.log(`[DEBUG] 初始處理狀態更新: ${initialRunStatus.status}`);
+    }
+    
+    if (initialRunStatus.status !== 'completed') {
+      throw new Error(`初始處理失敗: ${initialRunStatus.status}`);
+    }
+    
+    // 获取初步回应，检查是否能访问文件
+    const initialMessages = await openai.beta.threads.messages.list(thread.id);
+    const initialResponse = initialMessages.data[0].content
+      .filter(content => content.type === 'text')
+      .map(content => (content.type === 'text' ? content.text.value : ''))
+      .join('\n');
+    
+    console.log(`[DEBUG] 初始回應: ${initialResponse.substring(0, 200)}...`);
+    
+    // 检查响应中是否包含无法找到文件的信息
+    if (initialResponse.includes('找不到文件') || 
+        initialResponse.includes('无法访问') || 
+        initialResponse.includes('没有找到') ||
+        initialResponse.includes('不存在')) {
+      console.error('[ERROR] 助手无法访问文件');
+      throw new Error('助手无法访问上传的文件，请确保文件已正确上传并与助手关联');
+    }
+    
+    console.log('[DEBUG] 初始處理完成，助手可以访问文件，开始处理不同內容類型');
+
+    // 發送處理請求，生成不同類型的內容
+    const contentTypes = [
+      { type: 'summary', prompt: '請總結這篇文章的主要內容，以簡潔的方式呈現重點。請確保包含所有關鍵信息。' },
+      { type: 'fullText', prompt: '請完整保留原文內容，並加入適當的段落分隔。不要省略任何內容。' },
+      { type: 'devotional', prompt: '請基於這篇文章的內容，提供每日靈修指引，包含經文應用和禱告建議。' },
+      { type: 'bibleStudy', prompt: '請為這篇文章設計查經指引，包含相關經文、討論問題和應用建議。' }
+    ];
+
+    const results: Record<string, string> = {};
+
+    for (const { type, prompt } of contentTypes) {
+      // 更新當前處理階段
+      await updateProgress({
+        vectorStoreId,
+        fileName,
+        taskId,
+        status: 'processing',
+        stage: type,
+        progress: type === 'summary' ? 25 : 
+                  type === 'fullText' ? 50 : 
+                  type === 'devotional' ? 75 : 90
+      });
+      
+      console.log(`[DEBUG] 處理 ${type} 內容...`);
+      
+      // 發送用戶消息
+      await openai.beta.threads.messages.create(thread.id, {
+        role: 'user',
+        content: prompt
+      });
+
+      // 執行助手
+      const run = await openai.beta.threads.runs.create(thread.id, {
+        assistant_id: assistantId,
+        instructions: `請基於文件 "${fileName}" 的內容回應用戶的請求。使用文件搜索工具確保你能訪問到文件的完整內容。${prompt}`
+      });
+
+      // 等待處理完成
+      let runStatus = await openai.beta.threads.runs.retrieve(thread.id, run.id);
+      console.log(`[DEBUG] ${type} 處理狀態: ${runStatus.status}`);
+      
+      let attempts = 0;
+      const maxAttempts = 60; // 最多等待60次(大约10分钟)
+      
+      while ((runStatus.status === 'queued' || runStatus.status === 'in_progress') && attempts < maxAttempts) {
+        await new Promise(resolve => setTimeout(resolve, 10000)); // 等待10秒再查询
+        runStatus = await openai.beta.threads.runs.retrieve(thread.id, run.id);
+        console.log(`[DEBUG] ${type} 處理狀態更新: ${runStatus.status} (尝试 ${++attempts}/${maxAttempts})`);
+      }
+
+      if (runStatus.status !== 'completed') {
+        throw new Error(`處理 ${type} 內容失敗: ${runStatus.status}`);
+      }
+
+      // 獲取助手回覆
+      const messages = await openai.beta.threads.messages.list(thread.id);
+      const lastMessage = messages.data[0];
+      const content = lastMessage.content
+        .filter(content => content.type === 'text')
+        .map(content => (content.type === 'text' ? content.text.value : ''))
+        .join('\n');
+
+      results[type] = content;
+      console.log(`[DEBUG] ${type} 內容處理完成, 長度: ${content.length} 字元`);
+    }
+
+    // 獲取處理結束時間並計算總處理時間（毫秒）
+    const processingEndTime = Date.now();
+    const serverProcessingTime = processingEndTime - processingStartTime;
+    
+    console.log(`[DEBUG] 文件處理完成，總耗時: ${serverProcessingTime / 1000} 秒`);
+
+    // 保存處理結果到數據庫
+    console.log('[DEBUG] 保存處理結果到數據庫');
+    const docClient = await createDynamoDBClient();
+    await docClient.send(new PutCommand({
+      TableName: SUNDAY_GUIDE_TABLE,
+      Item: {
+        assistantId,
+        vectorStoreId,
+        fileName,
+        fileId: fileId || vectorStoreId,
+        summary: results.summary,
+        fullText: results.fullText,
+        devotional: results.devotional,
+        bibleStudy: results.bibleStudy,
+        processingTime: serverProcessingTime,
+        Timestamp: new Date().toISOString()
+      }
+    }));
+
+    // 更新完成狀態
+    await updateProgress({
+      vectorStoreId,
+      fileName,
+      taskId,
+      status: 'completed',
+      progress: 100
+    });
+    
+    console.log('[DEBUG] 處理完成，結果已保存');
+    return true;
+  } catch (error) {
+    console.error('[ERROR] 非同步處理失敗:', error);
+    // 更新失敗狀態
+    await updateProgress({
+      vectorStoreId,
+      fileName,
+      taskId,
+      status: 'failed',
+      error: error instanceof Error ? error.message : '未知錯誤'
+    });
+    return false;
+  }
+}
 
 export async function POST(request: Request) {
   try {
@@ -14,9 +229,13 @@ export async function POST(request: Request) {
     
     console.log('[DEBUG] 處理文件請求:', { assistantId, vectorStoreId, fileName });
     
-    // 記錄處理開始時間
-    const processingStartTime = Date.now();
-
+    if (!assistantId || !vectorStoreId || !fileName) {
+      return NextResponse.json(
+        { error: '缺少必要參數', details: { assistantId, vectorStoreId, fileName } },
+        { status: 400 }
+      );
+    }
+    
     // 獲取助手信息
     const assistant = await openai.beta.assistants.retrieve(assistantId);
     console.log(`[DEBUG] 助手信息:`, {
@@ -103,143 +322,37 @@ export async function POST(request: Request) {
       console.error('[ERROR] 获取 Vector Store 文件失败:', vectorStoreError);
     }
 
-    if (!fileId) {
-      console.warn('[WARN] 無法獲取文件ID，將使用vectorStoreId作為標識，但文件處理可能不準確');
-    }
-    
-    // 創建一個新的線程
-    const thread = await openai.beta.threads.create();
-    console.log(`[DEBUG] 創建線程 ID: ${thread.id}`);
-    
-    // 發送一個初始消息，提供文件名信息
-    await openai.beta.threads.messages.create(thread.id, {
-      role: 'user',
-      content: `請幫我分析文件 "${fileName}"。我需要獲取文件內容的摘要、全文、靈修指引和查經指引。`
+    // 生成一個任務ID
+    const taskId = `task_${Date.now()}_${Math.random().toString(36).substring(2, 10)}`;
+
+    // 初始化進度記錄
+    await updateProgress({
+      vectorStoreId,
+      fileName,
+      taskId,
+      status: 'queued',
+      stage: 'initialization',
+      progress: 5
     });
-    console.log('[DEBUG] 初始消息已發送到線程');
 
-    // 執行助手，使用明確的指示
-    const initialRun = await openai.beta.threads.runs.create(thread.id, {
-      assistant_id: assistantId,
-      instructions: `請使用文件搜索工具查詢並分析文件 "${fileName}"。你可以從vector store中獲取文件內容。請基於文件內容進行分析。如果找不到任何文件，請明確告知。`
-    });
-    
-    // 等待初始處理完成
-    let initialRunStatus = await openai.beta.threads.runs.retrieve(thread.id, initialRun.id);
-    console.log(`[DEBUG] 初始處理狀態: ${initialRunStatus.status}`);
-    
-    while (initialRunStatus.status === 'queued' || initialRunStatus.status === 'in_progress') {
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      initialRunStatus = await openai.beta.threads.runs.retrieve(thread.id, initialRun.id);
-      console.log(`[DEBUG] 初始處理狀態更新: ${initialRunStatus.status}`);
-    }
-    
-    if (initialRunStatus.status !== 'completed') {
-      throw new Error(`初始處理失敗: ${initialRunStatus.status}`);
-    }
-    
-    // 获取初步回应，检查是否能访问文件
-    const initialMessages = await openai.beta.threads.messages.list(thread.id);
-    const initialResponse = initialMessages.data[0].content
-      .filter(content => content.type === 'text')
-      .map(content => (content.type === 'text' ? content.text.value : ''))
-      .join('\n');
-    
-    console.log(`[DEBUG] 初始回應: ${initialResponse.substring(0, 200)}...`);
-    
-    // 检查响应中是否包含无法找到文件的信息
-    if (initialResponse.includes('找不到文件') || 
-        initialResponse.includes('无法访问') || 
-        initialResponse.includes('没有找到') ||
-        initialResponse.includes('不存在')) {
-      console.error('[ERROR] 助手无法访问文件');
-      throw new Error('助手无法访问上传的文件，请确保文件已正确上传并与助手关联');
-    }
-    
-    console.log('[DEBUG] 初始處理完成，助手可以访问文件，开始处理不同內容類型');
-
-    // 發送處理請求，生成不同類型的內容
-    const contentTypes = [
-      { type: 'summary', prompt: '請總結這篇文章的主要內容，以簡潔的方式呈現重點。請確保包含所有關鍵信息。' },
-      { type: 'fullText', prompt: '請完整保留原文內容，並加入適當的段落分隔。不要省略任何內容。' },
-      { type: 'devotional', prompt: '請基於這篇文章的內容，提供每日靈修指引，包含經文應用和禱告建議。' },
-      { type: 'bibleStudy', prompt: '請為這篇文章設計查經指引，包含相關經文、討論問題和應用建議。' }
-    ];
-
-    const results: Record<string, string> = {};
-
-    for (const { type, prompt } of contentTypes) {
-      console.log(`[DEBUG] 處理 ${type} 內容...`);
-      
-      // 發送用戶消息
-      await openai.beta.threads.messages.create(thread.id, {
-        role: 'user',
-        content: prompt
-      });
-
-      // 執行助手
-      const run = await openai.beta.threads.runs.create(thread.id, {
-        assistant_id: assistantId,
-        instructions: `請基於文件 "${fileName}" 的內容回應用戶的請求。使用文件搜索工具確保你能訪問到文件的完整內容。${prompt}`
-      });
-
-      // 等待處理完成
-      let runStatus = await openai.beta.threads.runs.retrieve(thread.id, run.id);
-      console.log(`[DEBUG] ${type} 處理狀態: ${runStatus.status}`);
-      
-      let attempts = 0;
-      const maxAttempts = 60; // 最多等待60次(大约10分钟)
-      
-      while ((runStatus.status === 'queued' || runStatus.status === 'in_progress') && attempts < maxAttempts) {
-        await new Promise(resolve => setTimeout(resolve, 10000)); // 等待10秒再查询
-        runStatus = await openai.beta.threads.runs.retrieve(thread.id, run.id);
-        console.log(`[DEBUG] ${type} 處理狀態更新: ${runStatus.status} (尝试 ${++attempts}/${maxAttempts})`);
-      }
-
-      if (runStatus.status !== 'completed') {
-        throw new Error(`處理 ${type} 內容失敗: ${runStatus.status}`);
-      }
-
-      // 獲取助手回覆
-      const messages = await openai.beta.threads.messages.list(thread.id);
-      const lastMessage = messages.data[0];
-      const content = lastMessage.content
-        .filter(content => content.type === 'text')
-        .map(content => (content.type === 'text' ? content.text.value : ''))
-        .join('\n');
-
-      results[type] = content;
-      console.log(`[DEBUG] ${type} 內容處理完成, 長度: ${content.length} 字元`);
-    }
-
-    // 獲取處理結束時間並計算總處理時間（毫秒）
-    const processingEndTime = Date.now();
-    const serverProcessingTime = processingEndTime - processingStartTime;
-    
-    console.log(`[DEBUG] 文件處理完成，總耗時: ${serverProcessingTime / 1000} 秒`);
-
-    // 保存處理結果到數據庫
-    console.log('[DEBUG] 保存處理結果到數據庫');
-    await docClient.send(new PutCommand({
-      TableName: SUNDAY_GUIDE_TABLE,
-      Item: {
+    // 啟動非同步處理 (使用setTimeout確保API立即返回，不阻塞請求)
+    setTimeout(() => {
+      processDocumentAsync({
         assistantId,
         vectorStoreId,
         fileName,
-        fileId: fileId || vectorStoreId,
-        summary: results.summary,
-        fullText: results.fullText,
-        devotional: results.devotional,
-        bibleStudy: results.bibleStudy,
-        processingTime: serverProcessingTime, // 保存處理時間
-        Timestamp: new Date().toISOString()
-      }
-    }));
+        taskId,
+        fileId
+      }).catch(err => {
+        console.error('[ERROR] 非同步處理出錯:', err);
+      });
+    }, 100);
 
-    console.log('[DEBUG] 處理完成，返回結果');
+    // 立即返回任務ID，不等待處理完成
     return NextResponse.json({
-      ...results,
-      serverProcessingTime // 將處理時間一併返回給前端
+      success: true,
+      message: '文件處理已啟動',
+      taskId
     });
 
   } catch (error) {
