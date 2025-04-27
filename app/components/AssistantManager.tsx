@@ -137,7 +137,14 @@ export default function AssistantManager({
       });
 
       if (!uploadResponse.ok) {
-        throw new Error('文件上傳失敗');
+        let errorText = "未知錯誤";
+        try {
+          errorText = await uploadResponse.text();
+        } catch (e) {
+          console.error("無法讀取錯誤響應:", e);
+        }
+        console.error("上傳失敗狀態碼:", uploadResponse.status, errorText);
+        throw new Error(`文件上傳失敗: ${uploadResponse.status} - ${errorText}`);
       }
       
       // 標記上傳完成
@@ -395,4 +402,4 @@ export default function AssistantManager({
       )}
     </div>
   );
-} 
+}
