@@ -4,57 +4,25 @@ import { createDynamoDBClient } from '@/app/utils/dynamodb';
 import { PutCommand, ScanCommand } from '@aws-sdk/lib-dynamodb';
 
 const SUNDAY_GUIDE_TABLE = process.env.NEXT_PUBLIC_SUNDAY_GUIDE_TABLE || 'SundayGuide';
-const PROGRESS_TABLE = process.env.NEXT_PUBLIC_SUNDAY_GUIDE_PROGRESS || 'SundayGuideProgress';
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
 });
 
-// 更新處理進度的輔助函數
-async function updateProgress(data: {
-  vectorStoreId: string;
-  fileName: string;
-  taskId: string;
-  status: 'queued' | 'processing' | 'completed' | 'failed';
-  stage?: string;
-  progress?: number;
-  error?: string;
-}) {
-  try {
-    const docClient = await createDynamoDBClient();
-    await docClient.send(new PutCommand({
-      TableName: PROGRESS_TABLE,
-      Item: {
-        ...data,
-        updatedAt: new Date().toISOString()
-      }
-    }));
-    console.log(`[DEBUG] 進度更新成功: ${data.status} - ${data.stage || 'N/A'}`);
-  } catch (error) {
-    console.error('[ERROR] 進度更新失敗:', error);
-  }
-}
+// 移除 updateProgress 函數，不再需要進度表
 
 // 非同步處理文件內容
 async function processDocumentAsync(params: {
   assistantId: string;
   vectorStoreId: string;
   fileName: string;
-  taskId: string;
   fileId?: string;
 }) {
-  const { assistantId, vectorStoreId, fileName, taskId, fileId } = params;
+  const { assistantId, vectorStoreId, fileName, fileId } = params;
   const processingStartTime = Date.now();
   
   try {
-    // 更新狀態為處理中
-    await updateProgress({
-      vectorStoreId,
-      fileName,
-      taskId,
-      status: 'processing',
-      stage: 'summary',
-      progress: 10
-    });
+    // 不再更新進度狀態，只記錄日誌
+    console.log(`[DEBUG] 開始處理文件: ${fileName}`);
     
     // 創建一個新的線程
     const thread = await openai.beta.threads.create();
@@ -118,18 +86,7 @@ async function processDocumentAsync(params: {
     const results: Record<string, string> = {};
 
     for (const { type, prompt } of contentTypes) {
-      // 更新當前處理階段
-      await updateProgress({
-        vectorStoreId,
-        fileName,
-        taskId,
-        status: 'processing',
-        stage: type,
-        progress: type === 'summary' ? 25 : 
-                  type === 'fullText' ? 50 : 
-                  type === 'devotional' ? 75 : 90
-      });
-      
+      // 只記錄日誌，不更新進度
       console.log(`[DEBUG] 處理 ${type} 內容...`);
       
       // 發送用戶消息
@@ -194,31 +151,16 @@ async function processDocumentAsync(params: {
         devotional: results.devotional,
         bibleStudy: results.bibleStudy,
         processingTime: serverProcessingTime,
+        completed: true, // 標記完成狀態
         Timestamp: new Date().toISOString()
       }
     }));
-
-    // 更新完成狀態
-    await updateProgress({
-      vectorStoreId,
-      fileName,
-      taskId,
-      status: 'completed',
-      progress: 100
-    });
     
     console.log('[DEBUG] 處理完成，結果已保存');
     return true;
   } catch (error) {
     console.error('[ERROR] 非同步處理失敗:', error);
-    // 更新失敗狀態
-    await updateProgress({
-      vectorStoreId,
-      fileName,
-      taskId,
-      status: 'failed',
-      error: error instanceof Error ? error.message : '未知錯誤'
-    });
+    // 記錄錯誤但不更新進度表
     return false;
   }
 }
@@ -326,14 +268,7 @@ export async function POST(request: Request) {
     const taskId = `task_${Date.now()}_${Math.random().toString(36).substring(2, 10)}`;
 
     // 初始化進度記錄
-    await updateProgress({
-      vectorStoreId,
-      fileName,
-      taskId,
-      status: 'queued',
-      stage: 'initialization',
-      progress: 5
-    });
+    // 移除進度記錄的初始化
 
     // 啟動非同步處理 (使用setTimeout確保API立即返回，不阻塞請求)
     setTimeout(() => {
@@ -341,18 +276,16 @@ export async function POST(request: Request) {
         assistantId,
         vectorStoreId,
         fileName,
-        taskId,
         fileId
       }).catch(err => {
         console.error('[ERROR] 非同步處理出錯:', err);
       });
     }, 100);
 
-    // 立即返回任務ID，不等待處理完成
+    // 立即返回成功訊息，不返回任務ID
     return NextResponse.json({
       success: true,
-      message: '文件處理已啟動',
-      taskId
+      message: '文件處理已啟動，請稍後檢查結果'
     });
 
   } catch (error) {
