@@ -3,6 +3,8 @@
 import { useState } from 'react';
 import AssistantManager from '../components/AssistantManager';
 import WithChat from '../components/layouts/WithChat';
+import { useCredit } from '../contexts/CreditContext';
+import UserIdDisplay from '../components/UserIdDisplay';
 import styles from './SundayGuide.module.css';
 import { ASSISTANT_IDS, VECTOR_STORE_IDS } from '../config/constants';
 
@@ -14,19 +16,24 @@ interface ProcessedContent {
 }
 
 export default function SundayGuide() {
+  const { refreshUsage } = useCredit(); // 引入信用點數更新函數
   const [isProcessing, setIsProcessing] = useState(false);
   const [processedContent, setProcessedContent] = useState<ProcessedContent | null>(null);
   const [uploadProgress, setUploadProgress] = useState<number>(0);
   const [uploadTime, setUploadTime] = useState<string>('');
 
-  const handleFileProcessed = (content: ProcessedContent) => {
+  const handleFileProcessed = async (content: ProcessedContent) => {
     setProcessedContent(content);
     setIsProcessing(false);
+    
+    // 文件處理完成後立即刷新信用點數使用量
+    await refreshUsage();
   };
 
   return (
     <WithChat>
       <div className={styles.container}>
+      <UserIdDisplay />
         <section className={styles.section}>
           <h2 className={styles.sectionTitle}>“文件上传与处理</h2>
           <AssistantManager 
@@ -50,10 +57,10 @@ export default function SundayGuide() {
                 <h3>信息总结</h3>
                 <div className={styles.previewContent}>{processedContent.summary}</div>
               </div>
-              <div className={styles.previewSection}>
+              {/* <div className={styles.previewSection}>
                 <h3>信息文字</h3>
                 <div className={styles.previewContent}>{processedContent.fullText}</div>
-              </div>
+              </div> */}
               <div className={styles.previewSection}>
                 <h3>每日灵修</h3>
                 <div className={styles.previewContent}>{processedContent.devotional}</div>

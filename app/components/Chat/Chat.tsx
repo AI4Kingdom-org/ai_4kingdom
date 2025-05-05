@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useChat } from '../../contexts/ChatContext';
 import { useAuth } from '../../contexts/AuthContext';
+import { useCredit } from '../../contexts/CreditContext';
 import styles from './Chat.module.css';
 import { Rnd } from 'react-rnd';
 import ConversationList from '../ConversationList';
@@ -20,6 +21,7 @@ interface ChatProps {
 
 export default function Chat({ type, assistantId, vectorStoreId, userId, threadId }: ChatProps) {
   const { user, loading: authLoading } = useAuth();
+  const { refreshUsage } = useCredit(); // 引入信用點數更新函數
   const {
     setConfig,
     messages,
@@ -154,6 +156,14 @@ export default function Chat({ type, assistantId, vectorStoreId, userId, threadI
       await sendMessage(message);
       
       console.log('[DEBUG] 消息发送成功');
+      
+      // 消息發送成功后，立即刷新信用點數使用量
+      // 1. 通過 refreshUsage 函數直接刷新
+      await refreshUsage();
+      
+      // 2. 同時觸發全局事件，確保所有訂閱該事件的組件都能刷新
+      window.dispatchEvent(new CustomEvent('refreshCredits'));
+
     } catch (error) {
       console.error('[ERROR] 发送消息失败:', {
         error,
@@ -169,57 +179,44 @@ export default function Chat({ type, assistantId, vectorStoreId, userId, threadI
     return <div className={styles.loadingContainer}>认证中...</div>;
   }
 
-  if (!userId && !user?.user_id) {
-    return (
-      <div className={styles.loginPrompt}>
-        <button className={styles.loginButton} onClick={() => (window.location.href = '/login')}>
-          去登录
-        </button>
-      </div>
-    );
-  }
-
   return (
-    <Rnd
-      default={{
-        x: 0,
-        y: 0,
-        width: 800,
-        height: 600,
-      }}
-      minWidth={400}
-      minHeight={300}
-      bounds="window"
-      className={styles.container}
-    >
-      <div className={styles.container}>
-        <ConversationList
-          userId={userId || user?.user_id || ''}
-          currentThreadId={currentThreadId}
-          onSelectThread={(threadId) => {
-            setCurrentThreadId(threadId);
-            setMessages([]); // 清空訊息
-          }}
-          type={type}
-          isCreating={isCreatingThread}
-          onCreateNewThread={handleCreateNewThread}
-        />
+    <div className={styles.container}>
+      {userId || user?.user_id ? (
+        <div className={styles.container}>
+          <ConversationList
+            userId={userId || user?.user_id || ''}
+            currentThreadId={currentThreadId}
+            onSelectThread={(threadId) => {
+              setCurrentThreadId(threadId);
+              setMessages([]); // 清空訊息
+            }}
+            type={type}
+            isCreating={isCreatingThread}
+            onCreateNewThread={handleCreateNewThread}
+          />
 
-        <div className={styles.chatWindow}>
-          {!assistantId || typeof assistantId !== 'string' ? (
-            <div className={styles.error}>
-              <p>错误: 无效的助手ID</p>
-              <p>请尝试刷新页面或联系管理员</p>
-            </div>
-          ) : (
-            <>
-              <MessageList messages={messages} isLoading={isLoading} />
-              {error && <div className={styles.error}>{error}</div>}
-              <ChatInput onSend={handleSendMessage} isLoading={isLoading} />
-            </>
-          )}
+          <div className={styles.chatWindow}>
+            {!assistantId || typeof assistantId !== 'string' ? (
+              <div className={styles.error}>
+                <p>错误: 无效的助手ID</p>
+                <p>请尝试刷新页面或联系管理员</p>
+              </div>
+            ) : (
+              <>
+                <MessageList messages={messages} isLoading={isLoading} />
+                {error && <div className={styles.error}>{error}</div>}
+                <ChatInput onSend={handleSendMessage} isLoading={isLoading} />
+              </>
+            )}
+          </div>
         </div>
-      </div>
-    </Rnd>
+      ) : (
+        <div className={styles.loginPrompt}>
+          <button className={styles.loginButton} onClick={() => (window.location.href = '/login')}>
+            去登录
+          </button>
+        </div>
+      )}
+    </div>
   );
 }

@@ -1,8 +1,37 @@
 import { NextResponse } from 'next/server';
 import { createDynamoDBClient } from '../../../../utils/dynamodb';
 import { ScanCommand } from "@aws-sdk/lib-dynamodb";
+import { updateMonthlyTokenUsage } from '../../../../utils/monthlyTokenUsage';
 
 const SUNDAY_GUIDE_TABLE = process.env.NEXT_PUBLIC_SUNDAY_GUIDE_TABLE || 'SundayGuide';
+
+// 定義各種內容類型估算的 token 使用量
+const CONTENT_TYPE_TOKEN_USAGE = {
+  summary: {
+    prompt_tokens: 50,
+    completion_tokens: 250,
+    total_tokens: 300,
+    retrieval_tokens: 150
+  },
+  text: {
+    prompt_tokens: 100,
+    completion_tokens: 400,
+    total_tokens: 500,
+    retrieval_tokens: 300
+  },
+  devotional: {
+    prompt_tokens: 100,
+    completion_tokens: 350,
+    total_tokens: 450,
+    retrieval_tokens: 200
+  },
+  bible: {
+    prompt_tokens: 120,
+    completion_tokens: 380,
+    total_tokens: 500,
+    retrieval_tokens: 250
+  }
+};
 
 export async function GET(
   request: Request,
@@ -12,7 +41,13 @@ export async function GET(
     const { assistantId } = params;
     const { searchParams } = new URL(request.url);
     const type = searchParams.get('type');  // 獲取內容類型
-
+    const userId = searchParams.get('userId'); // 獲取用戶 ID
+    
+    // 確認必要參數
+    if (!type) {
+      return NextResponse.json({ error: '缺少內容類型參數' }, { status: 400 });
+    }
+    
     const docClient = await createDynamoDBClient();
     
     const command = new ScanCommand({
@@ -56,6 +91,31 @@ export async function GET(
 
     if (!content) {
       return NextResponse.json({ error: '未找到請求的內容類型' }, { status: 404 });
+    }
+    
+    // 如果提供了用戶 ID，記錄 token 使用量
+    if (userId) {
+      try {
+        // 根據內容類型獲取預設的 token 使用量
+        const tokenUsage = CONTENT_TYPE_TOKEN_USAGE[type as keyof typeof CONTENT_TYPE_TOKEN_USAGE];
+        
+        // 根據內容長度調整 token 使用量
+        const contentLength = content.length;
+        const scaleFactor = Math.max(1, contentLength / 1000); // 每 1000 字符為一個單位
+        const adjustedUsage = {
+          prompt_tokens: Math.round(tokenUsage.prompt_tokens * scaleFactor),
+          completion_tokens: Math.round(tokenUsage.completion_tokens * scaleFactor),
+          total_tokens: Math.round(tokenUsage.total_tokens * scaleFactor),
+          retrieval_tokens: Math.round(tokenUsage.retrieval_tokens * scaleFactor)
+        };
+        
+        // 更新用戶的 token 使用量
+        await updateMonthlyTokenUsage(userId, adjustedUsage);
+        console.log(`[DEBUG] 已記錄用戶 ${userId} 訪問 ${type} 內容的 token 使用量:`, adjustedUsage);
+      } catch (usageError) {
+        // 記錄錯誤但不中斷請求
+        console.error('[ERROR] 記錄 token 使用量失敗:', usageError);
+      }
     }
 
     return NextResponse.json({ content });

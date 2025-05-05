@@ -102,9 +102,9 @@
 }
 
 .chatSection {
-  width: 45%; /* 從 50% 減少 10% 變為 45% */
-  height: calc((100vh - 250px) * 0.9); /* 高度減少 10% */
-  margin-left: 20px; /* 添加左邊距 */
+  width: 50%; /* 調整為與 contentArea 相同的寬度 */
+  height: calc(100vh - 250px); /* 調整為與 contentArea 相同的高度 */
+  margin-left: 20px;
   transition: opacity 0.3s ease, transform 0.3s ease;
 }
 

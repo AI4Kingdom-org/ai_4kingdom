@@ -3,6 +3,7 @@ import { DynamoDBDocumentClient, PutCommand, QueryCommand, GetCommand } from "@a
 import { fromCognitoIdentityPool } from "@aws-sdk/credential-providers";
 import OpenAI from 'openai';
 import { NextResponse } from 'next/server';
+import { updateMonthlyTokenUsage } from '../../utils/monthlyTokenUsage';
 
 // 统一环境变量配置
 const CONFIG = {
@@ -191,6 +192,42 @@ export async function POST(request: Request) {
   try {
     const { message, threadId, userId, config } = await request.json();
 
+    // 檢查是否為模擬測試請求
+    if (config.mock && config.mockUsage) {
+      console.log('[DEBUG] 接收到模擬測試請求:', {
+        userId,
+        usage: config.mockUsage
+      });
+
+      // 模拟用户使用量更新（在实际环境中，您需要实现相应的API）
+      try {
+        // 导入 updateMonthlyTokenUsage 函数
+        const { updateMonthlyTokenUsage } = require('../../utils/monthlyTokenUsage');
+        
+        // 更新用户的月度使用统计
+        await updateMonthlyTokenUsage(userId, config.mockUsage);
+        
+        console.log('[DEBUG] 模拟更新使用统计成功');
+        
+        // 返回模擬回應
+        return NextResponse.json({
+          success: true,
+          reply: `這是一個模擬回應。已成功消耗 ${config.mockUsage.total_tokens} tokens。`,
+          threadId: threadId || `mock_thread_${Date.now()}`,
+          debug: {
+            mockUsage: config.mockUsage,
+            timestamp: new Date().toISOString()
+          }
+        });
+      } catch (mockError) {
+        console.error('[ERROR] 模擬更新使用統計失敗:', mockError);
+        return NextResponse.json({
+          error: '模擬更新使用統計失敗',
+          details: mockError instanceof Error ? mockError.message : '未知錯誤'
+        }, { status: 500 });
+      }
+    }
+
     // 验证助手
     try {
       const assistant = await openai.beta.assistants.retrieve(config.assistantId);
@@ -274,6 +311,27 @@ export async function POST(request: Request) {
       .filter(content => content.type === 'text')
       .map(content => (content.type === 'text' ? content.text.value : ''))
       .join('\n');
+    
+    // 添加 token 使用量记录
+    if (userId && runStatus.usage) {
+      try {
+        // 从 runStatus 中提取 token 使用量
+        const tokenUsage = {
+          prompt_tokens: runStatus.usage.prompt_tokens || 0,
+          completion_tokens: runStatus.usage.completion_tokens || 0,
+          total_tokens: runStatus.usage.total_tokens || 0,
+          retrieval_tokens: 0 // OpenAI API 可能不提供检索 token，设为 0
+        };
+        
+        // 更新用户的月度 token 使用统计
+        await updateMonthlyTokenUsage(userId, tokenUsage);
+        
+        console.log(`[DEBUG] 已記錄用戶 ${userId} 的聊天 token 使用量:`, tokenUsage);
+      } catch (usageError) {
+        // 记录错误但不中断请求
+        console.error('[ERROR] 記錄 token 使用量失敗:', usageError);
+      }
+    }
     
     return NextResponse.json({
       success: true,

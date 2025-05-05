@@ -1,27 +1,114 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useChat } from '../contexts/ChatContext';
+import { useCredit } from '../contexts/CreditContext';
 import Chat from '../components/Chat/Chat';
 import WithChat from '../components/layouts/WithChat';
 import styles from './page.module.css';
 import { CHAT_TYPES } from '../config/chatTypes';
 import { ASSISTANT_IDS, VECTOR_STORE_IDS } from '../config/constants';
 import ReactMarkdown from 'react-markdown';
+import Script from 'next/script';
+
+// 添加全局類型定義，以解決TypeScript報錯
+declare global {
+  interface Window {
+    html2canvas: any;
+    jspdf: {
+      jsPDF: any;
+    };
+    jsPDF: any;
+  }
+}
+
+// 使用 script 標籤直接引入 jspdf 和 html2canvas 庫，避免動態導入問題
+const scriptsLoaded = {
+  jspdf: false,
+  html2canvas: false
+};
 
 type GuideMode = 'summary' | 'text' | 'devotional' | 'bible' | null;
+
+// 簡繁轉換映射表（擴展版，包含更多常用字符）
+const traditionalToSimplified: Record<string, string> = {
+  '個': '个', '東': '东', '義': '义', '並': '并', '餘': '余', '傑': '杰',
+  '這': '这', '為': '为', '來': '来', '後': '后', '點': '点', '國': '国',
+  '說': '说', '當': '当', '時': '时', '從': '从', '學': '学', '實': '实',
+  '進': '进', '與': '与', '產': '产', '還': '还', '會': '会', '發': '发',
+  '經': '经', '見': '见', '樣': '样', '現': '现', '話': '话', '讓': '让',
+  '對': '对', '體': '体', '們': '们', '開': '开', '過': '过', '著': '着',
+  '關': '关', '靈': '灵', '長': '长', '門': '门', '問': '问', '間': '间',
+  '聽': '听', '書': '书', '頁': '页', '紐': '纽', '約': '约', '馬': '马',
+  '總': '总', '結': '结', '數': '数', '處': '处',
+  '導': '导', '應': '应', '該': '该', '頭': '头', '顯': '显', '願': '愿',
+  '歲': '岁', '師': '师', '遠': '远', '鐘': '钟', '專': '专', '區': '区',
+  '團': '团', '園': '园', '圓': '圆', '連': '连', '週': '周', '階': '阶',
+  '麼': '么', '麗': '丽', '壽': '寿', '圍': '围', '興': '兴',
+  '證': '证', '讀': '读', '認': '认', '隻': '只', '講': '讲',
+  '較': '较', '誰': '谁', '張': '张', '際': '际', '離': '离', '壓': '压',
+  '雲': '云', '畫': '画', '惡': '恶', '愛': '爱', '爺': '爷', '態': '态',
+  '雞': '鸡', '強': '强', '歡': '欢', '漢': '汉'
+};
 
 function SundayGuideContent() {
   const { user } = useAuth();
   const { setConfig } = useChat();
+  const { refreshUsage } = useCredit();
   const [selectedMode, setSelectedMode] = useState<GuideMode>(null);
   const [sermonContent, setSermonContent] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [pdfLoading, setPdfLoading] = useState(false);
+  const contentRef = useRef<HTMLDivElement>(null);
+  const [pdfError, setPdfError] = useState<string | null>(null);
+  const [librariesLoaded, setLibrariesLoaded] = useState(false);
+
+  useEffect(() => {
+    // 檢查是否在瀏覽器環境
+    if (typeof window !== 'undefined') {
+      // 動態引入腳本
+      const loadScripts = async () => {
+        try {
+          // 加載 html2canvas
+          const html2canvasScript = document.createElement('script');
+          html2canvasScript.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
+          html2canvasScript.async = true;
+          html2canvasScript.onload = () => {
+            console.log('html2canvas 已加載');
+            scriptsLoaded.html2canvas = true;
+            checkAllScriptsLoaded();
+          };
+          document.head.appendChild(html2canvasScript);
+
+          // 加載 jspdf
+          const jspdfScript = document.createElement('script');
+          jspdfScript.src = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
+          jspdfScript.async = true;
+          jspdfScript.onload = () => {
+            console.log('jsPDF 已加載');
+            scriptsLoaded.jspdf = true;
+            checkAllScriptsLoaded();
+          };
+          document.head.appendChild(jspdfScript);
+
+          const checkAllScriptsLoaded = () => {
+            if (scriptsLoaded.html2canvas && scriptsLoaded.jspdf) {
+              setLibrariesLoaded(true);
+              console.log('所有 PDF 生成所需庫已加載完成');
+            }
+          };
+        } catch (error) {
+          console.error('腳本加載錯誤:', error);
+        }
+      };
+      
+      loadScripts();
+    }
+  }, []);
 
   useEffect(() => {
     if (user?.user_id) {
-      // 設定固定的助手配置
       setConfig({
         type: CHAT_TYPES.SUNDAY_GUIDE,
         assistantId: ASSISTANT_IDS.SUNDAY_GUIDE,
@@ -35,16 +122,163 @@ function SundayGuideContent() {
     setSelectedMode(mode);
     setLoading(true);
     try {
+      const userId = user?.user_id || '';
       const response = await fetch(
-        `/api/sunday-guide/content/${ASSISTANT_IDS.SUNDAY_GUIDE}?type=${mode}`
+        `/api/sunday-guide/content/${ASSISTANT_IDS.SUNDAY_GUIDE}?type=${mode}&userId=${encodeURIComponent(userId)}`
       );
       if (!response.ok) throw new Error('獲取內容失敗');
       const data = await response.json();
       setSermonContent(data.content);
+      await refreshUsage();
     } catch (error) {
       console.error('獲取內容失敗:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // 將繁體中文轉換為簡體中文（改進版本）
+  const convertToSimplified = (text: string): string => {
+    if (!text) return '';
+    
+    try {
+      return text.split('').map(char => traditionalToSimplified[char] || char).join('');
+    } catch (error) {
+      console.error('繁簡轉換出錯:', error);
+      return text; // 出錯時返回原文
+    }
+  };
+
+  // 改進的PDF生成函數
+  const handleDownloadPDF = async () => {
+    if (!contentRef.current || !sermonContent || !selectedMode) {
+      alert('無內容可下載，請先選擇一個主題。');
+      return;
+    }
+
+    setPdfError(null);
+    setPdfLoading(true);
+    
+    try {
+      console.log('開始生成PDF...');
+      
+      // 確保所需庫存在
+      if (typeof window.jspdf === 'undefined' && typeof window.jsPDF === 'undefined') {
+        throw new Error('PDF生成組件未加載完成，請刷新頁面後重試');
+      }
+      
+      if (typeof window.html2canvas === 'undefined') {
+        throw new Error('頁面截圖組件未加載完成，請刷新頁面後重試');
+      }
+      
+      const html2canvas = window.html2canvas;
+      const jsPDF = window.jspdf?.jsPDF || window.jsPDF;
+      
+      if (!html2canvas || !jsPDF) {
+        throw new Error('PDF相關組件未正確加載，請刷新頁面');
+      }
+
+      const titles = {
+        summary: '讲道总结',
+        text: '信息文字',
+        devotional: '每日灵修',
+        bible: '查经指引'
+      };
+      
+      // 準備簡體中文內容
+      console.log('準備轉換內容為簡體中文...');
+      const simplifiedContent = convertToSimplified(sermonContent);
+      const simplifiedTitle = convertToSimplified(titles[selectedMode]);
+      
+      // 使用當前內容區域直接生成PDF，而不是創建臨時元素
+      const contentElement = contentRef.current;
+      
+      // 加入簡體中文內容的臨時元素
+      const tempDiv = document.createElement('div');
+      tempDiv.style.width = '700px';
+      tempDiv.style.padding = '30px';
+      tempDiv.style.fontSize = '14px';
+      tempDiv.style.fontFamily = 'Arial, "Microsoft YaHei", "微软雅黑", sans-serif';
+      tempDiv.style.lineHeight = '1.5';
+      tempDiv.style.backgroundColor = '#ffffff';
+      tempDiv.style.color = '#333333';
+      tempDiv.style.position = 'absolute';
+      tempDiv.style.left = '-9999px';
+      
+      // 設置標題和內容
+      const formattedDate = new Date().toLocaleDateString('zh-CN', { 
+        year: 'numeric', 
+        month: '2-digit', 
+        day: '2-digit'
+      });
+      
+      tempDiv.innerHTML = `
+        <h1 style="text-align:center;margin-bottom:10px;font-size:24px;color:#000000;font-weight:normal;text-shadow:none;">${simplifiedTitle}</h1>
+        <p style="text-align:center;margin-bottom:30px;color:#666;font-size:14px;">生成日期: ${formattedDate}</p>
+        <div style="text-align:justify;">${simplifiedContent.replace(/\n/g, '<br/>')}</div>
+      `;
+      
+      document.body.appendChild(tempDiv);
+      
+      console.log('開始生成Canvas...');
+      // 使用內容直接生成
+      try {
+        const canvas = await html2canvas(tempDiv, {
+          scale: 1.5,
+          useCORS: true,
+          logging: true, // 開啟日誌以便除錯
+          allowTaint: true,
+          backgroundColor: '#ffffff'
+        });
+        
+        document.body.removeChild(tempDiv);
+        
+        if (!canvas || typeof canvas.toDataURL !== 'function') {
+          throw new Error('Canvas 生成失敗，無法獲取圖像數據');
+        }
+        
+        console.log('Canvas生成成功，開始創建PDF...');
+        
+        // 創建 PDF
+        const pdf = new jsPDF('p', 'mm', 'a4');
+        const imgWidth = 210; // A4寬度
+        const pageHeight = 297; // A4高度
+        const imgHeight = canvas.height * imgWidth / canvas.width;
+        
+        // 將 canvas 轉換為圖像
+        const imgData = canvas.toDataURL('image/jpeg', 0.8);
+        
+        // 添加圖像到PDF
+        pdf.addImage(imgData, 'JPEG', 0, 0, imgWidth, imgHeight);
+        
+        // 如果內容太長，需要分頁
+        let heightLeft = imgHeight - pageHeight;
+        let position = -pageHeight; // 初始位置
+        
+        while (heightLeft > 0) {
+          pdf.addPage();
+          pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight);
+          heightLeft -= pageHeight;
+          position -= pageHeight;
+        }
+        
+        // 下載PDF
+        const fileName = `${simplifiedTitle}-${new Date().toISOString().split('T')[0]}.pdf`;
+        pdf.save(fileName);
+        console.log('PDF下載成功');
+        
+      } catch (canvasError) {
+        console.error('Canvas 生成或處理錯誤:', canvasError);
+        const message = canvasError instanceof Error ? canvasError.message : '畫布生成失敗';
+        throw new Error(`PDF生成過程出錯: ${message}`);
+      }
+      
+    } catch (error) {
+      console.error('PDF生成失敗:', error);
+      setPdfError(error instanceof Error ? error.message : '下載PDF時發生錯誤，請重試');
+      alert('PDF下載失敗: ' + (error instanceof Error ? error.message : '請稍後重試'));
+    } finally {
+      setPdfLoading(false);
     }
   };
 
@@ -61,8 +295,18 @@ function SundayGuideContent() {
 
     return (
       <div className={styles.contentBox}>
-        <h2>{titles[selectedMode!]}</h2>
-        <div className={styles.markdownContent}>
+        <div className={styles.contentHeader}>
+          <h2>{titles[selectedMode!]}</h2>
+          <button 
+            className={styles.downloadButton} 
+            onClick={handleDownloadPDF}
+            disabled={pdfLoading}
+          >
+            {pdfLoading ? '生成PDF中...' : '下载PDF (简体中文)'}
+          </button>
+        </div>
+        {pdfError && <div className={styles.errorMessage}>{pdfError}</div>}
+        <div className={styles.markdownContent} ref={contentRef}>
           <ReactMarkdown>{sermonContent}</ReactMarkdown>
         </div>
       </div>
@@ -78,12 +322,6 @@ function SundayGuideContent() {
           onClick={() => handleModeSelect('summary')}
         >
           信息总结
-        </button>
-        <button 
-          className={`${styles.modeButton} ${selectedMode === 'text' ? styles.active : ''}`}
-          onClick={() => handleModeSelect('text')}
-        >
-          信息文字
         </button>
         <button 
           className={`${styles.modeButton} ${selectedMode === 'devotional' ? styles.active : ''}`}

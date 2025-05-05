@@ -77,10 +77,10 @@ async function processDocumentAsync(params: {
 
     // 發送處理請求，生成不同類型的內容
     const contentTypes = [
-      { type: 'summary', prompt: '請總結這篇文章的主要內容，以簡潔的方式呈現重點。請確保包含所有關鍵信息。' },
-      { type: 'fullText', prompt: '請完整保留原文內容，並加入適當的段落分隔。不要省略任何內容。' },
-      { type: 'devotional', prompt: '請基於這篇文章的內容，提供每日靈修指引，包含經文應用和禱告建議。' },
-      { type: 'bibleStudy', prompt: '請為這篇文章設計查經指引，包含相關經文、討論問題和應用建議。' }
+      { type: 'summary', prompt: '請用中文總結這篇文章的主要內容，以摘要markdown的方式呈現。請確保包含所有關鍵信息。如果文章包含多個部分，請確保每個部分都有被覆蓋。' },
+      // { type: 'fullText', prompt: '請完整保留原文內容，並加入適當的段落分隔。不要省略任何內容。' }, // Disabled fullText processing
+      { type: 'devotional', prompt: '請用中文基於這篇文章的內容，提供每日靈修指引，為了幫助教會成員在一周內學習和反思文章，將文章分為五個部分進行每日學習（周一到周五）。對於每一天：提供該部分文章的總結。從該部分提取最多三節聖經經文。根據文章的信息提供祷告指導。' },
+      { type: 'bibleStudy', prompt: '請用中文創造文章的小組查經指引。為了促進基於講道的小組查經，請提供：背景：文章的總結及其與基督教生活的相關性。文章中強調的三個重要點。文章中提到的三到五節聖經經文。提供三個討論問題，幫助成員反思信息及其聖經基礎。一到两個個人應用問題，挑戰成員將文章的信息付諸實踐。祷告指導，鼓勵成員為應用信息的力量祈禱。' }
     ];
 
     const results: Record<string, string> = {};
@@ -147,7 +147,7 @@ async function processDocumentAsync(params: {
         fileName,
         fileId: fileId || vectorStoreId,
         summary: results.summary,
-        fullText: results.fullText,
+        // fullText: results.fullText, // Disabled fullText saving
         devotional: results.devotional,
         bibleStudy: results.bibleStudy,
         processingTime: serverProcessingTime,

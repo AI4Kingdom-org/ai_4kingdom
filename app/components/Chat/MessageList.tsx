@@ -18,9 +18,17 @@ export default function MessageList({ messages, isLoading }: MessageListProps) {
   const chatEndRef = useRef<HTMLDivElement>(null);
   const [displayedMessages, setDisplayedMessages] = useState<Message[]>([]);
   const [streamingMessage, setStreamingMessage] = useState<string>("");
+  const intervalRef = useRef<NodeJS.Timeout | null>(null); // 用於儲存 interval 引用
 
+  // 安全地滾動到底部
   useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    try {
+      if (chatEndRef.current) {
+        chatEndRef.current.scrollIntoView({ behavior: "smooth" });
+      }
+    } catch (error) {
+      console.error("滾動到最新訊息時發生錯誤:", error);
+    }
   }, [displayedMessages, streamingMessage]);
 
   useEffect(() => {
@@ -41,22 +49,37 @@ export default function MessageList({ messages, isLoading }: MessageListProps) {
       let words = lastMessage.text.split(" ");
       let index = 0;
 
-      const interval = setInterval(() => {
+      // 清理前一個 interval (如果存在)
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+      }
+
+      intervalRef.current = setInterval(() => {
         if (index < words.length) {
           setStreamingMessage((prev) => prev + (index === 0 ? "" : " ") + words[index]);
           index++;
         } else {
-          clearInterval(interval);
+          // 清理 interval
+          if (intervalRef.current) {
+            clearInterval(intervalRef.current);
+            intervalRef.current = null;
+          }
           setDisplayedMessages([...messages]); // Final message displayed
           setStreamingMessage("");
         }
       }, 50);
-
-      return () => clearInterval(interval);
     } else {
       // If the last message is from user, display it immediately
       setDisplayedMessages([...messages]);
     }
+    
+    // 組件卸載時清理
+    return () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
+    };
   }, [messages]);
 
   return (
