@@ -41,11 +41,11 @@ export async function updateMonthlyTokenUsage(userId: string, usage: TokenUsage)
         YearMonth: yearMonth
       },
       UpdateExpression: `
-        SET prompt_tokens = if_not_exists(prompt_tokens, :zero) + :prompt,
-            completion_tokens = if_not_exists(completion_tokens, :zero) + :completion,
-            total_tokens = if_not_exists(total_tokens, :zero) + :total,
-            retrieval_tokens = if_not_exists(retrieval_tokens, :zero) + :retrieval,
-            last_updated = :now
+        SET promptTokens = if_not_exists(promptTokens, :zero) + :prompt,
+            completionTokens = if_not_exists(completionTokens, :zero) + :completion,
+            totalTokens = if_not_exists(totalTokens, :zero) + :total,
+            retrievalTokens = if_not_exists(retrievalTokens, :zero) + :retrieval,
+            lastUpdated = :now
       `,
       ExpressionAttributeValues: {
         ':zero': 0,
@@ -64,4 +64,4 @@ export async function updateMonthlyTokenUsage(userId: string, usage: TokenUsage)
   } catch (error) {
     console.error('[ERROR] 更新月度token使用失败:', error);
   }
-} 
+}

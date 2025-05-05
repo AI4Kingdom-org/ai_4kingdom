@@ -72,8 +72,12 @@ export default function Chat({ type, assistantId, vectorStoreId }: ChatProps) {
 
   // 滾動到最新訊息
   useEffect(() => {
-    if (messagesEndRef.current) {
-      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    try {
+      if (messagesEndRef.current) {
+        messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
+      }
+    } catch (error) {
+      console.error("滾動到最新訊息時發生錯誤:", error);
     }
   }, [messages]);
 

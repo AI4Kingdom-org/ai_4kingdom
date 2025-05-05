@@ -2,6 +2,9 @@ import { useState, useEffect, useRef } from 'react';
 import styles from './AssistantManager.module.css';
 import { ASSISTANT_IDS, VECTOR_STORE_IDS } from '../config/constants';
 import stylesGuide from '../sunday-guide/SundayGuide.module.css';
+import { useCredit } from '../contexts/CreditContext';
+import { useAuth } from '../contexts/AuthContext';
+import { updateFileUploadTokenUsage, updateFileProcessingTokenUsage } from '../utils/fileProcessingTokens';
 
 interface AssistantManagerProps {
   onFileProcessed: (content: {
@@ -29,6 +32,8 @@ export default function AssistantManager({
   setUploadProgress,
   setUploadTime
 }: AssistantManagerProps) {
+  const { refreshUsage } = useCredit();
+  const { user } = useAuth(); // 添加 useAuth 以獲取用戶 ID
   const [error, setError] = useState<string | null>(null);
   const [taskStatus, setTaskStatus] = useState<TaskStatus>({
     upload: 'idle',
@@ -145,6 +150,15 @@ export default function AssistantManager({
       setUploading(false);
       setUploadProgress(20);
       
+      // 文件上傳成功後，記錄 token 使用量
+      if (user?.user_id) {
+        // 根據文件大小估算頁數，這裡使用一個簡單的估算公式
+        const estimatedPages = Math.max(1, Math.ceil(file.size / (100 * 1024))); // 每 100KB 估算為 1 頁
+        await updateFileUploadTokenUsage(user.user_id, estimatedPages);
+        // 立即刷新使用量顯示
+        await refreshUsage();
+      }
+      
     } catch (err) {
       console.error('文件處理錯誤:', err);
       setError(err instanceof Error ? err.message : '未知錯誤');
@@ -162,6 +176,32 @@ export default function AssistantManager({
     } finally {
       setIsProcessing(false);
     }
+  };
+
+  const handleFileProcessed = async (content: {
+    summary: string;
+    fullText: string;
+    devotional: string;
+    bibleStudy: string;
+  }) => {
+    // 先通知父組件處理結果
+    onFileProcessed(content);
+    
+    // 文件處理成功後，記錄 token 使用量
+    if (user?.user_id) {
+      // 估算處理的頁數，可以根據內容長度來估算
+      const textLength = (content.summary?.length || 0) + 
+                         (content.fullText?.length || 0) + 
+                         (content.devotional?.length || 0) + 
+                         (content.bibleStudy?.length || 0);
+      
+      // 每 5000 字元估算為 1 頁
+      const estimatedPages = Math.max(1, Math.ceil(textLength / 5000));
+      await updateFileProcessingTokenUsage(user.user_id, estimatedPages);
+    }
+    
+    // 立即更新信用點數使用量
+    await refreshUsage();
   };
 
   const checkProcessingStatus = async () => {
@@ -205,8 +245,8 @@ export default function AssistantManager({
         });
         
         // 設置處理結果
-        if (onFileProcessed && statusData.result) {
-          onFileProcessed(statusData.result);
+        if (statusData.result) {
+          handleFileProcessed(statusData.result);
         }
         
         setUploadProgress(100);
@@ -316,10 +356,9 @@ export default function AssistantManager({
             // 設置完成進度
             setUploadProgress(100);
             
-            // 回調函數
-            if (onFileProcessed) {
-              onFileProcessed(result);
-            }
+            // 回調函數，使用處理過的方法更新信用點數
+            handleFileProcessed(result);
+            
           } else {
             // 未找到處理結果，繼續輪詢
             setTimeout(checkResult, 5000);
