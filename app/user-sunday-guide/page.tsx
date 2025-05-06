@@ -149,9 +149,9 @@ function SundayGuideContent() {
     }
   };
 
-  // 改進的PDF生成函數
-  const handleDownloadPDF = async () => {
-    if (!contentRef.current || !sermonContent || !selectedMode) {
+  // 改進的PDF下載函數 - 使用伺服器端API下載
+  const handleDownloadPDF = () => {
+    if (!sermonContent || !selectedMode) {
       alert('無內容可下載，請先選擇一個主題。');
       return;
     }
@@ -160,140 +160,27 @@ function SundayGuideContent() {
     setPdfLoading(true);
     
     try {
-      console.log('開始生成PDF...');
+      console.log('開始準備下載...');
       
-      // 確保所需庫存在
-      if (typeof window.jspdf === 'undefined' && typeof window.jsPDF === 'undefined') {
-        throw new Error('PDF生成組件未加載完成，請刷新頁面後重試');
-      }
+      const userId = user?.user_id || '';
       
-      if (typeof window.html2canvas === 'undefined') {
-        throw new Error('頁面截圖組件未加載完成，請刷新頁面後重試');
-      }
+      // 使用伺服器端API直接下載HTML文件
+      const downloadUrl = `/api/sunday-guide/download-pdf?type=${selectedMode}&userId=${encodeURIComponent(userId)}`;
       
-      const html2canvas = window.html2canvas;
-      const jsPDF = window.jspdf?.jsPDF || window.jsPDF;
+      // 在新分頁中打開下載URL
+      window.open(downloadUrl, '_blank');
       
-      if (!html2canvas || !jsPDF) {
-        throw new Error('PDF相關組件未正確加載，請刷新頁面');
-      }
-
-      const titles = {
-        summary: '讲道总结',
-        text: '信息文字',
-        devotional: '每日灵修',
-        bible: '查经指引'
-      };
+      console.log('下載請求已發送');
       
-      // 準備簡體中文內容
-      console.log('準備轉換內容為簡體中文...');
-      const simplifiedContent = convertToSimplified(sermonContent);
-      const simplifiedTitle = convertToSimplified(titles[selectedMode]);
-      
-      // 加入簡體中文內容的臨時元素
-      const tempDiv = document.createElement('div');
-      tempDiv.style.width = '700px';
-      tempDiv.style.padding = '30px';
-      tempDiv.style.fontSize = '14px';
-      tempDiv.style.fontFamily = 'Arial, "Microsoft YaHei", "微软雅黑", sans-serif';
-      tempDiv.style.lineHeight = '1.5';
-      tempDiv.style.backgroundColor = '#ffffff';
-      tempDiv.style.color = '#333333';
-      tempDiv.style.position = 'absolute';
-      tempDiv.style.left = '-9999px';
-      
-      // 設置標題和內容
-      const formattedDate = new Date().toLocaleDateString('zh-CN', { 
-        year: 'numeric', 
-        month: '2-digit', 
-        day: '2-digit'
-      });
-      
-      tempDiv.innerHTML = `
-        <h1 style="text-align:center;margin-bottom:10px;font-size:24px;color:#000000;font-weight:normal;text-shadow:none;">${simplifiedTitle}</h1>
-        <p style="text-align:center;margin-bottom:30px;color:#666;font-size:14px;">生成日期: ${formattedDate}</p>
-        <div style="text-align:justify;">${simplifiedContent.replace(/\n/g, '<br/>')}</div>
-      `;
-      
-      document.body.appendChild(tempDiv);
-      
-      console.log('開始生成Canvas...');
-      // 使用內容直接生成
-      try {
-        const canvas = await html2canvas(tempDiv, {
-          scale: 1.5,
-          useCORS: true,
-          logging: true,
-          allowTaint: true,
-          backgroundColor: '#ffffff'
-        });
-        
-        document.body.removeChild(tempDiv);
-        
-        if (!canvas || typeof canvas.toDataURL !== 'function') {
-          throw new Error('Canvas 生成失敗，無法獲取圖像數據');
-        }
-        
-        console.log('Canvas生成成功，開始創建PDF...');
-        
-        // 創建 PDF
-        const pdf = new jsPDF('p', 'mm', 'a4');
-        const imgWidth = 210; // A4寬度
-        const pageHeight = 297; // A4高度
-        const imgHeight = canvas.height * imgWidth / canvas.width;
-        
-        // 將 canvas 轉換為圖像
-        const imgData = canvas.toDataURL('image/jpeg', 0.8);
-        
-        // 添加圖像到PDF
-        pdf.addImage(imgData, 'JPEG', 0, 0, imgWidth, imgHeight);
-        
-        // 如果內容太長，需要分頁
-        let heightLeft = imgHeight - pageHeight;
-        let position = -pageHeight; // 初始位置
-        
-        while (heightLeft > 0) {
-          pdf.addPage();
-          pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight);
-          heightLeft -= pageHeight;
-          position -= pageHeight;
-        }
-        
-        // 新的下載方法：使用Blob和URL.createObjectURL
-        const fileName = `${simplifiedTitle}-${new Date().toISOString().split('T')[0]}.pdf`;
-        
-        // 獲取PDF數據作為blob
-        const pdfBlob = pdf.output('blob');
-        
-        // 創建下載鏈接
-        const downloadLink = document.createElement('a');
-        downloadLink.href = URL.createObjectURL(pdfBlob);
-        downloadLink.download = fileName;
-        downloadLink.style.display = 'none';
-        
-        // 添加到文檔並觸發點擊
-        document.body.appendChild(downloadLink);
-        downloadLink.click();
-        
-        // 清理
-        setTimeout(() => {
-          URL.revokeObjectURL(downloadLink.href);
-          document.body.removeChild(downloadLink);
-        }, 100);
-        
-        console.log('PDF下載成功');
-        
-      } catch (canvasError) {
-        console.error('Canvas 生成或處理錯誤:', canvasError);
-        const message = canvasError instanceof Error ? canvasError.message : '畫布生成失敗';
-        throw new Error(`PDF生成過程出錯: ${message}`);
-      }
+      // 短暫延遲後重置加載狀態
+      setTimeout(() => {
+        setPdfLoading(false);
+      }, 1000);
       
     } catch (error) {
-      console.error('PDF生成失敗:', error);
+      console.error('PDF下載請求失敗:', error);
       setPdfError(error instanceof Error ? error.message : '下載PDF時發生錯誤，請重試');
       alert('PDF下載失敗: ' + (error instanceof Error ? error.message : '請稍後重試'));
-    } finally {
       setPdfLoading(false);
     }
   };
