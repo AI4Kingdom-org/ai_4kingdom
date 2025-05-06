@@ -190,9 +190,6 @@ function SundayGuideContent() {
       const simplifiedContent = convertToSimplified(sermonContent);
       const simplifiedTitle = convertToSimplified(titles[selectedMode]);
       
-      // 使用當前內容區域直接生成PDF，而不是創建臨時元素
-      const contentElement = contentRef.current;
-      
       // 加入簡體中文內容的臨時元素
       const tempDiv = document.createElement('div');
       tempDiv.style.width = '700px';
@@ -226,7 +223,7 @@ function SundayGuideContent() {
         const canvas = await html2canvas(tempDiv, {
           scale: 1.5,
           useCORS: true,
-          logging: true, // 開啟日誌以便除錯
+          logging: true,
           allowTaint: true,
           backgroundColor: '#ffffff'
         });
@@ -262,9 +259,28 @@ function SundayGuideContent() {
           position -= pageHeight;
         }
         
-        // 下載PDF
+        // 新的下載方法：使用Blob和URL.createObjectURL
         const fileName = `${simplifiedTitle}-${new Date().toISOString().split('T')[0]}.pdf`;
-        pdf.save(fileName);
+        
+        // 獲取PDF數據作為blob
+        const pdfBlob = pdf.output('blob');
+        
+        // 創建下載鏈接
+        const downloadLink = document.createElement('a');
+        downloadLink.href = URL.createObjectURL(pdfBlob);
+        downloadLink.download = fileName;
+        downloadLink.style.display = 'none';
+        
+        // 添加到文檔並觸發點擊
+        document.body.appendChild(downloadLink);
+        downloadLink.click();
+        
+        // 清理
+        setTimeout(() => {
+          URL.revokeObjectURL(downloadLink.href);
+          document.body.removeChild(downloadLink);
+        }, 100);
+        
         console.log('PDF下載成功');
         
       } catch (canvasError) {
