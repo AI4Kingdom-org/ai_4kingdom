@@ -74,9 +74,18 @@ export async function GET(
     const simplifiedTitle = convertToSimplified(title);
     const simplifiedContent = convertToSimplified(content);
     
-    // 創建當前日期字符串作為PDF檔案名的一部分
+    // 創建當前日期字符串作為檔案名的一部分
     const today = new Date();
     const dateStr = today.toISOString().split('T')[0];
+    
+    // 準備英文檔案名
+    const fileTypes = {
+      summary: 'summary',
+      text: 'fulltext',
+      devotional: 'devotional',
+      bible: 'biblestudy'
+    };
+    const safeFileName = `sunday-guide-${fileTypes[type as keyof typeof fileTypes] || 'content'}-${dateStr}.html`;
     
     // 準備 HTML 結構
     const htmlContent = `
@@ -120,13 +129,13 @@ export async function GET(
       </html>
     `;
 
-    // 設置內容類型和檔案名的標頭，指示瀏覽器這是要下載的內容
+    // 設置內容類型和檔案名的標頭，使用安全的ASCII檔案名
     const headers = {
       'Content-Type': 'text/html; charset=UTF-8',
-      'Content-Disposition': `attachment; filename="${simplifiedTitle}-${dateStr}.html"`
+      'Content-Disposition': `attachment; filename="${safeFileName}"`
     };
 
-    console.log(`[DEBUG] 準備下載文件: ${simplifiedTitle}-${dateStr}.html`);
+    console.log(`[DEBUG] 準備下載文件: ${safeFileName}`);
 
     // 直接返回 HTML 檔案作為下載內容
     return new Response(htmlContent, {
