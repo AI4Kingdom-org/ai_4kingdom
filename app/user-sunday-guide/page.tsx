@@ -164,8 +164,8 @@ function SundayGuideContent() {
       
       const userId = user?.user_id || '';
       
-      // 使用伺服器端API直接下載HTML文件
-      const downloadUrl = `/api/sunday-guide/download-pdf?type=${selectedMode}&userId=${encodeURIComponent(userId)}`;
+      // 使用伺服器端API直接下載HTML文件，添加assistantId參數
+      const downloadUrl = `/api/sunday-guide/download-pdf?type=${selectedMode}&userId=${encodeURIComponent(userId)}&assistantId=${ASSISTANT_IDS.SUNDAY_GUIDE}`;
       
       // 在新分頁中打開下載URL
       window.open(downloadUrl, '_blank');

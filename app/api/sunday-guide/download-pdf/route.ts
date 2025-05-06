@@ -11,6 +11,11 @@ const traditionalToSimplified: Record<string, string> = {
   // ... 可以按需添加更多字符
 };
 
+// 定義常數
+const SUNDAY_GUIDE_TABLE = process.env.NEXT_PUBLIC_SUNDAY_GUIDE_TABLE || 'SundayGuide';
+// 默認助手ID，用於查詢內容
+const DEFAULT_ASSISTANT_ID = process.env.NEXT_PUBLIC_SUNDAY_GUIDE_ASSISTANT_ID || 'asst_KsH3Sm5fB968SLr2TaAIuZF8';
+
 // 將繁體中文轉換為簡體中文
 function convertToSimplified(text: string): string {
   if (!text) return '';
@@ -32,6 +37,7 @@ export async function GET(
     const url = new URL(request.url);
     const type = url.searchParams.get('type') || 'summary';
     const userId = url.searchParams.get('userId');
+    const assistantId = url.searchParams.get('assistantId') || DEFAULT_ASSISTANT_ID;
     
     if (!userId) {
       return NextResponse.json(
@@ -40,15 +46,20 @@ export async function GET(
       );
     }
 
-    // 獲取內容（從數據庫或其他來源）
-    const content = await getContentForPDF(type, userId);
+    console.log(`[DEBUG] PDF下載請求: type=${type}, userId=${userId}, assistantId=${assistantId}`);
+
+    // 獲取內容
+    const content = await getContentForPDF(type, assistantId);
     
     if (!content) {
+      console.error(`[ERROR] 找不到內容: type=${type}, assistantId=${assistantId}`);
       return NextResponse.json(
         { error: '找不到請求的內容' },
         { status: 404 }
       );
     }
+
+    console.log(`[DEBUG] 成功獲取內容，長度: ${content.length} 字符`);
 
     // 準備標題和內容數據
     const titles = {
@@ -97,13 +108,14 @@ export async function GET(
           }
           .content {
             text-align: justify;
+            white-space: pre-line;
           }
         </style>
       </head>
       <body>
         <h1>${simplifiedTitle}</h1>
         <div class="date">生成日期: ${today.toLocaleDateString('zh-CN')}</div>
-        <div class="content">${simplifiedContent.replace(/\n/g, '<br/>')}</div>
+        <div class="content">${simplifiedContent}</div>
       </body>
       </html>
     `;
@@ -114,6 +126,8 @@ export async function GET(
       'Content-Disposition': `attachment; filename="${simplifiedTitle}-${dateStr}.html"`
     };
 
+    console.log(`[DEBUG] 準備下載文件: ${simplifiedTitle}-${dateStr}.html`);
+
     // 直接返回 HTML 檔案作為下載內容
     return new Response(htmlContent, {
       status: 200,
@@ -122,34 +136,67 @@ export async function GET(
   } catch (error) {
     console.error('[ERROR] PDF下載請求處理失敗:', error);
     return NextResponse.json(
-      { error: '處理請求時發生錯誤' },
+      { error: '處理請求時發生錯誤', details: error instanceof Error ? error.message : '未知錯誤' },
       { status: 500 }
     );
   }
 }
 
-// 獲取內容的輔助函數
-async function getContentForPDF(type: string, userId: string) {
+// 獲取內容的輔助函數，使用與內容 API 相同的邏輯
+async function getContentForPDF(type: string, assistantId: string) {
   try {
     const docClient = await createDynamoDBClient();
     
-    // 獲取最新的內容
+    console.log(`[DEBUG] 查詢內容: 表=${SUNDAY_GUIDE_TABLE}, assistantId=${assistantId}`);
+    
+    // 使用與內容 API 相同的查詢邏輯 - 根據 assistantId 查詢
     const command = new ScanCommand({
-      TableName: process.env.NEXT_PUBLIC_SUNDAY_GUIDE_TABLE || 'SundayGuide',
-      FilterExpression: 'ContentType = :type',
+      TableName: SUNDAY_GUIDE_TABLE,
+      FilterExpression: 'assistantId = :assistantId',
       ExpressionAttributeValues: {
-        ':type': type
-      },
-      Limit: 1
+        ':assistantId': assistantId
+      }
     });
 
     const response = await docClient.send(command);
+    const items = response.Items;
+
+    if (!items || items.length === 0) {
+      console.error('[ERROR] 未找到任何內容記錄');
+      return null;
+    }
+
+    // 獲取最新的文件內容
+    const latestItem = items.sort((a, b) => 
+      new Date(b.Timestamp).getTime() - new Date(a.Timestamp).getTime()
+    )[0];
+
+    console.log(`[DEBUG] 找到最新記錄: ${latestItem.id || 'unknown ID'}, 時間戳: ${latestItem.Timestamp}`);
     
-    if (response.Items && response.Items.length > 0) {
-      return response.Items[0].Content;
+    // 根據類型返回對應內容
+    let content: string | null = null;
+    switch (type) {
+      case 'summary':
+        content = latestItem.summary;
+        break;
+      case 'text':
+        content = latestItem.fullText;
+        break;
+      case 'devotional':
+        content = latestItem.devotional;
+        break;
+      case 'bible':
+        content = latestItem.bibleStudy;
+        break;
+    }
+
+    if (!content) {
+      console.error(`[ERROR] 在找到的記錄中未找到 ${type} 類型的內容`);
+    } else {
+      console.log(`[DEBUG] 成功獲取 ${type} 類型的內容，長度: ${content.length} 字符`);
     }
     
-    return null;
+    return content;
   } catch (error) {
     console.error('[ERROR] 獲取PDF內容失敗:', error);
     throw error;
