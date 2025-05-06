@@ -129,10 +129,9 @@ export async function GET(
       </html>
     `;
 
-    // 設置內容類型和檔案名的標頭，使用安全的ASCII檔案名
+    // 設置內容類型標頭，移除 Content-Disposition 以便直接預覽
     const headers = {
-      'Content-Type': 'text/html; charset=UTF-8',
-      'Content-Disposition': `attachment; filename="${safeFileName}"`
+      'Content-Type': 'text/html; charset=UTF-8'
     };
 
     console.log(`[DEBUG] 準備下載文件: ${safeFileName}`);
