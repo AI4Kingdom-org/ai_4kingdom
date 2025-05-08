@@ -99,6 +99,7 @@ export async function POST(request: Request) {
 
     const formData = await request.formData();
     const file = formData.get('file') as File;
+    const userId = formData.get('userId') as string | null;
     
     if (!file) {
       console.error('[ERROR] 沒有找到文件');
@@ -131,7 +132,29 @@ export async function POST(request: Request) {
       );
       console.log(`[DEBUG] 文件成功添加到 Vector Store`);
 
-      // 此處移除等待文件處理完成的流程，直接返回成功
+      // 3. 寫入 DynamoDB
+      try {
+        const docClient = await createDynamoDBClient();
+        const tableName = process.env.NEXT_PUBLIC_SUNDAY_GUIDE_TABLE || 'SundayGuide';
+        await docClient.send(new PutCommand({
+          TableName: tableName,
+          Item: {
+            assistantId,
+            vectorStoreId,
+            fileId: uploadedFile.id,
+            fileName: file.name,
+            fileSize: file.size,
+            fileType: file.type,
+            userId: userId || 'unknown',
+            uploadTimestamp: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+          }
+        }));
+        console.log('[DEBUG] 已寫入 DynamoDB，包含 userId');
+      } catch (ddbErr) {
+        console.error('[ERROR] 寫入 DynamoDB 失敗:', ddbErr);
+      }
+
       return NextResponse.json({ 
         success: true,
         fileId: uploadedFile.id,

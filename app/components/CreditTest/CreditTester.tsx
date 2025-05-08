@@ -6,9 +6,9 @@ import { useAuth } from '../../contexts/AuthContext';
 
 // 定義每個用戶類型的 token 額度
 const TOKEN_LIMITS = {
-  free: 10000,     // 100 credits
-  pro: 100000,     // 1,000 credits
-  ultimate: 500000 // 5,000 credits
+  free: 100000,     // 100 credits
+  pro: 1000000,     // 1,000 credits
+  ultimate: 5000000 // 5,000 credits
 };
 
 // Token 轉換為 Credit 的比率

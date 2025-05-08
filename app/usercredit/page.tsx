@@ -97,68 +97,109 @@ export default function UserCreditPage() {
 
   const remainingCredits = calculateRemainingCredits();
 
-  // 處理到期日期顯示
-  const formatExpiryDate = () => {
-    if (user?.subscription?.type === 'free') {
-      return '永久有效 (Forever)';
-    } else if (user?.subscription?.expiry) {
-      const date = new Date(user.subscription.expiry);
-      return isNaN(date.getTime()) ? '未知' : date.toLocaleDateString();
-    }
-    return '未知';
+  // 檢查是否有不足的 tokens
+  const hasInsufficientTokens = () => {
+    if (!user || !usage) return false;
+    
+    const subscriptionType = user.subscription?.type || 'free';
+    const limit = TOKEN_LIMITS[subscriptionType];
+    const used = usage.monthlyTokens || 0;
+    
+    return limit - used <= 0;
   };
 
-  if (authLoading || loading) {
-    return <div className={styles.loading}>載入中...</div>;
+  // 處理到期日期顯示
+  const formatExpiryDate = () => {
+    // Assert the type of user.subscription to include expiresAt and access it safely
+    const expiresAtFromSubscription = (user?.subscription as { type: 'free' | 'pro' | 'ultimate'; expiresAt?: string | Date })?.expiresAt;
+
+    if (!expiresAtFromSubscription) {
+      return '永久有效';
+    }
+
+    try {
+      const expiryDate = new Date(expiresAtFromSubscription);
+      return expiryDate.toLocaleDateString('zh-TW', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+      });
+    } catch (err) {
+      console.error('日期格式錯誤:', err);
+      return '未知';
+    }
+  };
+
+  if (loading || authLoading) {
+    return <div className={styles.loading}>載入中，請稍候...</div>;
   }
 
   if (!user) {
-    return <div className={styles.loginPrompt}>請先登入以查看您的信用額度。</div>;
+    return <div className={styles.error}>請先登入</div>;
   }
 
   if (error) {
-    return <div className={styles.error}>{error}</div>;
+    return <div className={styles.error}>錯誤: {error}</div>;
   }
+
+  const subscriptionType = user.subscription?.type || 'free';
+  const subscriptionName = 
+    subscriptionType === 'ultimate' ? 'Ultimate' :
+    subscriptionType === 'pro' ? 'Pro' : 'Free';
+
+  const tokenLimit = TOKEN_LIMITS[subscriptionType];
+  const usedTokens = usage?.monthlyTokens || 0;
+  const percentUsed = Math.min(100, Math.round((usedTokens / tokenLimit) * 100));
 
   return (
     <div className={styles.container}>
-      <h1 className={styles.title}>Credit额度</h1>
-
-      <div className={styles.creditBlock}>
-        <div className={styles.userInfo}>
-          <div>
-            <span className={styles.label}>用户名:</span> 
-            <span className={styles.value}>{user.display_name}</span>
-          </div>
-          <div>
-            <span className={styles.label}>用户 ID:</span> 
-            <span className={styles.value}>{user.user_id}</span>
-          </div>
-          <div>
-            <span className={styles.label}>会员等级:</span> 
-            <span className={styles.value}>
-              {user.subscription?.type === 'free' && '免费会员 (100 Credits/月)'}
-              {user.subscription?.type === 'pro' && 'Pro 会员 (1,000 Credits/月)'}
-              {user.subscription?.type === 'ultimate' && 'Ultimate 会员 (5,000 Credits/月)'}
-            </span>
-          </div>
-          <div>
-            <span className={styles.label}>到期日期:</span> 
-            <span className={styles.value}>{formatExpiryDate()}</span>
-          </div>
-          
-          {/* 剩余点数显示 */}
-          <div className={styles.creditInfoSection}>
-            <div className={styles.creditInfo}>
-              <span className={styles.label}>剩余 Credits: </span>
-              <span className={styles.value}>{remainingCredits}</span>
-            </div>
-          </div>
-          
-          <div className={styles.resetReminder}>
-          每月额度将在每月1日重置，未使用的额度不会累计到下个月。
-          </div>
+      <h1 className={styles.title}>用户额度管理</h1>
+      
+      <div className={styles.infoCard}>
+        <div className={styles.infoRow}>
+          <span>用户ID:</span>
+          <span>{user.user_id}</span>
         </div>
+        <div className={styles.infoRow}>
+          <span>方案:</span>
+          <span className={styles.plan}>{subscriptionName}</span>
+        </div>
+        <div className={styles.infoRow}>
+          <span>到期时间:</span>
+          <span>{formatExpiryDate()}</span>
+        </div>
+        <div className={styles.infoRow}>
+          <span>剩余Credits:</span>
+          <span className={styles.credits}>{remainingCredits}</span>
+        </div>
+      </div>
+      
+      {hasInsufficientTokens() && (
+        <div className={styles.upgradeWarning}>
+          <p>您的 Token 额度不足！</p>
+          <p>请升级会员以获取更多 Credits，享有更多功能。</p>
+        </div>
+      )}
+
+      <div className={styles.usageCard}>
+        <h3>Token Monthly Usage</h3>
+        <div className={styles.progressContainer}>
+          <div 
+            className={`${styles.progressBar} ${percentUsed >= 80 ? styles.warning : ''} ${percentUsed >= 95 ? styles.danger : ''}`} 
+            style={{ width: `${percentUsed}%` }}
+          ></div>
+          <span className={styles.progressText}>{percentUsed}%</span>
+        </div>
+        <div className={styles.tokenInfo}>
+          <span>{usedTokens.toLocaleString()} / {tokenLimit.toLocaleString()} tokens</span>
+        </div>
+        <div className={styles.lastUpdated}>
+          Update Date: {new Date().toLocaleString('en-US', { timeZone: 'America/Los_Angeles' })}
+        </div>
+      </div>
+      
+      <div className={styles.creditsExplanation}>  
+        <p>每月额度将在每月1日重置，未使用的额度不会累计到下个月。</p>
       </div>
     </div>
   );

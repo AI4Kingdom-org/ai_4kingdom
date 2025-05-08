@@ -5,18 +5,17 @@
 }
 
 .title {
-  font-size: 2rem;
+  margin-bottom: 1.5rem;
+  font-size: 1.8rem;
   color: #333;
-  margin-bottom: 2rem;
-  text-align: center;
 }
 
 .section {
-  margin-bottom: 3rem;
-  background: white;
-  padding: 2rem;
+  background: #fff;
+  padding: 1.5rem;
   border-radius: 8px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  margin-bottom: 2rem;
 }
 
 .sectionTitle {
@@ -30,7 +29,6 @@
 .filterSection {
   display: flex;
   gap: 1rem;
-  margin-bottom: 1.5rem;
   align-items: center;
   flex-wrap: wrap;
 }
@@ -38,80 +36,116 @@
 .selectInput {
   padding: 0.5rem;
   border-radius: 4px;
-  border: 1px solid #ddd;
-  min-width: 250px;
+  border: 1px solid #ccc;
+  min-width: 180px;
 }
 
 .button {
   padding: 0.5rem 1rem;
-  background-color: #0070f3;
+  background-color: #4a90e2;
   color: white;
   border: none;
   border-radius: 4px;
   cursor: pointer;
-  transition: background-color 0.3s;
+  font-weight: 500;
+  transition: background-color 0.2s;
 }
 
 .button:hover {
-  background-color: #0051b3;
+  background-color: #3a80d2;
+}
+
+.button:disabled {
+  background-color: #a0a0a0;
+  cursor: not-allowed;
+}
+
+.dangerButton {
+  padding: 0.5rem 1rem;
+  background-color: #e74c3c;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: 500;
+  transition: background-color 0.2s;
+}
+
+.dangerButton:hover {
+  background-color: #c0392b;
+}
+
+.dangerButton:disabled {
+  background-color: #e57373;
+  cursor: not-allowed;
 }
 
 .recordsTable {
   width: 100%;
   border-collapse: collapse;
-  margin-top: 1.5rem;
+  margin-bottom: 1rem;
 }
 
 .recordsTable th, 
 .recordsTable td {
   padding: 0.75rem;
+  border: 1px solid #e1e1e1;
   text-align: left;
-  border-bottom: 1px solid #eee;
 }
 
 .recordsTable th {
   background-color: #f5f5f5;
   font-weight: 600;
-  color: #444;
 }
 
-.recordsTable tr:hover {
+.recordsTable tr:nth-child(even) {
   background-color: #f9f9f9;
 }
 
+.recordsTable tr:hover {
+  background-color: #f0f0f0;
+}
+
 .loading {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  height: 200px;
-  color: #666;
+  text-align: center;
+  padding: 2rem;
+  color: #777;
+  font-style: italic;
 }
 
 .error {
+  background-color: #ffebee;
+  border-left: 4px solid #e74c3c;
+  color: #c0392b;
   padding: 1rem;
-  background-color: #fff0f0;
-  color: #e00;
+  margin: 1rem 0;
+}
+
+.message {
+  padding: 1rem;
+  margin: 1rem 0;
   border-radius: 4px;
-  margin-bottom: 1.5rem;
+}
+
+.success {
+  background-color: #e8f5e9;
+  border-left: 4px solid #2ecc71;
+  color: #27ae60;
 }
 
 .noRecords {
   text-align: center;
   padding: 2rem;
-  color: #666;
-  background: #f8f9fa;
-  border-radius: 6px;
-  border: 1px solid #e9ecef;
-  margin-top: 1.5rem;
+  color: #777;
 }
 
 .statusSuccess {
-  color: #4CAF50;
+  color: #27ae60;
   font-weight: 500;
 }
 
 .statusPending {
-  color: #FF9800;
+  color: #e67e22;
   font-weight: 500;
 }
 
@@ -123,12 +157,11 @@
 }
 
 .pageButton {
-  padding: 0.4rem 0.8rem;
+  padding: 0.5rem 1rem;
   border: 1px solid #ddd;
-  background-color: white;
-  border-radius: 4px;
+  background-color: #fff;
   cursor: pointer;
-  transition: all 0.2s;
+  border-radius: 4px;
 }
 
 .pageButton:hover {
@@ -136,21 +169,29 @@
 }
 
 .pageButton.active {
-  background-color: #0070f3;
+  background-color: #4a90e2;
   color: white;
-  border-color: #0070f3;
+  border-color: #4a90e2;
+}
+
+.pageButton:disabled {
+  background-color: #f5f5f5;
+  color: #ccc;
+  cursor: not-allowed;
 }
 
 .headerActions {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 1rem;
+  margin-bottom: 1.5rem;
+  flex-wrap: wrap;
+  gap: 1rem;
 }
 
 .searchInput {
   padding: 0.5rem;
   border-radius: 4px;
-  border: 1px solid #ddd;
+  border: 1px solid #ccc;
   min-width: 250px;
 }

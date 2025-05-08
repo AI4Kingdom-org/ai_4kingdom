@@ -16,6 +16,7 @@ interface AssistantManagerProps {
   setIsProcessing: (isProcessing: boolean) => void;
   setUploadProgress: (progress: number) => void;
   setUploadTime: (time: string) => void;
+  disabled?: boolean; // 添加 disabled 屬性支援
 }
 
 interface TaskStatus {
@@ -30,7 +31,8 @@ export default function AssistantManager({
   onFileProcessed, 
   setIsProcessing, 
   setUploadProgress,
-  setUploadTime
+  setUploadTime,
+  disabled = false // 設置默認值為 false
 }: AssistantManagerProps) {
   const { refreshUsage } = useCredit();
   const { user } = useAuth(); // 添加 useAuth 以獲取用戶 ID
@@ -129,6 +131,11 @@ export default function AssistantManager({
       setError(null);
       const formData = new FormData();
       formData.append('file', file);
+      
+      // 添加用戶 ID 到上傳請求
+      if (user?.user_id) {
+        formData.append('userId', user.user_id);
+      }
       
       // 開始上傳文件
       const uploadResponse = await fetch(`/api/vector-store/upload?vectorStoreId=${VECTOR_STORE_IDS.JOHNSUNG}&assistantId=${ASSISTANT_IDS.SUNDAY_GUIDE}`, {
@@ -509,6 +516,7 @@ export default function AssistantManager({
                 handleFileUpload(file);
               }
             }}
+            disabled={disabled} // 禁用上傳按鈕
           />
           
           {uploading && (
@@ -520,7 +528,7 @@ export default function AssistantManager({
           {uploadSuccess && !processing && !processingComplete && (
             <div className={styles.successMsg}>
               文件「{uploadedFileName}」上传成功！
-              <button onClick={handleProcessDocument} disabled={processing} style={{marginLeft:8}}>
+              <button onClick={handleProcessDocument} disabled={processing || disabled} style={{marginLeft:8}}>
                 {processing ? '处理中...' : '开始处理'}
               </button>
             </div>

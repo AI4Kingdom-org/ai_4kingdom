@@ -41,6 +41,7 @@ export async function GET(request: Request) {
         fileId: item.fileId,
         fileName: item.fileName || '未命名文件',
         updatedAt: item.updatedAt || item.Timestamp,
+        userId: item.userId || '-', // 添加 userId
         summary: item.summary ? '已生成' : '未生成',
         fullText: item.fullText ? '已生成' : '未生成',
         devotional: item.devotional ? '已生成' : '未生成', 
@@ -87,6 +88,7 @@ export async function POST(request: Request) {
     
     const file = formData.get('files') as File;
     const assistantId = formData.get('assistantId') as string;
+    const userId = formData.get('userId') as string; // 獲取 userId
 
     console.log('请求参数详情:', {
       文件信息: file ? {
@@ -96,6 +98,7 @@ export async function POST(request: Request) {
         最后修改时间: file.lastModified
       } : '无文件',
       助手ID: assistantId || '未提供',
+      用户ID: userId || '未提供',
       表单字段列表: Array.from(formData.keys())
     });
 
@@ -186,6 +189,7 @@ export async function POST(request: Request) {
           fileName: file.name,
           fileSize: file.size,
           fileType: file.type,
+          userId: userId || 'unknown', // 添加 userId
           uploadTimestamp: new Date().toISOString(),
           updatedAt: new Date().toISOString()
         }
