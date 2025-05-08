@@ -303,7 +303,8 @@ export default function AssistantManager({
         body: JSON.stringify({
           assistantId: ASSISTANT_IDS.SUNDAY_GUIDE,
           vectorStoreId: VECTOR_STORE_IDS.JOHNSUNG,
-          fileName: uploadedFileName
+          fileName: uploadedFileName,
+          userId: user?.user_id || '-' // 添加用戶 ID
         })
       });
       

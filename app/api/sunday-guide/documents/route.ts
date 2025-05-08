@@ -12,6 +12,13 @@ export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const assistantId = searchParams.get('assistantId');
+    let userId = searchParams.get('userId'); // 添加獲取 userId 查詢參數
+    
+    console.log('[DEBUG] 請求參數:', {
+      assistantId,
+      userId,
+      url: request.url
+    });
     
     // 獲取數據庫連接
     const docClient = await createDynamoDBClient();
@@ -21,16 +28,51 @@ export async function GET(request: Request) {
       TableName: process.env.NEXT_PUBLIC_SUNDAY_GUIDE_TABLE || 'SundayGuide',
     };
     
-    // 如果提供了assistantId，則按助手ID過濾
+    // 構建過濾表達式和表達式屬性值
+    let filterExpressions = [];
+    const expressionAttributeValues: Record<string, any> = {};
+    
+    // 如果提供了assistantId，加入過濾條件
     if (assistantId) {
-      params.FilterExpression = "assistantId = :assistantId";
-      params.ExpressionAttributeValues = {
-        ":assistantId": assistantId
-      };
+      filterExpressions.push("assistantId = :assistantId");
+      expressionAttributeValues[":assistantId"] = assistantId;
     }
+    
+    // 如果提供了userId，加入過濾條件 - 使用 OR 條件同時檢查字符串和數字類型
+    if (userId) {
+      // 檢查 userId 是否可以轉換為數字
+      const numericUserId = !isNaN(Number(userId)) ? Number(userId) : null;
+      
+      if (numericUserId !== null) {
+        // 如果可以轉換為數字，同時檢查字符串和數字類型
+        filterExpressions.push("(userId = :userIdStr OR userId = :userIdNum OR UserId = :userIdStr OR UserId = :userIdNum)");
+        expressionAttributeValues[":userIdStr"] = userId;
+        expressionAttributeValues[":userIdNum"] = numericUserId;
+      } else {
+        // 如果不是數字，只檢查字符串
+        filterExpressions.push("(userId = :userId OR UserId = :userId)");
+        expressionAttributeValues[":userId"] = userId;
+      }
+    }
+    
+    // 如果有過濾條件，設置過濾表達式
+    if (filterExpressions.length > 0) {
+      params.FilterExpression = filterExpressions.join(" AND ");
+      params.ExpressionAttributeValues = expressionAttributeValues;
+    }
+    
+    console.log('[DEBUG] DynamoDB 查詢參數:', {
+      FilterExpression: params.FilterExpression,
+      ExpressionAttributeValues: params.ExpressionAttributeValues
+    });
     
     // 查詢文件記錄
     const result = await docClient.send(new ScanCommand(params));
+    
+    console.log('[DEBUG] 查詢結果:', {
+      itemCount: result.Items?.length || 0,
+      firstItem: result.Items && result.Items.length > 0 ? JSON.stringify(result.Items[0]).substring(0, 200) : '無記錄'
+    });
     
     // 返回結果
     return NextResponse.json({
@@ -41,7 +83,7 @@ export async function GET(request: Request) {
         fileId: item.fileId,
         fileName: item.fileName || '未命名文件',
         updatedAt: item.updatedAt || item.Timestamp,
-        userId: item.userId || '-', // 添加 userId
+        userId: item.userId || item.UserId || '-', // 統一使用 userId 並兼容舊數據
         summary: item.summary ? '已生成' : '未生成',
         fullText: item.fullText ? '已生成' : '未生成',
         devotional: item.devotional ? '已生成' : '未生成', 
@@ -178,25 +220,44 @@ export async function POST(request: Request) {
       const docClient = await createDynamoDBClient();
       const tableName = process.env.NEXT_PUBLIC_SUNDAY_GUIDE_TABLE || 'SundayGuide';
       
-      console.log(`[DEBUG] 使用數據表: ${tableName}`);
+      // 標準化用戶 ID 的處理
+      let parsedUserId = userId;
+      
+      // 如果 userId 是數字字符串，保留原始字符串形式
+      if (userId && !isNaN(Number(userId))) {
+        console.log(`[DEBUG] 用戶 ID "${userId}" 是數字格式的字符串`);
+        parsedUserId = userId; // 保持字符串形式
+      } else if (!userId) {
+        console.log(`[DEBUG] 未提供用戶 ID，使用默認值 "unknown"`);
+        parsedUserId = 'unknown';
+      } else {
+        console.log(`[DEBUG] 使用字符串用戶 ID: "${userId}"`);
+      }
+      
+      console.log(`[DEBUG] 使用數據表: ${tableName}，用戶 ID (${typeof parsedUserId}): ${parsedUserId}`);
+      
+      const item = {
+        assistantId,
+        vectorStoreId: vectorStore.id,
+        fileId: openaiFile.id,
+        fileName: file.name,
+        fileSize: file.size,
+        fileType: file.type,
+        userId: parsedUserId, // 使用處理後的 userId
+        uploadTimestamp: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        Timestamp: new Date().toISOString() // 添加 Timestamp 作為主鍵
+      };
+      
+      console.log(`[DEBUG] 即將寫入的 DynamoDB 記錄:`, JSON.stringify(item, null, 2));
       
       const command = new PutCommand({
         TableName: tableName,
-        Item: {
-          assistantId,
-          vectorStoreId: vectorStore.id,
-          fileId: openaiFile.id,
-          fileName: file.name,
-          fileSize: file.size,
-          fileType: file.type,
-          userId: userId || 'unknown', // 添加 userId
-          uploadTimestamp: new Date().toISOString(),
-          updatedAt: new Date().toISOString()
-        }
+        Item: item
       });
 
-      await docClient.send(command);
-      console.log(`[DEBUG] 步驟 4: ${currentStep}成功，耗時: ${Date.now() - stepStartTime}ms`);
+      const result = await docClient.send(command);
+      console.log(`[DEBUG] 步驟 4: ${currentStep}成功，响應:`, JSON.stringify(result, null, 2));
       console.log(`[DEBUG] 整個處理流程完成，總耗時: ${Date.now() - startTime}ms`);
 
       return NextResponse.json({
@@ -204,6 +265,7 @@ export async function POST(request: Request) {
         vectorStoreId: vectorStore.id,
         fileId: openaiFile.id,
         fileName: file.name,
+        userId: parsedUserId, // 返回用戶 ID
         processingTime: Date.now() - startTime
       });
     } catch (processError) {
