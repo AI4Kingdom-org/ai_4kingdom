@@ -16,8 +16,10 @@ async function processDocumentAsync(params: {
   vectorStoreId: string;
   fileName: string;
   fileId?: string;
+  userId?: string;
 }) {
-  const { assistantId, vectorStoreId, fileName, fileId } = params;
+  const { assistantId, vectorStoreId, fileName, fileId, userId } = params;
+  const effectiveUserId = userId ? String(userId) : 'unknown';
   const processingStartTime = Date.now();
   
   try {
@@ -146,6 +148,7 @@ async function processDocumentAsync(params: {
         vectorStoreId,
         fileName,
         fileId: fileId || vectorStoreId,
+        userId: effectiveUserId, // 強制寫入有效 userId
         summary: results.summary,
         // fullText: results.fullText, // Disabled fullText saving
         devotional: results.devotional,
@@ -167,7 +170,7 @@ async function processDocumentAsync(params: {
 
 export async function POST(request: Request) {
   try {
-    const { assistantId, vectorStoreId, fileName } = await request.json();
+    const { assistantId, vectorStoreId, fileName, userId } = await request.json();
     
     console.log('[DEBUG] 處理文件請求:', { assistantId, vectorStoreId, fileName });
     
@@ -276,7 +279,8 @@ export async function POST(request: Request) {
         assistantId,
         vectorStoreId,
         fileName,
-        fileId
+        fileId,
+        userId // 傳遞 userId
       }).catch(err => {
         console.error('[ERROR] 非同步處理出錯:', err);
       });

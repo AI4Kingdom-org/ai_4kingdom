@@ -529,7 +529,7 @@ export async function POST(request: Request) {
         assistantId: assistant.id,
         vectorStoreId: vectorStore.id,
         fileId: file.id,
-        UserId: userId,
+        userId: userId, // 將 UserId 改為 userId
         Timestamp: timestamp,
         youtubeUrl: url,
         status: 'active',
@@ -573,4 +573,4 @@ export async function POST(request: Request) {
       details: error instanceof Error ? error.message : '未知错误'
     }, { status: 500 });
   }
-} 
+}

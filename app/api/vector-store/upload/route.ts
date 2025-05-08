@@ -147,7 +147,8 @@ export async function POST(request: Request) {
             fileType: file.type,
             userId: userId || 'unknown',
             uploadTimestamp: new Date().toISOString(),
-            updatedAt: new Date().toISOString()
+            updatedAt: new Date().toISOString(),
+            Timestamp: new Date().toISOString() // 添加必要的 Timestamp 主鍵
           }
         }));
         console.log('[DEBUG] 已寫入 DynamoDB，包含 userId');
