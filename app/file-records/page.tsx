@@ -27,6 +27,7 @@ interface FileRecord {
   fullText: string;
   devotional: string;
   bibleStudy: string;
+  userId?: string;
 }
 
 export default function FileRecordsPage() {
@@ -36,10 +37,49 @@ export default function FileRecordsPage() {
   const [error, setError] = useState<string | null>(null);
   const [selectedAssistant, setSelectedAssistant] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [deleteMessage, setDeleteMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   
   // 分頁狀態
   const [currentPage, setCurrentPage] = useState(1);
   const recordsPerPage = 10;
+
+  // 新增：選取檔案記錄的狀態 - 使用索引陣列而非 fileId
+  const [selectedIndices, setSelectedIndices] = useState<number[]>([]);
+
+  // 切換單一checkbox - 使用索引而非 fileId
+  const handleCheckboxChange = (index: number) => {
+    setSelectedIndices(prev =>
+      prev.includes(index)
+        ? prev.filter(i => i !== index)
+        : [...prev, index]
+    );
+  };
+
+  // 全選/全不選 - 使用索引陣列
+  const handleSelectAll = (checked: boolean) => {
+    if (checked) {
+      // 全選目前頁面的所有索引
+      setSelectedIndices(Array.from({ length: currentRecords.length }, (_, i) => i));
+    } else {
+      // 清空選取
+      setSelectedIndices([]);
+    }
+  };
+
+  // 單/多選刪除功能
+  const handleDeleteSelected = () => {
+    if (selectedIndices.length === 0) {
+      alert('請先勾選要刪除的檔案記錄');
+      return;
+    }
+    
+    // 獲取選取記錄的 fileId 陣列
+    const selectedFileIds = selectedIndices.map(index => currentRecords[index].fileId).filter(Boolean);
+    
+    // TODO: 呼叫API批次刪除 selectedFileIds
+    alert('將刪除檔案ID: ' + selectedFileIds.join(', '));
+  };
 
   // 獲取文件記錄
   const fetchRecords = async () => {
@@ -77,6 +117,52 @@ export default function FileRecordsPage() {
     }
   }, [user, selectedAssistant]);
 
+  // 刪除所有文件記錄
+  const deleteAllFiles = async () => {
+    // 顯示確認對話框
+    if (!confirm('確定要刪除所有向量儲存中的檔案嗎？此操作無法撤銷！')) {
+      return;
+    }
+    
+    setDeleteLoading(true);
+    setDeleteMessage(null);
+    
+    try {
+      const queryParams = selectedAssistant ? `?vectorStoreId=${selectedAssistant}` : '';
+      
+      const response = await fetch(`/api/vector-store/delete-all${queryParams}`, {
+        method: 'DELETE',
+      });
+      
+      const data = await response.json();
+      
+      if (response.ok) {
+        setDeleteMessage({
+          type: 'success',
+          text: `成功刪除了 ${data.deletedCount} 個檔案！`
+        });
+        
+        // 重新載入記錄
+        fetchRecords();
+      } else {
+        throw new Error(data.error || '刪除操作失敗');
+      }
+    } catch (err) {
+      console.error('刪除所有檔案錯誤:', err);
+      setDeleteMessage({
+        type: 'error',
+        text: err instanceof Error ? err.message : '刪除失敗，請稍後再試'
+      });
+    } finally {
+      setDeleteLoading(false);
+      
+      // 5秒後自動清除訊息
+      setTimeout(() => {
+        setDeleteMessage(null);
+      }, 5000);
+    }
+  };
+
   // 過濾記錄
   const filteredRecords = records.filter(record => {
     if (!searchTerm) return true;
@@ -88,11 +174,17 @@ export default function FileRecordsPage() {
     );
   });
   
-  // 計算分頁
-  const totalPages = Math.ceil(filteredRecords.length / recordsPerPage);
+  // 計算分頁（先排序，後分頁）
+  // 先依 updatedAt 由新到舊排序
+  const sortedRecords = [...filteredRecords].sort((a, b) => {
+    const dateA = new Date(a.updatedAt).getTime();
+    const dateB = new Date(b.updatedAt).getTime();
+    return dateB - dateA;
+  });
+  const totalPages = Math.ceil(sortedRecords.length / recordsPerPage);
   const indexOfLastRecord = currentPage * recordsPerPage;
   const indexOfFirstRecord = indexOfLastRecord - recordsPerPage;
-  const currentRecords = filteredRecords.slice(indexOfFirstRecord, indexOfLastRecord);
+  const currentRecords = sortedRecords.slice(indexOfFirstRecord, indexOfLastRecord);
 
   // 格式化時間
   const formatDate = (dateString: string) => {
@@ -149,6 +241,14 @@ export default function FileRecordsPage() {
             >
               刷新記錄
             </button>
+            
+            <button 
+              className={styles.dangerButton} 
+              onClick={deleteAllFiles}
+              disabled={deleteLoading}
+            >
+              {deleteLoading ? '刪除中...' : '刪除所有檔案'}
+            </button>
           </div>
           
           <div>
@@ -161,6 +261,12 @@ export default function FileRecordsPage() {
             />
           </div>
         </div>
+        
+        {deleteMessage && (
+          <div className={`${styles.message} ${styles[deleteMessage.type]}`}>
+            {deleteMessage.text}
+          </div>
+        )}
 
         {error && (
           <div className={styles.error}>
@@ -170,21 +276,43 @@ export default function FileRecordsPage() {
 
         {loading ? (
           <div className={styles.loading}>載入中...</div>
-        ) : currentRecords.length > 0 ? (
+        ) : (
           <>
             <table className={styles.recordsTable}>
               <thead>
                 <tr>
+                  <th>
+                    <input
+                      type="checkbox"
+                      checked={currentRecords.length > 0 && selectedIndices.length === currentRecords.length}
+                      onChange={e => handleSelectAll(e.target.checked)}
+                      aria-label="全選/全不選"
+                    />
+                  </th>
                   <th>文件名稱</th>
+                  <th>助手ID</th>
+                  <th>用戶ID</th>
+                  <th>Vector Store ID</th>
                   <th>助手類型</th>
                   <th>上傳時間</th>
                   <th>處理狀態</th>
                 </tr>
               </thead>
               <tbody>
-                {currentRecords.map((record, index) => (
+                {currentRecords.length > 0 ? currentRecords.map((record, index) => (
                   <tr key={index}>
+                    <td>
+                      <input
+                        type="checkbox"
+                        checked={selectedIndices.includes(index)}
+                        onChange={() => handleCheckboxChange(index)}
+                        aria-label={`選取 ${record.fileName}`}
+                      />
+                    </td>
                     <td>{record.fileName}</td>
+                    <td>{record.assistantId || '-'}</td>
+                    <td>{record.userId || '-'}</td>
+                    <td>{record.vectorStoreId || '-'}</td>
                     <td>{getAssistantName(record.assistantId)}</td>
                     <td>{formatDate(record.updatedAt)}</td>
                     <td>
@@ -194,9 +322,21 @@ export default function FileRecordsPage() {
                       <div>查經: <span className={record.bibleStudy === '已生成' ? styles.statusSuccess : styles.statusPending}>{record.bibleStudy}</span></div>
                     </td>
                   </tr>
-                ))}
+                )) : (
+                  <tr>
+                    <td colSpan={8} style={{ textAlign: 'center', color: '#888' }}>找不到文件記錄</td>
+                  </tr>
+                )}
               </tbody>
             </table>
+            <button
+              className={styles.dangerButton}
+              style={{ marginTop: 8, marginBottom: 8 }}
+              onClick={handleDeleteSelected}
+              disabled={selectedIndices.length === 0}
+            >
+              刪除選取檔案
+            </button>
             
             {totalPages > 1 && (
               <div className={styles.paginationControls}>
@@ -228,10 +368,6 @@ export default function FileRecordsPage() {
               </div>
             )}
           </>
-        ) : (
-          <div className={styles.noRecords}>
-            找不到文件記錄
-          </div>
         )}
       </div>
     </div>

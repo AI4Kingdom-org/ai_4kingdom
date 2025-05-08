@@ -205,7 +205,7 @@ function SundayGuideContent() {
             onClick={handleDownloadPDF}
             disabled={pdfLoading}
           >
-            {pdfLoading ? '生成PDF中...' : '下载PDF (简体中文)'}
+            {pdfLoading ? '生成預覽中...' : '下载PDF(简体中文)'}
           </button>
         </div>
         {pdfError && <div className={styles.errorMessage}>{pdfError}</div>}

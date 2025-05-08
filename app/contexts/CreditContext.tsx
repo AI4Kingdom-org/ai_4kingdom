@@ -5,13 +5,13 @@ import { useAuth } from './AuthContext';
 
 // 定義每個用戶類型的 token 額度
 const TOKEN_LIMITS = {
-  free: 10000,     // 100 credits
-  pro: 100000,     // 1,000 credits
-  ultimate: 500000 // 5,000 credits
+  free: 100000,     // 100 credits
+  pro: 1000000,     // 1,000 credits
+  ultimate: 5000000 // 5,000 credits
 };
 
 // Token 轉換為 Credit 的比率
-const TOKEN_TO_CREDIT_RATIO = 100; // 100 tokens = 1 credit
+const TOKEN_TO_CREDIT_RATIO = 1000; // 1000 tokens = 1 credit
 
 interface UsageData {
   monthlyTokens: number;
@@ -25,6 +25,7 @@ interface CreditContextType {
   refreshUsage: () => Promise<void>;
   remainingCredits: number;
   lastRefreshTime: Date | null;
+  hasInsufficientTokens: boolean; // 新增檢查 token 是否不足的屬性
 }
 
 const CreditContext = createContext<CreditContextType | null>(null);
@@ -133,6 +134,18 @@ export function CreditProvider({ children }: { children: React.ReactNode }) {
   }, [user, usage]);
 
   const remainingCredits = calculateRemainingCredits();
+  
+  // 檢查是否有足夠的 tokens
+  const hasInsufficientTokens = useCallback(() => {
+    if (!user || !usage) return false;
+    
+    const subscriptionType = user.subscription?.type || 'free';
+    const limit = TOKEN_LIMITS[subscriptionType];
+    const used = usage.monthlyTokens || 0;
+    const remaining = limit - used;
+    
+    return remaining <= 0;
+  }, [user, usage]);
 
   // 提供給外部的上下文值
   const contextValue: CreditContextType = {
@@ -141,7 +154,8 @@ export function CreditProvider({ children }: { children: React.ReactNode }) {
     error,
     refreshUsage: fetchUsage,
     remainingCredits,
-    lastRefreshTime
+    lastRefreshTime,
+    hasInsufficientTokens: hasInsufficientTokens() // 添加到 context 中
   };
 
   return (
