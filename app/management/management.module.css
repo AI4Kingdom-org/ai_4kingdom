@@ -1,0 +1,82 @@
+.managementPortalContainer {
+  padding: 2rem;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.managementHeader {
+  margin-bottom: 2rem;
+  text-align: center;
+}
+
+.managementHeader h1 {
+  font-size: 2.5rem;
+  color: #333;
+  margin-bottom: 0.5rem;
+}
+
+.managementHeader p {
+  font-size: 1.2rem;
+  color: #666;
+}
+
+.managementToolsGrid {
+  display: flex;
+  flex-direction: row;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 1.5rem;
+}
+
+.toolCard {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  padding: 1.5rem;
+  transition: all 0.3s ease;
+  background-color: white;
+  text-decoration: none;
+  color: inherit;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+  width: 300px;
+  text-align: center;
+  align-items: center;
+}
+
+.toolCard:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
+  border-color: #2563eb;
+}
+
+.toolIcon {
+  font-size: 3rem;
+  margin-bottom: 1rem;
+  display: flex;
+  justify-content: center;
+}
+
+.toolCard h2 {
+  font-size: 1.5rem;
+  margin-bottom: 0.75rem;
+  color: #1e40af;
+}
+
+.toolCard p {
+  color: #666;
+  font-size: 1rem;
+}
+
+/* 響應式設計，確保在較小的螢幕上連結也能正常顯示 */
+@media (max-width: 768px) {
+  .managementToolsGrid {
+    flex-direction: column;
+    align-items: center;
+  }
+  
+  .toolCard {
+    width: 90%;
+    max-width: 400px;
+  }
+}

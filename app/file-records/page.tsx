@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import styles from './page.module.css';
 import { ASSISTANT_IDS } from '../config/constants';
 import { useAuth } from '../contexts/AuthContext';
+import BackToPortalLink from '../components/BackToPortalLink';
 
 // 助手選擇器選項
 const assistantOptions = [
@@ -66,9 +67,8 @@ export default function FileRecordsPage() {
       setSelectedIndices([]);
     }
   };
-
   // 單/多選刪除功能
-  const handleDeleteSelected = () => {
+  const handleDeleteSelected = async () => {
     if (selectedIndices.length === 0) {
       alert('請先勾選要刪除的檔案記錄');
       return;
@@ -77,8 +77,60 @@ export default function FileRecordsPage() {
     // 獲取選取記錄的 fileId 陣列
     const selectedFileIds = selectedIndices.map(index => currentRecords[index].fileId).filter(Boolean);
     
-    // TODO: 呼叫API批次刪除 selectedFileIds
-    alert('將刪除檔案ID: ' + selectedFileIds.join(', '));
+    // 確認刪除
+    if (!confirm(`確定要刪除已選取的 ${selectedFileIds.length} 個檔案嗎？此操作無法撤銷！`)) {
+      return;
+    }
+    
+    setDeleteLoading(true);
+    setDeleteMessage(null);
+    
+    let successCount = 0;
+    let failCount = 0;
+    
+    // 逐一刪除所選的檔案
+    for (const fileId of selectedFileIds) {
+      try {
+        const response = await fetch(`/api/vector-store/delete-file`, {
+          method: 'DELETE',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ fileId })
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok) {
+          successCount++;
+        } else {
+          failCount++;
+          console.error('刪除檔案失敗:', data.error || '未知錯誤');
+        }
+      } catch (err) {
+        failCount++;
+        console.error('刪除檔案錯誤:', err);
+      }
+    }
+    
+    // 重新載入記錄
+    await fetchRecords();
+    
+    // 設置結果訊息
+    setDeleteMessage({
+      type: failCount === 0 ? 'success' : 'error',
+      text: `${successCount} 個檔案成功刪除${failCount > 0 ? `，${failCount} 個檔案刪除失敗` : ''}`
+    });
+    
+    // 清空選取
+    setSelectedIndices([]);
+    
+    setDeleteLoading(false);
+    
+    // 5秒後自動清除訊息
+    setTimeout(() => {
+      setDeleteMessage(null);
+    }, 5000);
   };
 
   // 獲取文件記錄
@@ -218,6 +270,7 @@ export default function FileRecordsPage() {
 
   return (
     <div className={styles.container}>
+      <BackToPortalLink />
       <h1 className={styles.title}>文件上傳記錄</h1>
 
       <div className={styles.section}>
@@ -328,14 +381,13 @@ export default function FileRecordsPage() {
                   </tr>
                 )}
               </tbody>
-            </table>
-            <button
+            </table>            <button
               className={styles.dangerButton}
               style={{ marginTop: 8, marginBottom: 8 }}
               onClick={handleDeleteSelected}
-              disabled={selectedIndices.length === 0}
+              disabled={selectedIndices.length === 0 || deleteLoading}
             >
-              刪除選取檔案
+              {deleteLoading ? '刪除中...' : '刪除選取檔案'}
             </button>
             
             {totalPages > 1 && (
