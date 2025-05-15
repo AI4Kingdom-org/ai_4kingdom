@@ -1,0 +1,215 @@
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 20px;
+  font-family: Arial, sans-serif;
+}
+
+.title {
+  font-size: 24px;
+  margin-bottom: 20px;
+  color: #333;
+  text-align: center;
+}
+
+.usersTable {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 20px;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+.usersTable th {
+  background-color: #f0f0f0;
+  padding: 12px 15px;
+  text-align: left;
+  font-weight: bold;
+  border-bottom: 2px solid #ddd;
+  cursor: pointer;
+  user-select: none;
+}
+
+.usersTable th:hover {
+  background-color: #e0e0e0;
+}
+
+.sortIndicator {
+  display: inline-block;
+  margin-left: 5px;
+  font-size: 12px;
+}
+
+.usersTable td {
+  padding: 10px 15px;
+  border-bottom: 1px solid #ddd;
+}
+
+.usersTable tr:hover {
+  background-color: #f5f5f5;
+}
+
+.resetButton {
+  background-color: #4CAF50;
+  color: white;
+  border: none;
+  padding: 8px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: background-color 0.3s;
+}
+
+.resetButton:hover {
+  background-color: #45a049;
+}
+
+.resetButton:disabled {
+  background-color: #cccccc;
+  cursor: not-allowed;
+}
+
+.loadingOverlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  color: white;
+  font-size: 18px;
+  z-index: 1000;
+}
+
+.error {
+  color: red;
+  padding: 10px;
+  margin: 10px 0;
+  border: 1px solid red;
+  border-radius: 4px;
+  background-color: #ffeeee;
+}
+
+.success {
+  color: green;
+  padding: 10px;
+  margin: 10px 0;
+  border: 1px solid green;
+  border-radius: 4px;
+  background-color: #eeffee;
+}
+
+.filterContainer {
+  margin-bottom: 20px;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.filterContainer input {
+  padding: 8px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  flex-grow: 1;
+  max-width: 300px;
+}
+
+.refreshButton {
+  background-color: #2196F3;
+  color: white;
+  border: none;
+  padding: 8px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: background-color 0.3s;
+}
+
+.refreshButton:hover {
+  background-color: #0b7dda;
+}
+
+.bulkResetButton {
+  margin-left: 10px;
+  background-color: #ff9800;
+}
+
+.bulkResetButton:hover {
+  background-color: #e68a00;
+}
+
+.status {
+  margin-top: 10px;
+  font-style: italic;
+  color: #666;
+}
+
+.backButton {
+  display: inline-flex;
+  align-items: center;
+  background-color: #607d8b;
+  color: white;
+  border: none;
+  padding: 8px 15px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  text-decoration: none;
+  margin-bottom: 15px;
+  transition: background-color 0.3s;
+}
+
+.backButton:hover {
+  background-color: #455a64;
+}
+
+.backButton:before {
+  content: '←';
+  margin-right: 8px;
+  font-size: 16px;
+}
+
+.progressContainer {
+  width: 100%;
+  height: 10px;
+  background-color: #e0e0e0;
+  border-radius: 5px;
+  overflow: hidden;
+  margin-top: 5px;
+}
+
+.progressBar {
+  height: 100%;
+  background-color: #4CAF50;
+  border-radius: 5px;
+  transition: width 0.3s;
+}
+
+.progressBar.warning {
+  background-color: #ffa726;
+}
+
+.progressBar.danger {
+  background-color: #f44336;
+}
+
+.userId {
+  font-weight: bold;
+}
+
+.dangerTokens {
+  color: #ff3333;
+  font-weight: bold;
+}
+
+.warningTokens {
+  color: #ff9900;
+  font-weight: bold;
+}
+
+.goodTokens {
+  color: #33cc66;
+  font-weight: bold;
+}
