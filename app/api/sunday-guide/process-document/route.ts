@@ -1,7 +1,10 @@
 import { NextResponse } from 'next/server';
 import OpenAI from 'openai';
 import { createDynamoDBClient } from '@/app/utils/dynamodb';
-import { PutCommand, ScanCommand } from '@aws-sdk/lib-dynamodb';
+import { PutCommand, ScanCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
+import { getPromptsInBatch, defaultPrompts } from '@/app/utils/aiPrompts';
+import { optimizedQuery } from '@/app/utils/dynamodbHelpers';
+import { splitDocumentIfNeeded, createMultiThreadProcessor } from '@/app/utils/documentProcessor';
 
 const SUNDAY_GUIDE_TABLE = process.env.NEXT_PUBLIC_SUNDAY_GUIDE_TABLE || 'SundayGuide';
 const openai = new OpenAI({
@@ -17,8 +20,9 @@ async function processDocumentAsync(params: {
   fileName: string;
   fileId?: string;
   userId?: string;
+  threadId?: string; // 新增參數，允許傳入自定義線程ID
 }) {
-  const { assistantId, vectorStoreId, fileName, fileId, userId } = params;
+  const { assistantId, vectorStoreId, fileName, fileId, userId, threadId } = params;
   const effectiveUserId = userId ? String(userId) : 'unknown';
   const processingStartTime = Date.now();
   
@@ -26,9 +30,9 @@ async function processDocumentAsync(params: {
     // 不再更新進度狀態，只記錄日誌
     console.log(`[DEBUG] 開始處理文件: ${fileName}`);
     
-    // 創建一個新的線程
-    const thread = await openai.beta.threads.create();
-    console.log(`[DEBUG] 創建線程 ID: ${thread.id}`);
+    // 創建一個新的線程，或使用提供的線程
+    const thread = threadId ? { id: threadId } : await openai.beta.threads.create();
+    console.log(`[DEBUG] 使用線程 ID: ${thread.id}`);
     
     // 發送一個初始消息，提供文件名信息
     await openai.beta.threads.messages.create(thread.id, {
@@ -72,48 +76,72 @@ async function processDocumentAsync(params: {
         initialResponse.includes('没有找到') ||
         initialResponse.includes('不存在')) {
       console.error('[ERROR] 助手无法访问文件');
-      throw new Error('助手无法访问上传的文件，请确保文件已正确上传并与助手关联');
-    }
+      throw new Error('助手无法访问上传的文件，请确保文件已正确上传并与助手关联');    }
     
-    console.log('[DEBUG] 初始處理完成，助手可以访问文件，开始处理不同內容類型');
-
-    // 發送處理請求，生成不同類型的內容
+    console.log('[DEBUG] 初始處理完成，助手可以访问文件，开始處理不同內容類型');
+    // 從 AIPrompts 資料表中獲取 prompts
+    console.log('[DEBUG] 從 AIPrompts 資料表獲取 prompts');
+    const AI_PROMPTS_TABLE = process.env.NEXT_PUBLIC_AI_PROMPTS_TABLE || 'AIPrompts';
+    const promptsToFetch = ['summary', 'devotional', 'bibleStudy'];
+    
+    // 使用批處理和快取方式獲取 prompts
+    console.log('[DEBUG] 使用優化的方式獲取所有 prompts');
+    const promptsFromDB = await getPromptsInBatch(promptsToFetch, AI_PROMPTS_TABLE);
+    
+    // 準備處理的內容類型，並確保每個類型都有對應的提示詞
     const contentTypes = [
-      { type: 'summary', prompt: '請用中文總結這篇文章的主要內容，以摘要markdown的方式呈現。請確保包含所有關鍵信息。如果文章包含多個部分，請確保每個部分都有被覆蓋。' },
+      { type: 'summary', prompt: promptsFromDB.summary || defaultPrompts.summary },
       // { type: 'fullText', prompt: '請完整保留原文內容，並加入適當的段落分隔。不要省略任何內容。' }, // Disabled fullText processing
-      { type: 'devotional', prompt: '請用中文基於這篇文章的內容，提供每日靈修指引，為了幫助教會成員在一周內學習和反思文章，將文章分為五個部分進行每日學習（周一到周五）。對於每一天：提供該部分文章的總結。從該部分提取最多三節聖經經文。根據文章的信息提供祷告指導。' },
-      { type: 'bibleStudy', prompt: '請用中文創造文章的小組查經指引。為了促進基於講道的小組查經，請提供：背景：文章的總結及其與基督教生活的相關性。文章中強調的三個重要點。文章中提到的三到五節聖經經文。提供三個討論問題，幫助成員反思信息及其聖經基礎。一到两個個人應用問題，挑戰成員將文章的信息付諸實踐。祷告指導，鼓勵成員為應用信息的力量祈禱。' }
+      { type: 'devotional', prompt: promptsFromDB.devotional || defaultPrompts.devotional },
+      { type: 'bibleStudy', prompt: promptsFromDB.bibleStudy || defaultPrompts.bibleStudy }
     ];
-
+    
     const results: Record<string, string> = {};
-
-    for (const { type, prompt } of contentTypes) {
-      // 只記錄日誌，不更新進度
-      console.log(`[DEBUG] 處理 ${type} 內容...`);
+    
+    // 建立並行處理函數
+    async function processContentType({ type, prompt }: { type: string, prompt: string }) {
+      console.log(`[DEBUG] 並行處理 ${type} 內容開始...`);
+      
+      // 建立新執行緒，避免共用執行緒導致的干擾
+      const typeThread = await openai.beta.threads.create();
+      console.log(`[DEBUG] 為 ${type} 建立執行緒 ID: ${typeThread.id}`);
+      
+      // 發送初始訊息提供文件名信息
+      await openai.beta.threads.messages.create(typeThread.id, {
+        role: 'user',
+        content: `請幫我分析文件 "${fileName}"。我需要基於此文件提供${type}內容。`
+      });
       
       // 發送用戶消息
-      await openai.beta.threads.messages.create(thread.id, {
+      await openai.beta.threads.messages.create(typeThread.id, {
         role: 'user',
         content: prompt
       });
 
       // 執行助手
-      const run = await openai.beta.threads.runs.create(thread.id, {
+      const run = await openai.beta.threads.runs.create(typeThread.id, {
         assistant_id: assistantId,
         instructions: `請基於文件 "${fileName}" 的內容回應用戶的請求。使用文件搜索工具確保你能訪問到文件的完整內容。${prompt}`
       });
 
-      // 等待處理完成
-      let runStatus = await openai.beta.threads.runs.retrieve(thread.id, run.id);
+      // 等待處理完成，使用改進的輪詢間隔
+      let runStatus = await openai.beta.threads.runs.retrieve(typeThread.id, run.id);
       console.log(`[DEBUG] ${type} 處理狀態: ${runStatus.status}`);
       
       let attempts = 0;
-      const maxAttempts = 60; // 最多等待60次(大约10分钟)
+      const maxAttempts = 60; // 最多等待60次
+      
+      // 使用自適應輪詢間隔 (方案2實現部分)
+      let pollInterval = 1000; // 初始為1秒
+      const maxPollInterval = 10000; // 最大間隔為10秒
       
       while ((runStatus.status === 'queued' || runStatus.status === 'in_progress') && attempts < maxAttempts) {
-        await new Promise(resolve => setTimeout(resolve, 10000)); // 等待10秒再查询
-        runStatus = await openai.beta.threads.runs.retrieve(thread.id, run.id);
+        await new Promise(resolve => setTimeout(resolve, pollInterval));
+        runStatus = await openai.beta.threads.runs.retrieve(typeThread.id, run.id);
         console.log(`[DEBUG] ${type} 處理狀態更新: ${runStatus.status} (尝试 ${++attempts}/${maxAttempts})`);
+        
+        // 逐漸增加間隔時間，但不超過最大值
+        pollInterval = Math.min(pollInterval * 1.5, maxPollInterval);
       }
 
       if (runStatus.status !== 'completed') {
@@ -121,43 +149,91 @@ async function processDocumentAsync(params: {
       }
 
       // 獲取助手回覆
-      const messages = await openai.beta.threads.messages.list(thread.id);
+      const messages = await openai.beta.threads.messages.list(typeThread.id);
       const lastMessage = messages.data[0];
       const content = lastMessage.content
         .filter(content => content.type === 'text')
         .map(content => (content.type === 'text' ? content.text.value : ''))
         .join('\n');
 
-      results[type] = content;
       console.log(`[DEBUG] ${type} 內容處理完成, 長度: ${content.length} 字元`);
+      return { type, content };
     }
+    
+    // 並行處理所有內容類型
+    console.log(`[DEBUG] 開始並行處理 ${contentTypes.length} 種內容類型`);
+    const contentPromises = contentTypes.map(processContentType);
+    
+    // 等待所有處理完成
+    const contentResults = await Promise.all(contentPromises);
+    
+    // 將結果整合到一個對象中
+    contentResults.forEach(({ type, content }) => {
+      results[type] = content;
+    });
+    
+    console.log(`[DEBUG] 所有內容類型並行處理完成`);
 
     // 獲取處理結束時間並計算總處理時間（毫秒）
     const processingEndTime = Date.now();
     const serverProcessingTime = processingEndTime - processingStartTime;
     
-    console.log(`[DEBUG] 文件處理完成，總耗時: ${serverProcessingTime / 1000} 秒`);
-
-    // 保存處理結果到數據庫
-    console.log('[DEBUG] 保存處理結果到數據庫');
+    console.log(`[DEBUG] 文件處理完成，總耗時: ${serverProcessingTime / 1000} 秒`);    // 查詢是否已存在檔案記錄
+    console.log('[DEBUG] 查詢是否已存在檔案記錄');
     const docClient = await createDynamoDBClient();
-    await docClient.send(new PutCommand({
-      TableName: SUNDAY_GUIDE_TABLE,
-      Item: {
-        assistantId,
-        vectorStoreId,
-        fileName,
-        fileId: fileId || vectorStoreId,
-        userId: effectiveUserId, // 強制寫入有效 userId
-        summary: results.summary,
-        // fullText: results.fullText, // Disabled fullText saving
-        devotional: results.devotional,
-        bibleStudy: results.bibleStudy,
-        processingTime: serverProcessingTime,
-        completed: true, // 標記完成狀態
-        Timestamp: new Date().toISOString()
+    
+    // 使用優化的查詢
+    const existingRecords = await optimizedQuery({
+      tableName: SUNDAY_GUIDE_TABLE,
+      keyCondition: {},
+      filterExpression: "fileId = :fileId",
+      expressionAttributeValues: {
+        ":fileId": fileId || vectorStoreId
       }
-    }));
+    });
+    
+    if (existingRecords.Items && existingRecords.Items.length > 0) {
+      // 找到現有記錄，進行更新
+      console.log(`[DEBUG] 找到 ${existingRecords.Items.length} 條既有記錄，更新處理結果`);
+      const existingItem = existingRecords.Items[0]; // 使用第一條記錄
+      
+      await docClient.send(new UpdateCommand({
+        TableName: SUNDAY_GUIDE_TABLE,
+        Key: {
+          assistantId: existingItem.assistantId,
+          Timestamp: existingItem.Timestamp
+        },
+        UpdateExpression: "SET summary = :summary, devotional = :devotional, bibleStudy = :bibleStudy, processingTime = :processingTime, completed = :completed",
+        ExpressionAttributeValues: {
+          ":summary": results.summary,
+          ":devotional": results.devotional,
+          ":bibleStudy": results.bibleStudy,
+          ":processingTime": serverProcessingTime,
+          ":completed": true
+        }
+      }));
+      console.log(`[DEBUG] 成功更新現有記錄`);
+    } else {
+      // 沒找到現有記錄，創建新記錄
+      console.log('[DEBUG] 未找到現有記錄，創建新記錄');
+      await docClient.send(new PutCommand({
+        TableName: SUNDAY_GUIDE_TABLE,
+        Item: {
+          assistantId,
+          vectorStoreId,
+          fileName,
+          fileId: fileId || vectorStoreId,
+          userId: effectiveUserId, // 強制寫入有效 userId
+          summary: results.summary,
+          // fullText: results.fullText, // Disabled fullText saving
+          devotional: results.devotional,
+          bibleStudy: results.bibleStudy,
+          processingTime: serverProcessingTime,
+          completed: true, // 標記完成狀態
+          Timestamp: new Date().toISOString()
+        }
+      }));
+    }
     
     console.log('[DEBUG] 處理完成，結果已保存');
     return true;
@@ -227,19 +303,19 @@ export async function POST(request: Request) {
     }
 
     // 獲取文件ID - 從數據庫獲取
-    const docClient = await createDynamoDBClient();
-    const queryParams = {
-      TableName: SUNDAY_GUIDE_TABLE,
-      FilterExpression: "vectorStoreId = :vectorStoreId",
-      ExpressionAttributeValues: {
-        ":vectorStoreId": vectorStoreId
-      }
-    };
-    
     console.log('[DEBUG] 查詢數據庫獲取fileId');
     let fileId = null;
     try {
-      const result = await docClient.send(new ScanCommand(queryParams));
+      // 使用優化的查詢
+      const result = await optimizedQuery({
+        tableName: SUNDAY_GUIDE_TABLE,
+        keyCondition: {},
+        filterExpression: "vectorStoreId = :vectorStoreId",
+        expressionAttributeValues: {
+          ":vectorStoreId": vectorStoreId
+        }
+      });
+      
       if (result.Items && result.Items.length > 0) {
         // 找到最新的記錄
         const latestItem = result.Items.sort((a, b) => 
@@ -266,24 +342,26 @@ export async function POST(request: Request) {
     } catch (vectorStoreError) {
       console.error('[ERROR] 获取 Vector Store 文件失败:', vectorStoreError);
     }
-
+    
     // 生成一個任務ID
     const taskId = `task_${Date.now()}_${Math.random().toString(36).substring(2, 10)}`;
-
-    // 初始化進度記錄
-    // 移除進度記錄的初始化
-
-    // 啟動非同步處理 (使用setTimeout確保API立即返回，不阻塞請求)
-    setTimeout(() => {
-      processDocumentAsync({
-        assistantId,
-        vectorStoreId,
-        fileName,
-        fileId,
-        userId // 傳遞 userId
-      }).catch(err => {
+    
+    // 使用setTimeout確保API立即返回，不阻塞請求
+    setTimeout(async () => {
+      try {
+        // 直接使用優化的非同步處理
+        console.log('[DEBUG] 開始處理文件');
+        await processDocumentAsync({
+          assistantId,
+          vectorStoreId,
+          fileName,
+          fileId,
+          userId
+        });
+        console.log('[DEBUG] 文件處理完成');
+      } catch (err) {
         console.error('[ERROR] 非同步處理出錯:', err);
-      });
+      }
     }, 100);
 
     // 立即返回成功訊息，不返回任務ID

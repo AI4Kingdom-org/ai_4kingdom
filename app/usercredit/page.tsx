@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import styles from './UserCredit.module.css';
+import BackToPortalLink from '../components/BackToPortalLink';
 
 // 定義每個用戶類型的 token 額度
 const TOKEN_LIMITS = {
@@ -150,11 +151,11 @@ export default function UserCreditPage() {
   const tokenLimit = TOKEN_LIMITS[subscriptionType];
   const usedTokens = usage?.monthlyTokens || 0;
   const percentUsed = Math.min(100, Math.round((usedTokens / tokenLimit) * 100));
-
   return (
     <div className={styles.container}>
+    
       <h1 className={styles.title}>用户额度管理</h1>
-      
+
       <div className={styles.infoCard}>
         <div className={styles.infoRow}>
           <span>用户ID:</span>
