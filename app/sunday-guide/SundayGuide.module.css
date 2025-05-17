@@ -259,6 +259,45 @@
   100% { transform: rotate(360deg); }
 }
 
+/* 最新上传文档记录样式 */
+.latestFileRecord {
+  margin-top: 1.5rem;
+  padding: 0.9rem;  /* 稍微減小內邊距 */
+  background-color: #f7f9ff;
+  border-radius: 6px;
+  border-left: 3px solid #3f51b5;
+  font-size: 0.9rem; /* 整體字體縮小 */
+}
+
+.latestFileRecord h3 {
+  margin-top: 0;
+  margin-bottom: 0.8rem;
+  font-size: 1rem; /* 縮小標題字體 */
+  color: #444;
+  font-weight: 500;
+}
+
+.fileRecordContent {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  font-size: 0.9rem; /* 縮小內容字體 */
+}
+
+.fileNameBox, .uploadDateBox {
+  display: flex;
+  align-items: center;
+  padding: 6px 12px;
+  background-color: #fff;
+  border-radius: 4px;
+  border: 1px solid #e1e4e8;
+}
+
+.fileIcon, .timeIcon {
+  margin-right: 8px;
+  font-size: 13px; /* 縮小圖示字體 */
+}
+
 /* 響應式設計 */
 @media (max-width: 768px) {
   .previewContainer {
@@ -272,5 +311,12 @@
   
   .section {
     padding: 1rem;
+  }
+}
+
+/* 響應式設計 */
+@media (max-width: 576px) {
+  .fileRecordContent {
+    flex-direction: column;
   }
 }

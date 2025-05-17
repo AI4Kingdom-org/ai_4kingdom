@@ -506,7 +506,7 @@ export default function AssistantManager({
     <div className={styles.container}>
       {error && <div className={styles.error}>{error}</div>}
       <div className={styles.uploadSection}>
-        <h3>上传文件 <span className={styles.fileTypes}>.pdf,.txt,.doc,.docx</span></h3>
+        <h3><span className={styles.fileTypes}>.pdf,.txt,.doc,.docx</span></h3>
         <div className={styles.uploadForm}>
           <input
             type="file"
