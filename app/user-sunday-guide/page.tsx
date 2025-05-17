@@ -63,6 +63,9 @@ function SundayGuideContent() {
   const contentRef = useRef<HTMLDivElement>(null);
   const [pdfError, setPdfError] = useState<string | null>(null);
   const [librariesLoaded, setLibrariesLoaded] = useState(false);
+  // 添加檔案資訊相關狀態變數
+  const [fileName, setFileName] = useState<string>('');
+  const [uploadTime, setUploadTime] = useState<string>('');
 
   useEffect(() => {
     // 檢查是否在瀏覽器環境
@@ -115,8 +118,18 @@ function SundayGuideContent() {
         vectorStoreId: VECTOR_STORE_IDS.JOHNSUNG,
         userId: user.user_id
       });
+      
+      // 獲取檔案資訊
+      fetchLatestFileInfo();
     }
   }, [user, setConfig]);
+  
+  // 頁面載入時自動選擇 summary 模式並載入內容
+  useEffect(() => {
+    if (user?.user_id && !sermonContent && !selectedMode) {
+      handleModeSelect('summary');
+    }
+  }, [user, sermonContent, selectedMode]);
 
   const handleModeSelect = async (mode: GuideMode) => {
     setSelectedMode(mode);
@@ -136,6 +149,38 @@ function SundayGuideContent() {
       setLoading(false);
     }
   };
+
+  // 獲取最新的文件資訊
+  const fetchLatestFileInfo = async () => {
+    try {
+      const userId = user?.user_id || '';
+      const response = await fetch(
+        `/api/sunday-guide/documents?assistantId=${ASSISTANT_IDS.SUNDAY_GUIDE}&userId=${encodeURIComponent(userId)}`
+      );
+      if (!response.ok) throw new Error('獲取文件資訊失敗');
+      const data = await response.json();
+      
+      if (data.success && data.records && data.records.length > 0) {
+        // 按時間排序，獲取最新記錄
+        const latestRecord = [...data.records].sort(
+          (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+        )[0];
+        
+        setFileName(latestRecord.fileName || '未命名文件');
+        
+        // 格式化上傳時間，只顯示日期，使用洛杉磯地區格式
+        const uploadDate = new Date(latestRecord.updatedAt);
+        setUploadTime(uploadDate.toLocaleDateString('en-US', { timeZone: 'America/Los_Angeles' }));
+      }
+    } catch (error) {
+      console.error('獲取文件資訊失敗:', error);
+    }
+  };
+
+  useEffect(() => {
+    // 組件加載時獲取最新的文件資訊
+    fetchLatestFileInfo();
+  }, [user]);
 
   // 將繁體中文轉換為簡體中文（改進版本）
   const convertToSimplified = (text: string): string => {
@@ -219,6 +264,18 @@ function SundayGuideContent() {
   return (
     <div className={styles.container}>
       <h1 className={styles.title}>主日信息导航</h1>
+      {fileName && (
+        <div className={styles.fileInfo}>
+          <div className={styles.fileNameBox}>
+            <span className={styles.fileIcon}>📄</span>
+            <span>{fileName}</span>
+          </div>
+          <div className={styles.uploadTimeBox}>
+            <span className={styles.timeIcon}>🕒</span>
+            <span>{uploadTime || '未知時間'}</span>
+          </div>
+        </div>
+      )}
       <div className={styles.buttonGroup}>
         <button 
           className={`${styles.modeButton} ${selectedMode === 'summary' ? styles.active : ''}`}

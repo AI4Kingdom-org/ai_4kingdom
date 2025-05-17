@@ -22,18 +22,69 @@ export default function SundayGuide() {
   const [uploadProgress, setUploadProgress] = useState<number>(0);
   const [uploadTime, setUploadTime] = useState<string>('');
   const [isUploadDisabled, setIsUploadDisabled] = useState(false);
+  // 添加最新文件記錄的狀態
+  const [latestFile, setLatestFile] = useState<{ fileName: string, uploadDate: string } | null>(null);
+  // 添加是否顯示前次記錄的狀態
+  const [showLatestFile, setShowLatestFile] = useState(true);
 
   // 檢查用戶是否有足夠的 Credits
   useEffect(() => {
     // 只有當確實沒有剩餘 Credits 時才禁用上傳
     setIsUploadDisabled(remainingCredits <= 0);
   }, [remainingCredits, hasInsufficientTokens]);
+  
+  // 獲取最新的文件記錄
+  const fetchLatestFileRecord = async () => {
+    try {
+      const response = await fetch(`/api/sunday-guide/documents?assistantId=${ASSISTANT_IDS.SUNDAY_GUIDE}`);
+      if (!response.ok) throw new Error('獲取文件記錄失敗');
+      
+      const data = await response.json();
+      if (data.success && data.records && data.records.length > 0) {
+        // 按時間排序，獲取最新記錄
+        const latestRecord = [...data.records].sort(
+          (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+        )[0];
+        
+        // 只保留日期部分（去除時分秒）
+        const uploadDate = new Date(latestRecord.updatedAt);
+        const dateOnly = uploadDate.toLocaleDateString('en-US', { 
+          timeZone: 'America/Los_Angeles',
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit'
+        });
+        
+        setLatestFile({
+          fileName: latestRecord.fileName || '未命名文件',
+          uploadDate: dateOnly
+        });
+      }
+    } catch (error) {
+      console.error('獲取文件記錄失敗:', error);
+    }
+  };
+  
+  // 組件掛載時獲取最新的文件記錄
+  useEffect(() => {
+    fetchLatestFileRecord();
+  }, []);
+
+  // 當有處理結果時，隱藏前次上傳記錄
+  useEffect(() => {
+    if (processedContent) {
+      setShowLatestFile(false);
+    } else {
+      setShowLatestFile(true);
+    }
+  }, [processedContent]);
 
   const handleFileProcessed = async (content: ProcessedContent) => {
     setProcessedContent(content);
     setIsProcessing(false);
     
-    // 文件處理完成後立即刷新信用點數使用量
+    // 文件處理完成後重新獲取最新的文件記錄並刷新信用點數使用量
+    await fetchLatestFileRecord();
     await refreshUsage();
   };
 
@@ -63,6 +114,23 @@ export default function SundayGuide() {
           {uploadTime && (
             <div className={styles.uploadTimeContainer}>
               <p>处理完成时间: {uploadTime}</p>
+            </div>
+          )}
+          
+          {/* 顯示最新上傳的文檔記錄，但只在沒有處理結果時顯示 */}
+          {showLatestFile && latestFile && !isProcessing && (
+            <div className={styles.latestFileRecord}>
+              <h3>前次上传文档:</h3>
+              <div className={styles.fileRecordContent}>
+                <div className={styles.fileNameBox}>
+                  <span className={styles.fileIcon}>📄</span>
+                  <span>{latestFile.fileName}</span>
+                </div>
+                <div className={styles.uploadDateBox}>
+                  <span className={styles.timeIcon}>📅</span>
+                  <span>上传日期: {latestFile.uploadDate}</span>
+                </div>
+              </div>
             </div>
           )}
         </section>
