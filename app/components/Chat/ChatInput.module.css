@@ -1,21 +1,20 @@
 .inputContainer {
   display: flex;
   gap: 1rem;
-  padding: 1.5rem;
-  background-color: #ffffff;
-  border-top: 1px solid #e5e7eb;
+  padding: 0.75rem 1rem; /* 稍微減少上下內邊距 */
+  background-color: #2a2a2a; /* 調整背景色，與消息列表顏色更一致 */
+  border-top: 1px solid #3a3a3a; /* 稍微調暗一些 */
   position: sticky;
   bottom: 0;
-  width: 100%;
-  max-width: 1200px;
-  margin: 0 auto;
-  box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.05);
+  width: 100%; /* 確保使用100%寬度 */
+  box-sizing: border-box; /* 確保內邊距計入總寬度 */
+  box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.15); /* 稍微調整陰影 */
 }
 
 .textArea {
   flex: 1;
-  padding: 1rem 1.25rem;
-  border: 1px solid #e5e7eb;
+  padding: 0.75rem 1rem;
+  border: 1px solid #3a3a3a; /* 調整邊框顏色 */
   border-radius: 12px;
   resize: none;
   font-family: inherit;
@@ -23,22 +22,23 @@
   line-height: 1.5;
   min-height: 50px;
   max-height: 200px;
-  background-color: #f9fafb;
+  background-color: #333333; /* 調整背景色，使其與新的暗色主題一致 */
+  color: #ffffff; /* 設置文字顏色為白色 */
   transition: all 0.2s ease;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
 }
 
 .textArea:focus {
   outline: none;
-  border-color: #2563eb;
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+  border-color: #4a5fc1; /* 調整高亮顏色 */
+  box-shadow: 0 0 0 3px rgba(74, 95, 193, 0.2); /* 調整陰影顏色 */
 }
 
 .button {
-  padding: 0 1.5rem;
+  padding: 0 1rem;
   height: 50px;
-  min-width: 120px;
-  background-color: #2563eb;
+  min-width: 100px;
+  background-color: #4a5fc1; /* 調整按鈕顏色，使其與暗色主題更加協調 */
   color: white;
   border: none;
   border-radius: 12px;
@@ -52,14 +52,15 @@
 }
 
 .button:hover:not(:disabled) {
-  background-color: #1d4ed8;
+  background-color: #3949a0; /* 調整 hover 狀態顏色 */
   transform: translateY(-1px);
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2); /* 添加些許陰影效果 */
 }
 
 .button:disabled {
-  background-color: #e5e7eb;
+  background-color: #4a4a4a; /* 調整禁用狀態顏色，使其與暗色主題一致 */
   cursor: not-allowed;
-  color: #9ca3af;
+  color: #8a8a8a; /* 調整禁用狀態文字顏色 */
 }
 
 @media (max-width: 768px) {

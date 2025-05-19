@@ -114,6 +114,16 @@
   background-color: #ffe6e6;
 }
 
+/* 新增：檔案已存在的警告樣式 */
+.warning {
+  color: #856404;
+  margin-bottom: 1rem;
+  padding: 0.5rem;
+  border-radius: 4px;
+  background-color: #fff3cd;
+  border-left: 4px solid #ffc107;
+}
+
 .uploadSection {
   margin-top: 1rem;
   display: grid;

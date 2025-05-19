@@ -55,6 +55,7 @@ export default function AssistantManager({
   const [processingError, setProcessingError] = useState<string | null>(null);
   const [processingStatus, setProcessingStatus] = useState<string>('idle');
   const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const [fileExists, setFileExists] = useState<boolean>(false);  // 新增：檔案是否已存在的狀態
   
   // 獲取PDT時間的輔助函數
   const getPDTTime = () => {
@@ -126,6 +127,7 @@ export default function AssistantManager({
     setUploadSuccess(false);
     setUploadedFileName('');
     setProcessingComplete(false);
+    setFileExists(false); // 重置檔案存在狀態
     
     try {
       setError(null);
@@ -143,11 +145,29 @@ export default function AssistantManager({
         body: formData
       });
       
+      // 解析響應
+      let responseData;
+      try {
+        responseData = await uploadResponse.json();
+      } catch (e) {
+        console.error("無法解析回應:", e);
+        throw new Error(`文件上傳失敗: ${uploadResponse.status}`);
+      }
+
+      // 檢查檔案是否已存在
+      if (uploadResponse.status === 409 && responseData?.fileExists) {
+        console.log("檔案已存在:", responseData);
+        setFileExists(true);
+        setError(responseData.details || "檔案已存在，請使用不同的檔案名稱");
+        setUploading(false);
+        setUploadProgress(0);
+        setTaskStatus(prev => ({ ...prev, upload: 'idle' }));
+        return;
+      }
+      
       if (!uploadResponse.ok) {
-        let errorText = "未知錯誤";
-        try { errorText = await uploadResponse.text(); } catch (e) { console.error("無法讀取錯誤響應:", e); }
-        console.error("上傳失敗狀態碼:", uploadResponse.status, errorText);
-        throw new Error(`文件上傳失敗: ${uploadResponse.status} - ${errorText}`);
+        console.error("上傳失敗狀態碼:", uploadResponse.status, responseData?.error || "未知錯誤");
+        throw new Error(`文件上傳失敗: ${uploadResponse.status} - ${responseData?.error || "未知錯誤"}`);
       }
       
       // 上傳成功，更新狀態
@@ -504,7 +524,11 @@ export default function AssistantManager({
 
   return (
     <div className={styles.container}>
-      {error && <div className={styles.error}>{error}</div>}
+      {error && (
+        <div className={fileExists ? styles.warning : styles.error}>
+          {error}
+        </div>
+      )}
       <div className={styles.uploadSection}>
         <h3><span className={styles.fileTypes}>.pdf,.txt,.doc,.docx</span></h3>
         <div className={styles.uploadForm}>

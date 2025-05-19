@@ -198,11 +198,11 @@ export default function Chat({ type, assistantId, vectorStoreId }: ChatProps) {
       setIsLoading(false);
     }
   };
-
   const handleSubmit = () => {
     if (!isLoading && input.trim()) {
-      sendMessage(input.trim());
-      setInput('');
+      const messageToSend = input.trim();
+      setInput(''); // 立即清空輸入框，不等待 sendMessage 的響應
+      sendMessage(messageToSend);
     }
   };
 

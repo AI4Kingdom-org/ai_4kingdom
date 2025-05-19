@@ -19,13 +19,14 @@ const WEEKLY_LIMITS: UsageLimit = {
 };
 
 // 获取用户订阅信息
-async function getUserSubscription(userId: string): Promise<Subscription | null> {
+// 修改返回類型，始終返回 Subscription 而不是 null
+async function getUserSubscription(userId: string): Promise<Subscription> {
   try {
+    // 在伺服器端 API 路由中不使用 credentials: 'include'，因為沒有用户瀏覽器 cookies
     const response = await fetch(
       `https://ai4kingdom.com/wp-json/custom/v1/validate_session`,
       {
         method: 'POST',
-        credentials: 'include',
         headers: {
           'Content-Type': 'application/json'
         },
@@ -34,14 +35,44 @@ async function getUserSubscription(userId: string): Promise<Subscription | null>
     );
 
     if (!response.ok) {
-      throw new Error('Failed to fetch subscription info');
+      console.error(`[ERROR] Failed to fetch subscription info for user ${userId}, status: ${response.status}`);
+      // 如果是 401 或 403 錯誤，可能是認證問題
+      if (response.status === 401 || response.status === 403) {
+        // 返回一個預設的免費訂閱，而不是 null
+        return {
+          status: 'active',
+          type: 'free',
+          expiry: null,
+          plan_id: null,
+          roles: ['free_member']
+        };
+      }
+      throw new Error(`Failed to fetch subscription info: ${response.status}`);
     }
 
     const data = await response.json();
-    return data.subscription || null;
+    if (!data.subscription) {
+      console.warn(`[WARN] No subscription info returned for user ${userId}, using default free subscription`);
+      // 如果沒有訂閱信息，返回一個預設的免費訂閱
+      return {
+        status: 'active',
+        type: 'free',
+        expiry: null,
+        plan_id: null,
+        roles: ['free_member']
+      };
+    }
+    return data.subscription;
   } catch (error) {
-    console.error('[ERROR] 获取订阅信息失败:', error);
-    return null;
+    console.error(`[ERROR] 获取用户 ${userId} 订阅信息失败:`, error);
+    // 發生錯誤時，返回一個預設的免費訂閱，而不是 null
+    return {
+      status: 'active',
+      type: 'free',
+      expiry: null,
+      plan_id: null,
+      roles: ['free_member']
+    };
   }
 }
 
@@ -52,15 +83,21 @@ export async function GET(request: Request) {
   if (!userId) {
     return NextResponse.json({ error: "UserId is required" }, { status: 400 });
   }
-
   try {
-    console.log('[DEBUG] Starting usage check for userId:', userId);
-
-    // 获取用户订阅信息
+    console.log('[DEBUG] Starting usage check for userId:', userId);    // 获取用户订阅信息
     const subscription = await getUserSubscription(userId);
-    console.log('[DEBUG] User subscription:', subscription);
+    console.log('[DEBUG] User subscription:', {
+      userId,
+      status: subscription.status,
+      type: subscription.type,
+      roles: subscription.roles,
+      // 添加一個標記，標明是否使用了默認訂閱
+      isDefault: !subscription.plan_id || subscription.plan_id === null
+    });
 
-    if (!subscription || subscription.status !== 'active') {
+    // 由於我們修改了 getUserSubscription 函數，它總是會返回一個訂閱（至少是免費的）
+    // 所以只需檢查訂閱狀態
+    if (subscription.status !== 'active') {
       return NextResponse.json({
         error: "Inactive subscription",
         subscription,
@@ -89,14 +126,13 @@ export async function GET(request: Request) {
     });
 
     const response = await docClient.send(command);
-    const weeklyCount = response.Items?.length || 0;
-
-    // 获取用户类型对应的使用限制
-    const subscriptionType = subscription?.type?.toLowerCase() || 'free';
+    const weeklyCount = response.Items?.length || 0;    // 获取用户类型对应的使用限制
+    // 由於 subscription 總是可用，不再需要可選鏈運算符
+    const subscriptionType = subscription.type.toLowerCase();
     const weeklyLimit = WEEKLY_LIMITS[subscriptionType as keyof UsageLimit] || WEEKLY_LIMITS.free;
 
     // 添加角色检查
-    const hasRequiredRole = subscription?.roles?.some(role => 
+    const hasRequiredRole = subscription.roles.some(role => 
       ['free_member', 'pro_member', 'ultimate_member'].includes(role)
     );
 
