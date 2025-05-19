@@ -182,33 +182,19 @@ export default function Chat({ type, assistantId, vectorStoreId, userId, threadI
   return (
     <div className={styles.container}>
       {userId || user?.user_id ? (
-        <div className={styles.container}>
-          <ConversationList
-            userId={userId || user?.user_id || ''}
-            currentThreadId={currentThreadId}
-            onSelectThread={(threadId) => {
-              setCurrentThreadId(threadId);
-              setMessages([]); // 清空訊息
-            }}
-            type={type}
-            isCreating={isCreatingThread}
-            onCreateNewThread={handleCreateNewThread}
-          />
-
-          <div className={styles.chatWindow}>
-            {!assistantId || typeof assistantId !== 'string' ? (
-              <div className={styles.error}>
-                <p>错误: 无效的助手ID</p>
-                <p>请尝试刷新页面或联系管理员</p>
-              </div>
-            ) : (
-              <>
-                <MessageList messages={messages} isLoading={isLoading} />
-                {error && <div className={styles.error}>{error}</div>}
-                <ChatInput onSend={handleSendMessage} isLoading={isLoading} />
-              </>
-            )}
-          </div>
+        <div className={styles.chatWindow}>
+          {!assistantId || typeof assistantId !== 'string' ? (
+            <div className={styles.error}>
+              <p>错误: 无效的助手ID</p>
+              <p>请尝试刷新页面或联系管理员</p>
+            </div>
+          ) : (
+            <>
+              <MessageList messages={messages} isLoading={isLoading} />
+              {error && <div className={styles.error}>{error}</div>}
+              <ChatInput onSend={handleSendMessage} isLoading={isLoading} />
+            </>
+          )}
         </div>
       ) : (
         <div className={styles.loginPrompt}>

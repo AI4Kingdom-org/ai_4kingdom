@@ -74,8 +74,9 @@
 }
 
 .contentArea {
-  width: 50%;
-  height: calc(100vh - 250px); /* 動態高度，以適應視窗大小 */
+  width: 100%; /* 修改為 100% 寬度 */
+  height: auto; /* 修改高度為自動調整 */
+  min-height: 350px; /* 設定最小高度 */
   overflow-y: auto;
   border: 1px solid #ddd;
   border-radius: 8px;
@@ -83,7 +84,7 @@
   background: white;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
   display: none; /* Hidden by default */
-  margin-right: 20px;
+  margin-bottom: 20px; /* 添加底部邊距，與聊天區域分隔 */
 }
 
 .contentArea.hasContent {
@@ -127,10 +128,20 @@
 }
 
 .chatSection {
-  width: 50%; /* 調整為與 contentArea 相同的寬度 */
-  height: calc(100vh - 250px); /* 調整為與 contentArea 相同的高度 */
-  margin-left: 20px;
+  width: 100%; /* 確保 100% 寬度 */
+  max-width: 100%; /* 確保不會超出父容器寬度 */
+  height: 450px; /* 稍微增加高度以提供更好的聊天體驗 */
+  margin-top: 20px; /* 頂部邊距，與內容區域分隔 */
+  margin-left: 0;
+  border-radius: 12px; /* 添加圓角 */
+  overflow: hidden; /* 確保內容不會溢出 */
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1); /* 增加陰影效果 */
   transition: opacity 0.3s ease, transform 0.3s ease;
+  box-sizing: border-box;
+}
+
+.chatSection > div {
+  width: 100% !important; /* 確保直接子元素也是100%寬度 */
 }
 
 .chatSection.hidden {
@@ -139,13 +150,46 @@
   pointer-events: none;
 }
 
-/* Add a flex container for the side-by-side layout */
+/* 修改為垂直布局 */
 .contentWrapper {
   display: flex;
-  width: 100%;
-  justify-content: space-between;
-  align-items: flex-start;
+  flex-direction: column; /* 改為垂直排列 */
+  width: 90%; /* 設定合適的寬度 */
+  max-width: 900px; /* 限制最大寬度，提高可讀性 */
+  justify-content: flex-start;
+  align-items: stretch; /* 讓子元素填滿容器寬度 */
   gap: 20px;
+}
+
+/* 內容頭部樣式改進 */
+.contentHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 15px;
+}
+
+/* 下載按鈕樣式 */
+.downloadButton {
+  padding: 8px 12px;
+  border-radius: 4px;
+  background: #f0f7ff;
+  border: 1px solid #0070f3;
+  color: #0070f3;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  font-size: 14px;
+}
+
+.downloadButton:hover {
+  background: #0070f3;
+  color: #fff;
+}
+
+.errorMessage {
+  color: #d32f2f;
+  margin: 10px 0;
+  font-size: 14px;
 }
 
 /* Responsive adjustments */
@@ -155,7 +199,7 @@
   }
 
   .contentWrapper {
-    flex-direction: column;
+    width: 100%;
   }
 
   .contentArea,

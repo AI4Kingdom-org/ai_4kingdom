@@ -17,11 +17,11 @@ export default function ChatInput({ onSend, isLoading }: ChatInputProps) {
   useEffect(() => {
     setInput('');
   }, [currentThreadId]);
-
   const handleSend = async () => {
     if (!input.trim() || isLoading) return;
-    await onSend(input);
-    setInput('');
+    const messageToSend = input.trim();
+    setInput(''); // 立即清空輸入框，不等待 API 調用完成
+    await onSend(messageToSend);
   };
 
   return (

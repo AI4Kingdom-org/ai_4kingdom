@@ -14,6 +14,21 @@ interface ChatConfig {
   threadId?: string;
 }
 
+// 定義參考來源的型別
+interface DocumentReference {
+  fileName: string;
+  filePath: string;
+  pageNumber: number | null;
+  text: string;
+  fileId: string;
+}
+
+interface ChatMessage {
+  sender: string;
+  text: string;
+  references?: DocumentReference[];
+}
+
 interface ChatContextType {
   config: {
     type: ChatType;
@@ -23,8 +38,8 @@ interface ChatContextType {
     threadId?: string;
   } | null;
   setConfig: (config: ChatContextType['config']) => void;
-  messages: Array<{ sender: string; text: string }>;
-  setMessages: React.Dispatch<React.SetStateAction<Array<{ sender: string; text: string }>>>;
+  messages: Array<ChatMessage>;
+  setMessages: React.Dispatch<React.SetStateAction<Array<ChatMessage>>>;
   currentThreadId: string | null;
   setCurrentThreadId: (threadId: string | null) => void;
   sendMessage: (message: string) => Promise<void>;
@@ -52,7 +67,7 @@ export function ChatProvider({
 }) {
   const { user: authUser } = useAuth();  // 获取认证用户
   const [config, setConfigState] = useState<ChatContextType['config']>(initialConfig || null);
-  const [messages, setMessages] = useState<Array<{ sender: string; text: string }>>([]);
+  const [messages, setMessages] = useState<Array<ChatMessage>>([]);
   const [currentThreadId, setCurrentThreadId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -84,12 +99,20 @@ export function ChatProvider({
     setCurrentThreadId(null);
     setError(null);
   }, [config?.assistantId, config?.vectorStoreId, config?.type]);
-
   const sendMessage = useCallback(async (message: string) => {
     setIsLoading(true);
     setError(null);
 
     try {
+        // 先添加使用者訊息
+        setMessages(prev => [...prev, { sender: 'user', text: message }]);
+        
+        // 創建一個暫時的機器人回應，用於流式更新
+        let streamingContent = '';
+        let finalThreadId = currentThreadId;
+        let currentReferences: DocumentReference[] = [];
+        
+        // 使用流式 API 發送請求
         const response = await fetch('/api/chat', {
             method: 'POST',
             headers: {
@@ -102,7 +125,8 @@ export function ChatProvider({
                 config: {
                     type: config?.type,
                     assistantId: config?.assistantId,
-                    vectorStoreId: config?.vectorStoreId
+                    vectorStoreId: config?.vectorStoreId,
+                    stream: true // 啟用流式輸出
                 }
             })
         });
@@ -116,18 +140,109 @@ export function ChatProvider({
             throw new Error(errorData.error || '发送失败');
         }
 
-        const data = await response.json();
+        // 檢查是否為流式回應
+        if (response.headers.get('Content-Type')?.includes('text/event-stream')) {
+            // 處理流式回應            // 添加一個暫時的機器人回應
+            setMessages(prev => [...prev, { sender: 'bot', text: '', references: [] }]);
 
-        if (data.success) {
-            setMessages(prev => [
-                ...prev,
-                { sender: 'user', text: message },
-                { sender: 'bot', text: data.reply }
-            ]);
-            setCurrentThreadId(data.threadId);
+            const reader = response.body?.getReader();
+            if (!reader) {
+                throw new Error('無法讀取響應流');
+            }
+            
+            const decoder = new TextDecoder();
+            let isDone = false;
+            
+            // 讀取並處理流數據
+            while (!isDone) {
+                const { value, done } = await reader.read();
+                if (done) {
+                    isDone = true;
+                    break;
+                }
+
+                // 解碼接收到的數據
+                const chunk = decoder.decode(value);
+                const lines = chunk.split('\n\n');
+                
+                for (const line of lines) {
+                    if (line.trim() && line.startsWith('data: ')) {
+                        try {
+                            const jsonStr = line.substring(6);
+                            const data = JSON.parse(jsonStr);
+                              if (data.content) {
+                                // 更新流式內容
+                                streamingContent += data.content;
+                                
+                                // 更新最後一個機器人訊息
+                                setMessages(prev => {
+                                    const newMessages = [...prev];
+                                    if (newMessages.length > 0 && newMessages[newMessages.length - 1].sender === 'bot') {                                        newMessages[newMessages.length - 1].text = streamingContent;
+                                        // 保留任何已有的參考來源
+                                        newMessages[newMessages.length - 1].references = currentReferences;
+                                    }
+                                    return newMessages;
+                                });
+                            }
+                            
+                            // 處理參考來源資訊
+                            if (data.references && Array.isArray(data.references)) {
+                                // 更新當前參考來源
+                                currentReferences = data.references;
+                                
+                                // 更新最後一個機器人訊息以包含參考來源
+                                setMessages(prev => {
+                                    const newMessages = [...prev];
+                                    if (newMessages.length > 0 && newMessages[newMessages.length - 1].sender === 'bot') {
+                                        newMessages[newMessages.length - 1].references = currentReferences;
+                                    }
+                                    return newMessages;
+                                });
+                                
+                                console.log('[DEBUG] 收到文档引用:', data.references.length);
+                            }
+                            
+                            if (data.threadId) {
+                                finalThreadId = data.threadId;
+                                setCurrentThreadId(finalThreadId);
+                            }
+                            
+                            if (data.error) {
+                                setError(data.error);
+                                break;
+                            }
+                            
+                            if (data.done) {
+                                isDone = true;
+                                console.log('[DEBUG] 流式響應完成，總token:', data.usage);
+                                break;
+                            }
+                        } catch (e) {
+                            console.error('[ERROR] 解析流數據失敗:', e, line.substring(6));
+                        }
+                    }
+                }
+            }
+            
+            return { success: true, threadId: finalThreadId };
+        } else {
+            // 傳統的非流式回應處理
+            const data = await response.json();
+
+            if (data.success) {                setMessages(prev => [
+                    ...prev,
+                    { sender: 'user', text: message },
+                    { 
+                      sender: 'bot', 
+                      text: data.reply, 
+                      references: data.references || [] 
+                    }
+                ]);
+                setCurrentThreadId(data.threadId);
+            }
+
+            return data;
         }
-
-        return data;
     } catch (error) {
         console.error('[ERROR] 发送消息失败:', error);
         setError(error instanceof Error ? error.message : '发送消息失败');
@@ -153,12 +268,11 @@ export function ChatProvider({
             throw new Error(errorData.error || '加载失败');
         }
 
-        const data = await response.json();
-
-        if (data.success && Array.isArray(data.messages)) {
+        const data = await response.json();        if (data.success && Array.isArray(data.messages)) {
             const formattedMessages = data.messages.map((msg: any) => ({
                 sender: msg.role === 'user' ? 'user' : 'bot',
-                text: msg.content
+                text: msg.content,
+                references: msg.references || []
             }));
             
             setMessages(formattedMessages);
@@ -197,4 +311,4 @@ export function useChat() {
     throw new Error('useChat must be used within a ChatProvider');
   }
   return context;
-} 
+}

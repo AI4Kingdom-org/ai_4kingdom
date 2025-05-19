@@ -298,23 +298,21 @@ function SundayGuideContent() {
       </div>
 
       {sermonContent ? (
-        <>
-          <div className={styles.contentWrapper}>
-            <div className={`${styles.contentArea} ${styles.hasContent}`}>
-              {renderContent()}
-            </div>
-            <div className={styles.chatSection}>
-              {user && (
-                <Chat 
-                  type={CHAT_TYPES.SUNDAY_GUIDE}
-                  assistantId={ASSISTANT_IDS.SUNDAY_GUIDE}
-                  vectorStoreId={VECTOR_STORE_IDS.JOHNSUNG}
-                  userId={user.user_id}
-                />
-              )}
-            </div>
+        <div className={styles.contentWrapper}>
+          <div className={`${styles.contentArea} ${styles.hasContent}`}>
+            {renderContent()}
           </div>
-        </>
+          <div className={styles.chatSection}>
+            {user && (
+              <Chat 
+                type={CHAT_TYPES.SUNDAY_GUIDE}
+                assistantId={ASSISTANT_IDS.SUNDAY_GUIDE}
+                vectorStoreId={VECTOR_STORE_IDS.JOHNSUNG}
+                userId={user.user_id}
+              />
+            )}
+          </div>
+        </div>
       ) : (
         <div className={styles.emptyState}>
           <p>请选择要查看的内容类型</p>

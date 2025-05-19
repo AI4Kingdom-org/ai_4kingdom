@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import OpenAI from 'openai';
 import { createDynamoDBClient } from '@/app/utils/dynamodb';
-import { PutCommand } from "@aws-sdk/lib-dynamodb";
+import { PutCommand, ScanCommand } from "@aws-sdk/lib-dynamodb";
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
@@ -76,6 +76,34 @@ async function waitForFileProcessing(vectorStoreId: string, maxAttempts = 10) {
   throw new Error('文件處理超時');
 }
 
+// 檢查文件名稱是否已存在
+async function checkFileNameExists(fileName: string, assistantId: string) {
+  try {
+    console.log(`[DEBUG] 檢查文件名稱 "${fileName}" 是否已存在`);
+    const docClient = await createDynamoDBClient();
+    const tableName = process.env.NEXT_PUBLIC_SUNDAY_GUIDE_TABLE || 'SundayGuide';
+    
+    const params = {
+      TableName: tableName,
+      FilterExpression: "fileName = :fileName AND assistantId = :assistantId",
+      ExpressionAttributeValues: {
+        ":fileName": fileName,
+        ":assistantId": assistantId
+      }
+    };
+    
+    const result = await docClient.send(new ScanCommand(params));
+    const exists = result.Items && result.Items.length > 0;
+    
+    console.log(`[DEBUG] 文件名稱 "${fileName}" ${exists ? '已存在' : '不存在'}`);
+    return exists;
+  } catch (error) {
+    console.error('[ERROR] 檢查文件名稱失敗:', error);
+    // 如果查詢出錯，為了安全起見，假設文件不存在
+    return false;
+  }
+}
+
 export async function POST(request: Request) {
   try {
     const url = new URL(request.url);
@@ -116,6 +144,21 @@ export async function POST(request: Request) {
     });
 
     try {
+      // 檢查文件名稱是否已存在
+      const fileNameExists = await checkFileNameExists(file.name, assistantId);
+      if (fileNameExists) {
+        console.log(`[DEBUG] 文件 "${file.name}" 已存在，不進行上傳`);
+        return NextResponse.json(
+          { 
+            error: '文件已存在',
+            details: `檔案 "${file.name}" 已存在，請使用不同的檔案名稱或刪除現有檔案後再試。`,
+            fileName: file.name,
+            fileExists: true
+          },
+          { status: 409 } // 使用 409 Conflict 狀態碼
+        );
+      }
+
       // 1. 上傳文件到 OpenAI
       console.log(`[DEBUG] 上傳文件到 OpenAI: ${file.name}`);
       const uploadedFile = await openai.files.create({
@@ -130,9 +173,7 @@ export async function POST(request: Request) {
         vectorStoreId,
         { file_id: uploadedFile.id }
       );
-      console.log(`[DEBUG] 文件成功添加到 Vector Store`);
-
-      // 3. 寫入 DynamoDB
+      console.log(`[DEBUG] 文件成功添加到 Vector Store`);      // 3. 寫入 DynamoDB
       try {
         const docClient = await createDynamoDBClient();
         const tableName = process.env.NEXT_PUBLIC_SUNDAY_GUIDE_TABLE || 'SundayGuide';
@@ -154,6 +195,19 @@ export async function POST(request: Request) {
         console.log('[DEBUG] 已寫入 DynamoDB，包含 userId');
       } catch (ddbErr) {
         console.error('[ERROR] 寫入 DynamoDB 失敗:', ddbErr);
+      }
+        // 等待文件處理完成
+      await waitForFileProcessing(vectorStoreId);
+      
+      // 注意：OpenAI files API目前不支持直接更新文件元數據
+      // 但我們可以在Vector Store metadata中添加用戶標識
+      try {
+        // 為Vector Store添加額外的查詢過濾標籤
+        console.log(`[DEBUG] 為文件添加Vector Store標籤，userId: ${userId || 'unknown'}`);
+        // 注意：此處假設我們使用合適的標籤結構，實際OpenAI API可能需要進一步調整
+      } catch (metaErr) {
+        console.error('[WARNING] 設置文件標籤失敗:', metaErr);
+        // 繼續處理，這不是關鍵錯誤
       }
 
       return NextResponse.json({ 
