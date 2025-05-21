@@ -18,6 +18,8 @@
 .chatContainer {
   flex: 1;
   display: flex;
+  width: 50%;
+  margin: 0 auto;
   min-height: 400px;
   background: white;
   border-radius: 12px;
@@ -37,5 +39,9 @@
   .container {
     height: calc(100vh - 56px);
     padding: 0.5rem;
+  }
+  
+  .chatContainer {
+    width: 90%;
   }
 }
