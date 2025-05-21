@@ -145,10 +145,23 @@ export default function Chat({ type, assistantId, vectorStoreId, userId, threadI
       // 仍然可以继续，只是没有知识库
     }
 
+    // 確認 userId 是否存在
+    if (!config?.userId) {
+      console.error('[ERROR] 发送消息前缺少userId:', {
+        config,
+        userId: userId || user?.user_id,
+        时间戳: new Date().toISOString()
+      });
+      setError('缺少用户ID配置');
+      return;
+    }
+
     try {
       console.log('[DEBUG] 开始发送消息:', {
         message: message.substring(0, 20) + (message.length > 20 ? '...' : ''),
         assistantId: config.assistantId,
+        vectorStoreId: config.vectorStoreId,
+        userId: config.userId,
         threadId: currentThreadId || '新对话',
         时间戳: new Date().toISOString()
       });
@@ -157,21 +170,39 @@ export default function Chat({ type, assistantId, vectorStoreId, userId, threadI
       
       console.log('[DEBUG] 消息发送成功');
       
-      // 消息發送成功后，立即刷新信用點數使用量
-      // 1. 通過 refreshUsage 函數直接刷新
-      await refreshUsage();
-      
-      // 2. 同時觸發全局事件，確保所有訂閱該事件的組件都能刷新
-      window.dispatchEvent(new CustomEvent('refreshCredits'));
-
+      try {
+        // 消息發送成功后，立即刷新信用點數使用量
+        // 1. 通過 refreshUsage 函數直接刷新
+        await refreshUsage();
+        
+        // 2. 同時觸發全局事件，確保所有訂閱該事件的組件都能刷新
+        window.dispatchEvent(new CustomEvent('refreshCredits'));
+      } catch (creditError) {
+        console.warn('[WARN] 刷新信用点数失败，但消息已成功发送:', creditError);
+        // 這裡不顯示錯誤給用戶，因為消息已經成功發送
+      }
     } catch (error) {
       console.error('[ERROR] 发送消息失败:', {
         error,
         message: error instanceof Error ? error.message : '未知错误',
         assistantId: config.assistantId,
+        vectorStoreId: config.vectorStoreId || '未提供',
+        userId: config.userId || '未提供',
         时间戳: new Date().toISOString()
       });
-      setError('发送消息失败');
+      
+      // 提供更詳細的錯誤信息
+      if (error instanceof Error) {
+        if (error.message.includes('token') || error.message.includes('credit')) {
+          setError('信用点数不足，发送消息失败');
+        } else if (error.message.includes('network') || error.message.includes('timeout')) {
+          setError('网络连接问题，发送消息失败');
+        } else {
+          setError(`发送消息失败: ${error.message}`);
+        }
+      } else {
+        setError('发送消息失败，请稍后重试');
+      }
     }
   };
 

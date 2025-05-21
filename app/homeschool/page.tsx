@@ -6,6 +6,7 @@ import Chat from "../components/Chat/Chat";
 import { CHAT_TYPES } from "@/app/config/chatTypes";
 import { ASSISTANT_IDS, VECTOR_STORE_IDS } from "../config/constants";
 import { ChatProvider, useChat } from '../contexts/ChatContext';
+import WithChat from '../components/layouts/WithChat';
 import styles from './Homeschool.module.css';
 
 function HomeschoolContent() {
@@ -60,13 +61,14 @@ function HomeschoolContent() {
                 assistantId={ASSISTANT_IDS.HOMESCHOOL}
                 vectorStoreId={VECTOR_STORE_IDS.HOMESCHOOL}
                 threadId={threadId}
+                userId={user.user_id}
             />
         </div>
     );
 }
 
 export default function Homeschool() {
-    const { user } = useAuth();
+    const { user, loading } = useAuth();
     
     console.log('[DEBUG] Homeschool页面初始化:', {
         userId: user?.user_id,
@@ -74,18 +76,17 @@ export default function Homeschool() {
         vectorStoreId: VECTOR_STORE_IDS.HOMESCHOOL
     });
     
-    if (!user?.user_id) {
-        return null;
+    if (loading) {
+        return <div>Loading, please wait...</div>;
+    }
+    
+    if (!user) {
+        return <div>请先登录</div>;
     }
 
     return (
-        <ChatProvider initialConfig={{
-            type: CHAT_TYPES.HOMESCHOOL,
-            assistantId: ASSISTANT_IDS.HOMESCHOOL,
-            vectorStoreId: VECTOR_STORE_IDS.HOMESCHOOL,
-            userId: user.user_id
-        }}>
+        <WithChat chatType={CHAT_TYPES.HOMESCHOOL}>
             <HomeschoolContent />
-        </ChatProvider>
+        </WithChat>
     );
 }
