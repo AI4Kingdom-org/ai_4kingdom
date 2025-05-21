@@ -115,7 +115,7 @@ function SundayGuideContent() {
       setConfig({
         type: CHAT_TYPES.SUNDAY_GUIDE,
         assistantId: ASSISTANT_IDS.SUNDAY_GUIDE,
-        vectorStoreId: VECTOR_STORE_IDS.JOHNSUNG,
+        vectorStoreId: VECTOR_STORE_IDS.SUNDAY_GUIDE,
         userId: user.user_id
       });
       
@@ -307,7 +307,7 @@ function SundayGuideContent() {
               <Chat 
                 type={CHAT_TYPES.SUNDAY_GUIDE}
                 assistantId={ASSISTANT_IDS.SUNDAY_GUIDE}
-                vectorStoreId={VECTOR_STORE_IDS.JOHNSUNG}
+                vectorStoreId={VECTOR_STORE_IDS.SUNDAY_GUIDE}
                 userId={user.user_id}
               />
             )}
