@@ -90,7 +90,7 @@
   }
 }
 
-/* 優化滾动條 */
+/* 優化滾動條 */
 .messageList::-webkit-scrollbar {
   width: 5px;
 }
@@ -106,90 +106,4 @@
 
 .messageList::-webkit-scrollbar-thumb:hover {
   background-color: #d1d5db;
-}
-
-/* 參考來源相關樣式 */
-.references {
-  margin-top: 1rem;
-  padding: 0.75rem 1rem;
-  background-color: rgba(0, 0, 0, 0.1);
-  border-radius: 0.5rem;
-  font-size: 0.9rem;
-}
-
-.references h4 {
-  margin-top: 0;
-  margin-bottom: 0.5rem;
-  color: #bbb;
-  font-weight: 500;
-}
-
-.references ul {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.reference {
-  padding: 0.75rem;
-  margin-bottom: 0.75rem;
-  background-color: rgba(255, 255, 255, 0.05);
-  border-radius: 0.5rem;
-  border-left: 3px solid #666;
-}
-
-/* 當前用戶上傳的文件樣式 */
-.userFile {
-  border-left: 3px solid #4a5fc1;
-  background-color: rgba(74, 95, 193, 0.1);
-}
-
-.referenceHeader {
-  display: flex;
-  align-items: center;
-  margin-bottom: 0.5rem;
-  flex-wrap: wrap;
-}
-
-.userFileTag {
-  margin-left: auto;
-  background-color: #4a5fc1;
-  color: white;
-  padding: 0.25rem 0.5rem;
-  border-radius: 0.25rem;
-  font-size: 0.75rem;
-  font-weight: bold;
-}
-
-.uploadedBy {
-  font-size: 0.8rem;
-  color: #999;
-  margin-bottom: 0.5rem;
-  font-style: italic;
-}
-
-.referenceText {
-  margin: 0.5rem 0 0;
-  color: #ddd;
-  line-height: 1.4;
-  white-space: normal;
-  font-style: italic;
-}
-
-.typing {
-  display: inline-block;
-  position: relative;
-}
-
-.typing:after {
-  content: '...';
-  position: absolute;
-  animation: ellipsis 1.5s infinite;
-}
-
-@keyframes ellipsis {
-  0% { content: '.'; }
-  33% { content: '..'; }
-  66% { content: '...'; }
-  100% { content: '.'; }
 }
