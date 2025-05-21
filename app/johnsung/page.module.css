@@ -18,6 +18,8 @@
   .chatContainer {
     flex: 1;
     display: flex;
+    width: 50%;  /* 將寬度減少到50% */
+    margin: 0 auto;  /* 居中顯示 */
     min-height: 400px;
     background: rgb(237, 235, 244);
     border-radius: 12px;
@@ -37,5 +39,9 @@
     .container {
       height: calc(100vh - 56px);
       padding: 0.5rem;
+    }
+    
+    .chatContainer {
+      width: 90%;  /* 在手機螢幕上佔據更多寬度 */
     }
   }
