@@ -140,7 +140,7 @@ export default function AssistantManager({
       }
       
       // 開始上傳文件
-      const uploadResponse = await fetch(`/api/vector-store/upload?vectorStoreId=${VECTOR_STORE_IDS.JOHNSUNG}&assistantId=${ASSISTANT_IDS.SUNDAY_GUIDE}`, {
+      const uploadResponse = await fetch(`/api/vector-store/upload?vectorStoreId=${VECTOR_STORE_IDS.SUNDAY_GUIDE}&assistantId=${ASSISTANT_IDS.SUNDAY_GUIDE}`, {
         method: 'POST',
         body: formData
       });
@@ -322,7 +322,7 @@ export default function AssistantManager({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           assistantId: ASSISTANT_IDS.SUNDAY_GUIDE,
-          vectorStoreId: VECTOR_STORE_IDS.JOHNSUNG,
+          vectorStoreId: VECTOR_STORE_IDS.SUNDAY_GUIDE,
           fileName: uploadedFileName,
           userId: user?.user_id || '-' // 添加用戶 ID
         })
@@ -349,7 +349,7 @@ export default function AssistantManager({
       const checkResult = async () => {
         try {
           // 直接查詢數據庫結果
-          const resultResponse = await fetch(`/api/sunday-guide/check-result?vectorStoreId=${VECTOR_STORE_IDS.JOHNSUNG}&fileName=${encodeURIComponent(uploadedFileName)}`);
+          const resultResponse = await fetch(`/api/sunday-guide/check-result?vectorStoreId=${VECTOR_STORE_IDS.SUNDAY_GUIDE}&fileName=${encodeURIComponent(uploadedFileName)}`);
           
           if (!resultResponse.ok) {
             // 如果請求失敗，等待後再試
