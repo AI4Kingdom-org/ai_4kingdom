@@ -1,91 +1,17 @@
 import { NextResponse } from 'next/server';
-import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, GetCommand, PutCommand } from '@aws-sdk/lib-dynamodb';
 import OpenAI from 'openai';
-import { fromCognitoIdentityPool } from "@aws-sdk/credential-providers";
+import { createDynamoDBClient } from '../../utils/dynamodb';
 import { ASSISTANT_IDS } from '../../config/constants';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
 });
 
-// 添加调试日志
-console.log('[DEBUG] AWS 环境变量:', {
-  region: process.env.AWS_REGION,
-  hasAccessKey: !!process.env.NEXT_PUBLIC_ACCESS_KEY_ID,
-  hasSecretKey: !!process.env.NEXT_PUBLIC_SECRET_ACCESS_KEY,
-  availableEnvVars: Object.keys(process.env).filter(key => key.startsWith('NEXT_PUBLIC_'))
-});
-
-// 检查环境变量
-const validateEnvVars = () => {
-  const credentials = {
-    region: process.env.NEXT_PUBLIC_REGION
-  };
-
-  console.log('[DEBUG] 验证环境变量:', {
-    region: credentials.region,
-    isAmplifyEnv: process.env.AWS_EXECUTION_ENV?.includes('AWS_Amplify')
-  });
-
-  if (!credentials.region) {
-    throw new Error('AWS region not found');
-  }
-
-  return credentials;
-};
-
-// 创建 DynamoDB 客户端
-const createDynamoDBClient = async () => {
-  try {
-    const { region } = validateEnvVars();
-    const isDev = process.env.NODE_ENV === 'development';
-    
-    console.log('[DEBUG] 创建 DynamoDB 客户端:', {
-      region,
-      isDev,
-      identityPoolId: process.env.NEXT_PUBLIC_IDENTITY_POOL_ID,
-      hasAccessKey: !!process.env.NEXT_PUBLIC_ACCESS_KEY_ID,
-      hasSecretKey: !!process.env.NEXT_PUBLIC_SECRET_ACCESS_KEY
-    });
-
-    // 本地开发环境使用访问密钥
-    if (isDev) {
-      return new DynamoDBClient({
-        region,
-        credentials: {
-          accessKeyId: process.env.NEXT_PUBLIC_ACCESS_KEY_ID || '',
-          secretAccessKey: process.env.NEXT_PUBLIC_SECRET_ACCESS_KEY || ''
-        }
-      });
-    }
-    
-    // 生产环境使用 Cognito Identity Pool
-    try {
-      const credentials = await fromCognitoIdentityPool({
-        clientConfig: { region },
-        identityPoolId: process.env.NEXT_PUBLIC_IDENTITY_POOL_ID!
-      })();
-
-      return new DynamoDBClient({
-        region,
-        credentials
-      });
-    } catch (error) {
-      console.error('[ERROR] Cognito 凭证获取失败:', error);
-      throw error;
-    }
-    
-  } catch (error) {
-    console.error('[ERROR] DynamoDB 客户端创建失败:', error);
-    throw error;
-  }
-};
-
-// 由于 createDynamoDBClient 现在是异步的，需要修改其他使用它的地方
+// 由于统一使用 utils/dynamodb.ts 中的客户端
 const getDocClient = async () => {
   const client = await createDynamoDBClient();
-  return DynamoDBDocumentClient.from(client);
+  return client;
 };
 
 // 获取用户的家校信息
@@ -125,13 +51,7 @@ export async function GET(request: Request) {
     console.error('[ERROR] 获取数据失败:', {
       error,
       type: error instanceof Error ? error.name : typeof error,
-      message: error instanceof Error ? error.message : String(error),
-      envCheck: {
-        hasRegion: !!process.env.AWS_REGION,
-        hasAccessKey: !!process.env.NEXT_PUBLIC_ACCESS_KEY_ID,
-        hasSecretKey: !!process.env.NEXT_PUBLIC_SECRET_ACCESS_KEY,
-        availableEnvVars: Object.keys(process.env).filter(key => key.startsWith('NEXT_PUBLIC_'))
-      }
+      message: error instanceof Error ? error.message : String(error)
     });
     return NextResponse.json({ error: '获取数据失败' }, { status: 500 });
   }
@@ -171,21 +91,9 @@ export async function POST(request: Request) {
     console.error('[ERROR] 保存数据失败:', {
       error,
       type: error instanceof Error ? error.name : typeof error,
-      message: error instanceof Error ? error.message : String(error),
-      envCheck: {
-        hasRegion: !!process.env.AWS_REGION,
-        hasAccessKey: !!process.env.NEXT_PUBLIC_ACCESS_KEY_ID,
-        hasSecretKey: !!process.env.NEXT_PUBLIC_SECRET_ACCESS_KEY,
-        availableEnvVars: Object.keys(process.env).filter(key => key.startsWith('NEXT_PUBLIC_'))
-      }
+      message: error instanceof Error ? error.message : String(error)
     });
     return NextResponse.json({ error: '保存数据失败' }, { status: 500 });
   }
 }
 
-console.log('[DEBUG] 凭证检查:', {
-  identityPoolId: process.env.NEXT_PUBLIC_IDENTITY_POOL_ID,
-  region: process.env.NEXT_PUBLIC_REGION,
-  roleArn: process.env.AWS_LAMBDA_ROLE,
-  // 其他相关配置
-}); 

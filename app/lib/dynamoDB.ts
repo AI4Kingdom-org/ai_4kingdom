@@ -1,13 +1,16 @@
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
-import { fromCognitoIdentityPool } from "@aws-sdk/credential-providers";
 
 const client = new DynamoDBClient({
-  region: process.env.NEXT_PUBLIC_REGION,
-  credentials: fromCognitoIdentityPool({
-    clientConfig: { region: process.env.NEXT_PUBLIC_REGION },
-    identityPoolId: process.env.NEXT_PUBLIC_IDENTITY_POOL_ID!,
-  })
+  region: process.env.NEXT_PUBLIC_REGION || 'us-east-2',
+  credentials: {
+    accessKeyId: process.env.NEXT_PUBLIC_ACCESS_KEY_ID!,
+    secretAccessKey: process.env.NEXT_PUBLIC_SECRET_ACCESS_KEY!
+  }
 });
 
-export const docClient = DynamoDBDocumentClient.from(client); 
+export const docClient = DynamoDBDocumentClient.from(client, {
+  marshallOptions: {
+    removeUndefinedValues: true,
+  },
+});

@@ -1,9 +1,9 @@
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocumentClient, PutCommand, QueryCommand, GetCommand } from "@aws-sdk/lib-dynamodb";
-import { fromCognitoIdentityPool } from "@aws-sdk/credential-providers";
 import OpenAI from 'openai';
 import { NextResponse } from 'next/server';
 import { updateMonthlyTokenUsage } from '../../utils/monthlyTokenUsage';
+import { createDynamoDBClient } from '../../utils/dynamodb';
 
 // 统一环境变量配置
 const CONFIG = {
@@ -15,45 +15,10 @@ const CONFIG = {
   isDev: process.env.NODE_ENV === 'development'
 };
 
-async function getDynamoDBConfig() {
-  if (CONFIG.isDev) {
-    return {
-      region: CONFIG.region,
-      credentials: {
-        accessKeyId: process.env.NEXT_PUBLIC_AWS_ACCESS_KEY!,
-        secretAccessKey: process.env.NEXT_PUBLIC_AWS_SECRET_KEY!
-      }
-    };
-  }
-
-  try {
-    const credentials = await fromCognitoIdentityPool({
-      clientConfig: { region: CONFIG.region },
-      identityPoolId: CONFIG.identityPoolId
-    })();
-
-    return {
-      region: CONFIG.region,
-      credentials
-    };
-  } catch (error) {
-    console.error('[ERROR] Cognito 凭证获取失败:', error);
-    throw error;
-  }
-}
-
-// 创建 DynamoDB 客户端
-async function createDynamoDBClient() {
-  try {
-    const config = await getDynamoDBConfig();
-    
-    const client = new DynamoDBClient(config);
-    return DynamoDBDocumentClient.from(client);
-  } catch (error) {
-    console.error('[ERROR] DynamoDB 客户端创建失败:', error);
-    throw error;
-  }
-}
+// 获取 DynamoDB 客户端函数
+const getDocClient = async (): Promise<DynamoDBDocumentClient> => {
+  return await createDynamoDBClient();
+};
 
 // CORS 配置
 const ALLOWED_ORIGINS = [
@@ -86,7 +51,7 @@ async function getUserActiveThread(
   assistantId: string  // 新增参数
 ): Promise<string> {
   try {
-    const docClient = await createDynamoDBClient();
+    const docClient = await getDocClient();
     const command = new QueryCommand({
       TableName: CONFIG.tableName,
       IndexName: 'UserTypeIndex',
