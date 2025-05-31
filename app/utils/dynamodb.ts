@@ -22,7 +22,13 @@ export async function createDynamoDBClient() {
     console.log('[DEBUG] DynamoDB初始化配置:', {
       region: config.region,
       hasAccessKey: !!config.credentials.accessKeyId,
-      hasSecretKey: !!config.credentials.secretAccessKey
+      hasSecretKey: !!config.credentials.secretAccessKey,
+      envCheck: {
+        hasRegion: !!process.env.NEXT_PUBLIC_REGION,
+        hasAccessKey: !!process.env.NEXT_PUBLIC_ACCESS_KEY_ID,
+        hasSecretKey: !!process.env.NEXT_PUBLIC_SECRET_ACCESS_KEY,
+        availableEnvVars: Object.keys(process.env).filter(key => key.startsWith('NEXT_PUBLIC_')).slice(0, 10)
+      }
     });
 
     const client = new DynamoDBClient({
@@ -36,7 +42,17 @@ export async function createDynamoDBClient() {
       },
     });
   } catch (error) {
-    console.error('[ERROR] DynamoDB客户端创建失败:', error);
+    console.error('[ERROR] DynamoDB客户端创建失败:', {
+      error,
+      type: error instanceof Error ? error.name : typeof error,
+      message: error instanceof Error ? error.message : String(error),
+      envCheck: {
+        hasRegion: !!process.env.NEXT_PUBLIC_REGION,
+        hasAccessKey: !!process.env.NEXT_PUBLIC_ACCESS_KEY_ID,
+        hasSecretKey: !!process.env.NEXT_PUBLIC_SECRET_ACCESS_KEY,
+        availableEnvVars: Object.keys(process.env).filter(key => key.startsWith('NEXT_PUBLIC_'))
+      }
+    });
     throw error;
   }
 }

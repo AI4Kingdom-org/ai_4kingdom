@@ -1,80 +1,17 @@
 import { NextResponse } from 'next/server';
-import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
-import { 
-  DynamoDBDocumentClient, 
-  GetCommand,
-  PutCommand
-} from "@aws-sdk/lib-dynamodb";
+import { DynamoDBDocumentClient, GetCommand, PutCommand } from "@aws-sdk/lib-dynamodb";
 import OpenAI from 'openai';
 import { ASSISTANT_IDS, VECTOR_STORE_IDS } from "@/app/config/constants";
+import { createDynamoDBClient } from '../../utils/dynamodb';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
 });
 
-// 添加调试日志
-console.log('[DEBUG] AWS 环境变量:', {
-  region: process.env.NEXT_PUBLIC_AWS_REGION || process.env.NEXT_PUBLIC_REGION,
-  hasAccessKey: !!process.env.NEXT_PUBLIC_ACCESS_KEY_ID,
-  hasSecretKey: !!process.env.NEXT_PUBLIC_SECRET_ACCESS_KEY,
-  availableEnvVars: Object.keys(process.env).filter(key => key.startsWith('NEXT_PUBLIC_'))
-});
-
-// 检查环境变量
-const validateEnvVars = () => {
-  const requiredVars = [
-    'NEXT_PUBLIC_REGION'
-  ];
-  
-  // 检查AWS凭证
-  const credentials = {
-    accessKeyId: process.env.NEXT_PUBLIC_ACCESS_KEY_ID,
-    secretAccessKey: process.env.NEXT_PUBLIC_SECRET_ACCESS_KEY,
-    region: process.env.NEXT_PUBLIC_AWS_REGION || process.env.NEXT_PUBLIC_REGION
-  };
-
-  if (!credentials.accessKeyId || !credentials.secretAccessKey) {
-    console.error('AWS凭证检查失败:', {
-      available: Object.keys(process.env).filter(key => key.startsWith('NEXT_PUBLIC_')),
-      hasAccessKey: !!credentials.accessKeyId,
-      hasSecretKey: !!credentials.secretAccessKey
-    });
-    throw new Error('AWS credentials not found');
-  }
-
-  return credentials;
+// 使用統一的 DynamoDB 客戶端
+const getDocClient = async () => {
+  return await createDynamoDBClient();
 };
-
-// 创建 DynamoDB 客户端
-const createDynamoDBClient = () => {
-  try {
-    const credentials = validateEnvVars();
-    
-    return new DynamoDBClient({
-      region: credentials.region,
-      credentials: {
-        accessKeyId: credentials.accessKeyId!,
-        secretAccessKey: credentials.secretAccessKey!
-      }
-    });
-  } catch (error) {
-    console.error('[ERROR] DynamoDB 客户端创建失败:', error);
-    throw error;
-  }
-};
-
-const client = createDynamoDBClient();
-
-// 添加调试日志查看凭证是否正确加载
-console.log('[DEBUG] AWS Config:', {
-  region: process.env.NEXT_PUBLIC_REGION,
-  hasAccessKey: !!process.env.NEXT_PUBLIC_AWS_ACCESS_KEY,
-  hasSecretKey: !!process.env.NEXT_PUBLIC_AWS_SECRET_KEY,
-  accessKeyFirstChar: process.env.NEXT_PUBLIC_AWS_ACCESS_KEY?.charAt(0),
-  secretKeyLength: process.env.NEXT_PUBLIC_AWS_SECRET_KEY?.length
-});
-
-const docClient = DynamoDBDocumentClient.from(client);
 
 // 获取当前Prompt
 export async function GET(request: Request) {
@@ -82,6 +19,7 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const vectorStoreId = searchParams.get('vectorStoreId') || VECTOR_STORE_IDS.GENERAL;
     
+    const docClient = await getDocClient();
     const command = new GetCommand({
       TableName: "AIPrompts",
       Key: { id: vectorStoreId }
@@ -139,9 +77,8 @@ export async function PUT(request: Request) {
     } catch (error) {
       console.error('[ERROR] 更新 OpenAI Assistant 失败:', error);
       throw error;
-    }
-
-    // 2. 更新 DynamoDB
+    }    // 2. 更新 DynamoDB
+    const docClient = await getDocClient();
     const command = new PutCommand({
       TableName: "AIPrompts",
       Item: {
@@ -150,7 +87,6 @@ export async function PUT(request: Request) {
         lastUpdated: new Date().toISOString()
       }
     });
-
 
     await docClient.send(command);
     
