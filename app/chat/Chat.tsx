@@ -206,6 +206,11 @@ export default function Chat({ type, assistantId, vectorStoreId }: ChatProps) {
     }
   };
 
+  useEffect(() => {
+    // 頁面初次載入時，強制滾動到頂部
+    window.scrollTo(0, 0);
+  }, []);
+
   if (loading) return <div>加载中...</div>;
   if (error) return <div>认证错误: {error}</div>;
   if (!user) return (

@@ -20,17 +20,6 @@ export default function MessageList({ messages, isLoading }: MessageListProps) {
   const [streamingMessage, setStreamingMessage] = useState<string>("");
   const intervalRef = useRef<NodeJS.Timeout | null>(null); // 用於儲存 interval 引用
 
-  // 安全地滾動到底部
-  useEffect(() => {
-    try {
-      if (chatEndRef.current) {
-        chatEndRef.current.scrollIntoView({ behavior: "smooth" });
-      }
-    } catch (error) {
-      console.error("滾動到最新訊息時發生錯誤:", error);
-    }
-  }, [displayedMessages, streamingMessage]);
-
   useEffect(() => {
     if (messages.length === 0) {
       setDisplayedMessages([]);

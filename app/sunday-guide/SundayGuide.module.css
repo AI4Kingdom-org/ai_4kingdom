@@ -320,3 +320,96 @@
     flex-direction: column;
   }
 }
+
+/* 本月上傳記錄區塊樣式 */
+.mainContentWrapper {
+  display: flex;
+  align-items: stretch;
+  gap: 1rem;
+}
+
+.mainContent {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.recentFilesAside {
+  flex: 0 0 260px;
+  min-width: 180px;
+  background: #f5f5f5;
+  border-radius: 8px;
+  padding: 1rem 1rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  height: 100%;
+}
+
+.recentFilesTitle {
+  font-size: 1rem;
+  color: #050505;
+  margin-bottom: 1rem;
+  padding-bottom: 0.3rem;
+  border-bottom: 0px solid #eee;
+  background: #f5f5f5;
+  font-weight: 600;
+}
+
+.recentFilesList {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.recentFileItem {
+  display: flex;
+  align-items: center;
+  padding: 0rem 0;
+  margin-bottom: 0rem;
+  font-size: 0.8rem; /* 縮小兩號 */
+  background: #f5f5f5;
+  border: none;
+  border-radius: 0;
+}
+
+.fileIndex {
+  color: #010df7;
+  font-size: 0.8rem;
+  margin-right: 0.3rem;
+}
+
+.fileName {
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: #333;
+  flex: 1;
+}
+
+.uploadDate {
+  font-size: 0.8rem;
+  color: #666;
+  margin-left: 0.5rem;
+}
+
+.noRecentFiles {
+  font-size: 0.8rem;
+  color: #999;
+  text-align: center;
+  padding: 0.5rem 0;
+  background: none;
+  border-radius: 0;
+}
+
+@media (max-width: 900px) {
+  .mainContentWrapper {
+    flex-direction: column;
+  }
+  .recentFilesAside {
+    width: 100%;
+    min-width: unset;
+    margin-top: 2rem;
+    height: auto;
+  }
+}

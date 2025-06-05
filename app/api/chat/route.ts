@@ -165,16 +165,19 @@ function extractDocumentReferences(toolCall: any, currentUserId?: string): any[]
     if (parsedOutput?.citations && Array.isArray(parsedOutput.citations)) {
       console.log('[DEBUG] 檢索到文檔引用:', parsedOutput.citations.length);
       
-      // 添加用戶屬性到引用中
-      return parsedOutput.citations.map((citation: any) => ({
-        fileName: citation.file_name || citation.fileName || '未知檔案',
-        filePath: citation.file_path || citation.filePath || '',
-        pageNumber: citation.page_number || citation.pageNumber || null,
-        text: citation.text || '',
-        fileId: citation.file_id || citation.fileId || '',
-        isCurrentUserFile: true, // 默認為當前用戶的文件
-        uploadedBy: currentUserId ? `您 (用戶ID: ${currentUserId})` : "您" 
-      }));
+      // 對於johnsung和sunday-guide的文件，這些是共享資源，所以不需要檢查擁有者
+      // 將所有文件都視為系統資源，而不是私人資源
+      return parsedOutput.citations.map((citation: any) => {
+        return {
+          fileName: citation.file_name || citation.fileName || '未知檔案',
+          filePath: citation.file_path || citation.filePath || '',
+          pageNumber: citation.page_number || citation.pageNumber || null,
+          text: citation.text || '',
+          fileId: citation.file_id || citation.fileId || '',
+          isCurrentUserFile: false, // 所有文件都視為系統資源
+          uploadedBy: "系統資源" // 統一顯示為系統資源，不顯示具體用戶
+        };
+      });
     }
     
     return [];
@@ -387,8 +390,7 @@ export async function POST(request: Request) {
         userId,
         assistantId: config.assistantId,
         vectorStoreId: config.vectorStoreId || 'none'
-      });
-        // 建立执行
+      });        // 建立执行 - 所有檔案視為系統資源，無需用戶過濾
       const run = await openai.beta.threads.runs.create(activeThreadId, {
         assistant_id: config.assistantId,
         max_completion_tokens: 1000,
@@ -396,7 +398,7 @@ export async function POST(request: Request) {
           tool_resources: {
             file_search: {
               vector_store_ids: [config.vectorStoreId]
-              // OpenAI API 不支援 user_filter 參數
+              // 不使用用戶過濾，所有文件可被所有用戶訪問
             }
           }
         } : {})
@@ -439,8 +441,7 @@ export async function POST(request: Request) {
           'Connection': 'keep-alive'
         }
       });
-    }
-      // 非流式请求的处理
+    }      // 非流式请求的处理 - 所有檔案視為系統資源，無需用戶過濾
     const run = await openai.beta.threads.runs.create(activeThreadId, {
       assistant_id: config.assistantId,
       max_completion_tokens: 1000,
@@ -448,7 +449,7 @@ export async function POST(request: Request) {
         tool_resources: {
           file_search: {
             vector_store_ids: [config.vectorStoreId]
-            // OpenAI API 不支援 user_filter 參數
+            // 不使用用戶過濾，所有文件可被所有用戶訪問
           }
         }
       } : {})

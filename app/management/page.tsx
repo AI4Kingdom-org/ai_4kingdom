@@ -24,6 +24,12 @@ const managementTools: ManagementTool[] = [
     iconEmoji: '💰'
   },
   {
+    title: '檔案上傳',
+    description: '上傳單一或多個檔案到指定的助手知識庫',
+    path: '/file-upload',
+    iconEmoji: '⬆️'
+  },
+  {
     title: '文件記錄管理',
     description: '查看和管理上傳的檔案',
     path: '/file-records',

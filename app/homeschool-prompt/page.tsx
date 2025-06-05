@@ -76,6 +76,8 @@ function HomeschoolPromptContent() {
           threadId: data.threadId,
           vectorStoreId: VECTOR_STORE_IDS.HOMESCHOOL
         });
+        // 新增：通知其他頁面 homeschool prompt 已更新
+        window.dispatchEvent(new Event('homeschool_data_updated'));
         setMessage('保存成功');
       } else {
         throw new Error('保存失败');

@@ -173,17 +173,23 @@
 .downloadButton {
   padding: 8px 12px;
   border-radius: 4px;
-  background: #f0f7ff;
-  border: 1px solid #0070f3;
-  color: #0070f3;
+  background: #fff8f0;
+  border: 1px solid #ff8c00;
+  color: #ff8c00;
   cursor: pointer;
   transition: all 0.3s ease;
   font-size: 14px;
+  white-space: nowrap;
 }
 
 .downloadButton:hover {
-  background: #0070f3;
+  background: #ff8c00;
   color: #fff;
+}
+
+.downloadButton:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 .errorMessage {
@@ -219,5 +225,17 @@
 
   .emptyState {
     font-size: 1rem;
+  }
+
+  /* 響應式下載按鈕 */
+  .contentHeader {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  .downloadButton {
+    width: 100%;
+    text-align: center;
   }
 }
