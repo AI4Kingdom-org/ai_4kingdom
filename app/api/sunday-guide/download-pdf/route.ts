@@ -38,6 +38,7 @@ export async function GET(
     const type = url.searchParams.get('type') || 'summary';
     const userId = url.searchParams.get('userId');
     const assistantId = url.searchParams.get('assistantId') || DEFAULT_ASSISTANT_ID;
+    const includeAll = url.searchParams.get('includeAll') === 'true';
     
     if (!userId) {
       return NextResponse.json(
@@ -46,9 +47,44 @@ export async function GET(
       );
     }
 
-    console.log(`[DEBUG] PDF下載請求: type=${type}, userId=${userId}, assistantId=${assistantId}`);
+    console.log(`[DEBUG] PDF下載請求: type=${type}, userId=${userId}, assistantId=${assistantId}, includeAll=${includeAll}`);
 
-    // 獲取內容
+    // 如果是包含所有內容的請求
+    if (includeAll) {
+      const allContent = await getAllContentForPDF(assistantId);
+      
+      if (!allContent || (!allContent.summary && !allContent.devotional && !allContent.bible)) {
+        console.error(`[ERROR] 找不到完整內容: assistantId=${assistantId}`);
+        return NextResponse.json(
+          { error: '找不到請求的內容' },
+          { status: 404 }
+        );
+      }
+
+      console.log(`[DEBUG] 成功獲取所有內容`);
+
+      // 創建當前日期字符串作為檔案名的一部分
+      const today = new Date();
+      const dateStr = today.toISOString().split('T')[0];
+      const safeFileName = `sunday-guide-complete-${dateStr}.html`;
+
+      // 準備所有內容的 HTML
+      const htmlContent = createCompleteHTML(allContent, today);
+
+      // 設置內容類型標頭
+      const headers = {
+        'Content-Type': 'text/html; charset=UTF-8'
+      };
+
+      console.log(`[DEBUG] 準備下載完整文件: ${safeFileName}`);
+
+      return new Response(htmlContent, {
+        status: 200,
+        headers
+      });
+    }
+
+    // 原有的單個內容下載邏輯
     const content = await getContentForPDF(type, assistantId);
     
     if (!content) {
@@ -148,6 +184,144 @@ export async function GET(
       { status: 500 }
     );
   }
+}
+
+// 獲取所有內容類型的輔助函數
+async function getAllContentForPDF(assistantId: string) {
+  try {
+    const docClient = await createDynamoDBClient();
+    
+    console.log(`[DEBUG] 查詢所有內容: 表=${SUNDAY_GUIDE_TABLE}, assistantId=${assistantId}`);
+    
+    const command = new ScanCommand({
+      TableName: SUNDAY_GUIDE_TABLE,
+      FilterExpression: 'assistantId = :assistantId',
+      ExpressionAttributeValues: {
+        ':assistantId': assistantId
+      }
+    });
+
+    const response = await docClient.send(command);
+    const items = response.Items;
+
+    if (!items || items.length === 0) {
+      console.error('[ERROR] 未找到任何內容記錄');
+      return null;
+    }
+
+    // 獲取最新的文件內容
+    const latestItem = items.sort((a, b) => 
+      new Date(b.Timestamp).getTime() - new Date(a.Timestamp).getTime()
+    )[0];
+
+    console.log(`[DEBUG] 找到最新記錄: ${latestItem.id || 'unknown ID'}, 時間戳: ${latestItem.Timestamp}`);
+    
+    return {
+      summary: latestItem.summary || '',
+      devotional: latestItem.devotional || '',
+      bible: latestItem.bibleStudy || '',
+      timestamp: latestItem.Timestamp
+    };
+  } catch (error) {
+    console.error('[ERROR] 獲取所有內容失敗:', error);
+    throw error;
+  }
+}
+
+// 創建包含所有內容的完整 HTML
+function createCompleteHTML(allContent: { summary: string; devotional: string; bible: string; timestamp?: string }, today: Date) {
+  // 轉換所有內容為簡體中文
+  const summarySimplified = convertToSimplified(allContent.summary);
+  const devotionalSimplified = convertToSimplified(allContent.devotional);
+  const bibleSimplified = convertToSimplified(allContent.bible);
+  
+  return `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="UTF-8">
+      <title>主日信息导航完整版</title>
+      <style>
+        body {
+          font-family: Arial, "Microsoft YaHei", sans-serif;
+          line-height: 1.6;
+          color: #333;
+          max-width: 800px;
+          margin: 0 auto;
+          padding: 20px;
+        }
+        h1 {
+          text-align: center;
+          color: #000;
+          font-weight: bold;
+          margin-bottom: 10px;
+          font-size: 28px;
+        }
+        h2 {
+          color: #2c5282;
+          border-bottom: 2px solid #2c5282;
+          padding-bottom: 5px;
+          margin-top: 40px;
+          margin-bottom: 20px;
+          font-size: 22px;
+        }
+        .date {
+          text-align: center;
+          color: #666;
+          margin-bottom: 40px;
+          font-size: 14px;
+        }
+        .content {
+          text-align: justify;
+          white-space: pre-line;
+          margin-bottom: 30px;
+        }
+        .section {
+          margin-bottom: 50px;
+          page-break-inside: avoid;
+        }
+        @media print {
+          body {
+            max-width: none;
+            margin: 0;
+            padding: 15px;
+          }
+          h2 {
+            page-break-after: avoid;
+          }
+          .section {
+            page-break-inside: avoid;
+          }
+        }
+      </style>
+    </head>
+    <body>
+      <h1>主日信息导航完整版</h1>
+      <div class="date">生成日期: ${today.toLocaleDateString('zh-CN')}</div>
+      
+      ${summarySimplified ? `
+      <div class="section">
+        <h2>一、讲道总结</h2>
+        <div class="content">${summarySimplified}</div>
+      </div>
+      ` : ''}
+      
+      ${devotionalSimplified ? `
+      <div class="section">
+        <h2>二、每日灵修</h2>
+        <div class="content">${devotionalSimplified}</div>
+      </div>
+      ` : ''}
+      
+      ${bibleSimplified ? `
+      <div class="section">
+        <h2>三、查经指引</h2>
+        <div class="content">${bibleSimplified}</div>
+      </div>
+      ` : ''}
+    </body>
+    </html>
+  `;
 }
 
 // 獲取內容的輔助函數，使用與內容 API 相同的邏輯

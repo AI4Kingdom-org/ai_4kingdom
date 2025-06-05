@@ -5,6 +5,11 @@ import { ASSISTANT_IDS, VECTOR_STORE_IDS } from '../config/constants';
 import { ChatType } from '../config/chatTypes';
 import { useAuth } from '../contexts/AuthContext';
 
+// 自訂事件總線，用於跨組件通信
+export const ChatEvents = {
+  HOMESCHOOL_DATA_UPDATED: 'homeschool_data_updated'
+};
+
 interface ChatConfig {
   type: ChatType;
   assistantId: string;
@@ -48,6 +53,7 @@ interface ChatContextType {
   setError: (error: string | null) => void;
   loadChatHistory: (userId: string) => Promise<void>;
   setIsLoading: (loading: boolean) => void;
+  refreshHomeschoolData: () => Promise<void>; // 新增的方法來刷新 homeschool 資料
 }
 
 const ChatContext = createContext<ChatContextType | null>(null);
@@ -76,6 +82,45 @@ export function ChatProvider({
     setConfigState(newConfig);
   }, []);
 
+  // 刷新 homeschool 數據的函數
+  const refreshHomeschoolData = useCallback(async () => {
+    if (config?.type !== 'homeschool' || !config?.userId) return;
+    
+    try {
+      setIsLoading(true);
+      console.log('[DEBUG] 刷新家校数据:', { userId: config.userId });
+      
+      // 獲取最新的 homeschool 數據
+      const response = await fetch(`/api/homeschool-prompt?userId=${config.userId}`);
+      if (response.ok) {
+        const data = await response.json();
+        console.log('[DEBUG] 获取到新的家校数据:', data);
+        // 如果 recentChanges 有變化，清空對話並更新 config（將 recentChanges 放進 assistantId 以外的自訂欄位，如 extraPrompt）
+        if ((config as any).extraPrompt !== data.recentChanges) {
+          setMessages([]);
+          setConfig({
+            ...config,
+            threadId: data.threadId,
+            extraPrompt: data.recentChanges // 新增自訂欄位
+          } as any);
+        } else if (data.threadId && data.threadId !== currentThreadId) {
+          setCurrentThreadId(data.threadId);
+          setConfig({
+            ...config,
+            threadId: data.threadId,
+            extraPrompt: data.recentChanges
+          } as any);
+        }
+        return data;
+      }
+    } catch (error) {
+      console.error('[ERROR] 刷新家校数据失败:', error);
+      setError(error instanceof Error ? error.message : '刷新数据失败');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [config, currentThreadId, setConfig]);
+
   useEffect(() => {
     if (!config || config.type !== initialConfig?.type) {
       console.log('[DEBUG] ChatProvider 初始化配置:', {
@@ -99,6 +144,26 @@ export function ChatProvider({
     setCurrentThreadId(null);
     setError(null);
   }, [config?.assistantId, config?.vectorStoreId, config?.type]);
+  
+  // 監聽 homeschool 數據更新事件
+  useEffect(() => {
+    // 只有在 homeschool 聊天類型下才需要監聽
+    if (config?.type !== 'homeschool') return;
+    
+    const handleHomeschoolDataUpdated = () => {
+      console.log('[DEBUG] 收到家校数据更新事件');
+      refreshHomeschoolData();
+    };
+    
+    // 添加事件監聽器
+    window.addEventListener(ChatEvents.HOMESCHOOL_DATA_UPDATED, handleHomeschoolDataUpdated);
+    
+    // 清理函數
+    return () => {
+      window.removeEventListener(ChatEvents.HOMESCHOOL_DATA_UPDATED, handleHomeschoolDataUpdated);
+    };
+  }, [config?.type, refreshHomeschoolData]);
+
   const sendMessage = useCallback(async (message: string) => {
     setIsLoading(true);
     setError(null);
@@ -299,7 +364,8 @@ export function ChatProvider({
     error,
     setError,
     loadChatHistory,
-    setIsLoading
+    setIsLoading,
+    refreshHomeschoolData
   };
 
   return <ChatContext.Provider value={value}>{children}</ChatContext.Provider>;

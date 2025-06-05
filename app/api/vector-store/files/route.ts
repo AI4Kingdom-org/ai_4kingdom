@@ -38,9 +38,7 @@ export async function GET(request: Request) {
 
     // 獲取 vector store 的文件
     console.log('[DEBUG] 請求 OpenAI Vector Store 文件列表');
-    const vectorStoreFiles = await openai.files.list({
-      purpose: 'assistants'
-    });
+    const vectorStoreFiles = await openai.beta.vectorStores.files.list(vectorStoreId);
 
     console.log('[DEBUG] 獲取到文件列表:', {
       總數: vectorStoreFiles.data.length,
@@ -49,19 +47,20 @@ export async function GET(request: Request) {
 
     // 獲取文件詳細信息
     const fileDetails = await Promise.all(
-      vectorStoreFiles.data.map(async (file) => {
+      vectorStoreFiles.data.map(async (vectorStoreFile) => {
         try {
-          const fileInfo = await openai.files.retrieve(file.id);
+          // vectorStoreFile 對象包含 file_id 屬性
+          const fileInfo = await openai.files.retrieve(vectorStoreFile.id);
           // 將 Unix timestamp 轉換為 ISO 字符串
           const uploadDate = new Date(fileInfo.created_at * 1000).toISOString();
           
           return {
             fileName: fileInfo.filename,
-            fileId: file.id,
+            fileId: vectorStoreFile.id,
             uploadDate: uploadDate
           };
         } catch (err) {
-          console.error(`[ERROR] 獲取文件信息失敗: ${file.id}`, err);
+          console.error(`[ERROR] 獲取文件信息失敗: ${vectorStoreFile.id}`, err);
           return null;
         }
       })

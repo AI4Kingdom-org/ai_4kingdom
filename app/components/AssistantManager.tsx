@@ -156,9 +156,9 @@ export default function AssistantManager({
 
       // 檢查檔案是否已存在
       if (uploadResponse.status === 409 && responseData?.fileExists) {
-        console.log("檔案已存在:", responseData);
+        console.log("文件已存在:", responseData);
         setFileExists(true);
-        setError(responseData.details || "檔案已存在，請使用不同的檔案名稱");
+        setError(responseData.details || "文件已存在，请使用不同的文件名称");
         setUploading(false);
         setUploadProgress(0);
         setTaskStatus(prev => ({ ...prev, upload: 'idle' }));
@@ -166,29 +166,29 @@ export default function AssistantManager({
       }
       
       if (!uploadResponse.ok) {
-        console.error("上傳失敗狀態碼:", uploadResponse.status, responseData?.error || "未知錯誤");
-        throw new Error(`文件上傳失敗: ${uploadResponse.status} - ${responseData?.error || "未知錯誤"}`);
+        console.error("上传失败状态码:", uploadResponse.status, responseData?.error || "未知错误");
+        throw new Error(`文件上传失败: ${uploadResponse.status} - ${responseData?.error || "未知错误"}`);
       }
       
-      // 上傳成功，更新狀態
+      // 上传成功，更新状态
       setTaskStatus(prev => ({ ...prev, upload: 'completed' }));
       setUploadSuccess(true);
       setUploadedFileName(file.name);
       setUploading(false);
       setUploadProgress(20);
       
-      // 文件上傳成功後，記錄 token 使用量
+      // 文件上传成功后，记录 token 使用量
       if (user?.user_id) {
-        // 根據文件大小估算頁數，這裡使用一個簡單的估算公式
-        const estimatedPages = Math.max(1, Math.ceil(file.size / (100 * 1024))); // 每 100KB 估算為 1 頁
+        // 根据文件大小估算页数，这里使用一个简单的估算公式
+        const estimatedPages = Math.max(1, Math.ceil(file.size / (100 * 1024))); // 每 100KB 估算为 1 页
         await updateFileUploadTokenUsage(user.user_id, estimatedPages);
-        // 立即刷新使用量顯示
+        // 立即刷新使用量显示
         await refreshUsage();
       }
       
     } catch (err) {
-      console.error('文件處理錯誤:', err);
-      setError(err instanceof Error ? err.message : '未知錯誤');
+      console.error('文件处理错误:', err);
+      setError(err instanceof Error ? err.message : '未知错误');
       setUploadProgress(0);
       setUploading(false);
       setTaskStatus({
@@ -214,20 +214,20 @@ export default function AssistantManager({
     // 先通知父組件處理結果
     onFileProcessed(content);
     
-    // 文件處理成功後，記錄 token 使用量
+    // 文件处理成功后，记录 token 使用量
     if (user?.user_id) {
-      // 估算處理的頁數，可以根據內容長度來估算
+      // 估算处理的页数，可以根据内容长度来估算
       const textLength = (content.summary?.length || 0) + 
                          (content.fullText?.length || 0) + 
                          (content.devotional?.length || 0) + 
                          (content.bibleStudy?.length || 0);
       
-      // 每 5000 字元估算為 1 頁
+      // 每 5000 字符估算为 1 页
       const estimatedPages = Math.max(1, Math.ceil(textLength / 5000));
       await updateFileProcessingTokenUsage(user.user_id, estimatedPages);
     }
     
-    // 立即更新信用點數使用量
+    // 立即更新信用点数使用量
     await refreshUsage();
   };
 
@@ -236,14 +236,14 @@ export default function AssistantManager({
       const statusResponse = await fetch(`/api/sunday-guide/progress?vectorStoreId=${VECTOR_STORE_IDS.JOHNSUNG}&fileName=${encodeURIComponent(uploadedFileName)}`);
       
       if (!statusResponse.ok) {
-        console.error('檢查處理狀態失敗:', statusResponse.status);
+        console.error('检查处理状态失败:', statusResponse.status);
         return;
       }
       
       const statusData = await statusResponse.json();
       
       if (statusData.status === 'completed') {
-        // 處理完成，獲取結果
+        // 处理完成，获取结果
         setProcessingStatus('completed');
         setProcessingComplete(true);
         setProcessing(false);
@@ -262,7 +262,7 @@ export default function AssistantManager({
           setTimeSpent(timeSpentStr);
         }
         
-        // 更新任務狀態
+        // 更新任务状态
         setTaskStatus({
           upload: 'completed',
           summary: 'completed',
@@ -278,9 +278,9 @@ export default function AssistantManager({
         
         setUploadProgress(100);
       } else if (statusData.status === 'failed') {
-        // 處理失敗
+        // 处理失败
         setProcessingStatus('failed');
-        setProcessingError(statusData.error || '文件處理失敗');
+        setProcessingError(statusData.error || '文件处理失败');
         setProcessing(false);
         
         if (pollingIntervalRef.current) {
@@ -288,7 +288,7 @@ export default function AssistantManager({
           pollingIntervalRef.current = null;
         }
       } else if (statusData.status === 'processing') {
-        // 更新處理階段
+        // 更新处理阶段
         setProcessingStatus('processing');
         if (statusData.stage === 'summary') {
           setTaskStatus(prev => ({ ...prev, summary: 'processing' }));
@@ -301,7 +301,7 @@ export default function AssistantManager({
         }
       }
     } catch (err) {
-      console.error('檢查處理狀態出錯:', err);
+      console.error('检查处理状态出错:', err);
     }
   };
 
@@ -313,10 +313,10 @@ export default function AssistantManager({
     setProcessingError(null);
     
     try {
-      // 記錄處理開始時間
+      // 记录处理开始时间
       const startProcessingTime = new Date();
       
-      // 啟動處理流程
+      // 启动处理流程
       const processResponse = await fetch('/api/sunday-guide/process-document', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -324,35 +324,35 @@ export default function AssistantManager({
           assistantId: ASSISTANT_IDS.SUNDAY_GUIDE,
           vectorStoreId: VECTOR_STORE_IDS.SUNDAY_GUIDE,
           fileName: uploadedFileName,
-          userId: user?.user_id || '-' // 添加用戶 ID
+          userId: user?.user_id || '-' // 添加用户 ID
         })
       });
       
       if (!processResponse.ok) {
-        let errorText = "未知錯誤";
+        let errorText = "未知错误";
         try { 
           const errorResponse = await processResponse.json();
-          errorText = errorResponse.details || errorResponse.error || "處理過程中發生錯誤";
+          errorText = errorResponse.details || errorResponse.error || "处理过程中发生错误";
         } catch (e) { 
-          console.error("無法解析錯誤響應:", e); 
+          console.error("无法解析错误响应:", e); 
           try {
             errorText = await processResponse.text();
           } catch (e2) {
-            console.error("無法讀取錯誤響應文本:", e2);
+            console.error("无法读取错误响应文本:", e2);
           }
         }
-        console.error("處理失敗狀態碼:", processResponse.status, errorText);
-        throw new Error(`文件處理失敗: ${processResponse.status} - ${errorText}`);
+        console.error("处理失败状态码:", processResponse.status, errorText);
+        throw new Error(`文件处理失败: ${processResponse.status} - ${errorText}`);
       }
       
-      // 處理已啟動，設置輪詢檢查
+      // 处理已启动，设置轮询检查
       const checkResult = async () => {
         try {
-          // 直接查詢數據庫結果
+          // 直接查询数据库结果
           const resultResponse = await fetch(`/api/sunday-guide/check-result?vectorStoreId=${VECTOR_STORE_IDS.SUNDAY_GUIDE}&fileName=${encodeURIComponent(uploadedFileName)}`);
           
           if (!resultResponse.ok) {
-            // 如果請求失敗，等待後再試
+            // 如果请求失败，等待后再试
             setTimeout(checkResult, 5000);
             return;
           }
@@ -360,19 +360,19 @@ export default function AssistantManager({
           const result = await resultResponse.json();
           
           if (result.found) {
-            // 處理完成，更新界面
+            // 处理完成，更新界面
             setProcessingComplete(true);
             setProcessing(false);
             
-            // 設置處理時間
+            // 设置处理时间
             const pdtTime = getPDTTime();
             setUploadTime(pdtTime);
             
-            // 計算處理時間
+            // 计算处理时间
             const processingTime = calculateTimeSpent(startProcessingTime, result.processingTime);
             setTimeSpent(processingTime);
             
-            // 更新任務狀態
+            // 更新任务状态
             setTaskStatus({
               upload: 'completed',
               summary: 'completed',
@@ -381,27 +381,27 @@ export default function AssistantManager({
               bibleStudy: 'completed'
             });
             
-            // 設置完成進度
+            // 设置完成进度
             setUploadProgress(100);
             
-            // 回調函數，使用處理過的方法更新信用點數
+            // 回调函数，使用处理过的方法更新信用点数
             handleFileProcessed(result);
             
           } else {
-            // 未找到處理結果，繼續輪詢
+            // 未找到处理结果，继续轮询
             setTimeout(checkResult, 5000);
           }
         } catch (err) {
-          console.error('檢查處理結果錯誤:', err);
-          // 發生錯誤時，繼續輪詢
+          console.error('检查处理结果错误:', err);
+          // 发生错误时，继续轮询
           setTimeout(checkResult, 5000);
         }
       };
       
-      // 開始輪詢檢查結果
+      // 开始轮询检查结果
       setTimeout(checkResult, 5000);
       
-      // 每 30 秒更新一次處理階段，讓用戶看到進展
+      // 每 30 秒更新一次处理阶段，让用户看到进展
       let currentStage = 0;
       const stages = ['summary', 'fullText', 'devotional', 'bibleStudy'];
       
@@ -411,15 +411,15 @@ export default function AssistantManager({
           setTaskStatus(prev => {
             const newStatus = { ...prev };
             
-            // 將前面的階段標記為完成
+            // 将前面的阶段标记为完成
             for (let i = 0; i < currentStage; i++) {
               newStatus[stages[i] as keyof TaskStatus] = 'completed';
             }
             
-            // 將當前階段標記為處理中
+            // 将当前阶段标记为处理中
             newStatus[stages[currentStage] as keyof TaskStatus] = 'processing';
             
-            // 將後面的階段標記為空閒
+            // 将后面的阶段标记为空闲
             for (let i = currentStage + 1; i < stages.length; i++) {
               newStatus[stages[i] as keyof TaskStatus] = 'idle';
             }
@@ -434,9 +434,9 @@ export default function AssistantManager({
       setTimeout(updateStage, 30000);
       
     } catch (err) {
-      console.error('文件處理錯誤:', err);
-      setError(err instanceof Error ? err.message : '未知錯誤');
-      setProcessingError(err instanceof Error ? err.message : '未知錯誤');
+      console.error('文件处理错误:', err);
+      setError(err instanceof Error ? err.message : '未知错误');
+      setProcessingError(err instanceof Error ? err.message : '未知错误');
       setProcessingStatus('failed');
       setTaskStatus(prev => ({ ...prev, summary: 'idle', fullText: 'idle', devotional: 'idle', bibleStudy: 'idle' }));
       setProcessing(false);
@@ -454,7 +454,17 @@ export default function AssistantManager({
     };
   }, []);
 
-  // 任務列表渲染
+  // 通知父组件处理完成后，尝试刷新 user-sunday-guide 页面内容（不跳转）
+  useEffect(() => {
+    if (processingComplete) {
+      // 尝试在父页面存在特定刷新函数时调用
+      if (window && window.dispatchEvent) {
+        window.dispatchEvent(new Event('user-sunday-guide-refresh'));
+      }
+    }
+  }, [processingComplete]);
+
+  // 任务列表渲染
   const renderTaskList = () => {
     return (
       <div className={stylesGuide.taskList}>
@@ -541,7 +551,7 @@ export default function AssistantManager({
                 handleFileUpload(file);
               }
             }}
-            disabled={disabled} // 禁用上傳按鈕
+            disabled={disabled} // 禁用上传按钮
           />
           
           {uploading && (
@@ -566,8 +576,8 @@ export default function AssistantManager({
                 <span style={{marginLeft: '10px'}}>
                   {taskStatus.summary === 'processing' && '生成摘要中...'}
                   {taskStatus.fullText === 'processing' && '整理文本中...'}
-                  {taskStatus.devotional === 'processing' && '生成靈修中...'}
-                  {taskStatus.bibleStudy === 'processing' && '生成查經指引中...'}
+                  {taskStatus.devotional === 'processing' && '生成灵修中...'}
+                  {taskStatus.bibleStudy === 'processing' && '生成查经指引中...'}
                 </span>
               )}
             </div>
@@ -575,14 +585,12 @@ export default function AssistantManager({
           
           {processingError && (
             <div className={styles.error} style={{marginTop: '10px'}}>
-              處理失敗: {processingError}
+              处理失败: {processingError}
             </div>
           )}
           
           {processingComplete && (
-            <div className={styles.successMsg}>
-              <span style={{color:'green'}}>✓</span> 文件处理完成！您可以在下方查看处理结果。
-            </div>
+            <></>
           )}
         </div>
       </div>
@@ -591,7 +599,7 @@ export default function AssistantManager({
         <div className={stylesGuide.timeSpent}>
           <span>
             <span className={stylesGuide.timeIcon}>⏱</span> 
-            文件：{fileName} | 处理完成，耗時：{timeSpent}
+            文件：{fileName} | 处理完成，耗时：{timeSpent}
           </span>
         </div>
       )}

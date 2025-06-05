@@ -194,28 +194,23 @@ function SundayGuideContent() {
     }
   };
 
-  // 改進的PDF下載函數 - 使用伺服器端API下載
+  // 下載包含所有內容的完整版本
   const handleDownloadPDF = () => {
-    if (!sermonContent || !selectedMode) {
-      alert('無內容可下載，請先選擇一個主題。');
-      return;
-    }
-
     setPdfError(null);
     setPdfLoading(true);
     
     try {
-      console.log('開始準備下載...');
+      console.log('開始準備下載完整版...');
       
       const userId = user?.user_id || '';
       
-      // 使用伺服器端API直接下載HTML文件，添加assistantId參數
-      const downloadUrl = `/api/sunday-guide/download-pdf?type=${selectedMode}&userId=${encodeURIComponent(userId)}&assistantId=${ASSISTANT_IDS.SUNDAY_GUIDE}`;
+      // 使用伺服器端API下載包含所有內容的HTML文件
+      const downloadUrl = `/api/sunday-guide/download-pdf?includeAll=true&userId=${encodeURIComponent(userId)}&assistantId=${ASSISTANT_IDS.SUNDAY_GUIDE}`;
       
       // 在新分頁中打開下載URL
       window.open(downloadUrl, '_blank');
       
-      console.log('下載請求已發送');
+      console.log('完整版下載請求已發送');
       
       // 短暫延遲後重置加載狀態
       setTimeout(() => {
@@ -223,9 +218,9 @@ function SundayGuideContent() {
       }, 1000);
       
     } catch (error) {
-      console.error('PDF下載請求失敗:', error);
-      setPdfError(error instanceof Error ? error.message : '下載PDF時發生錯誤，請重試');
-      alert('PDF下載失敗: ' + (error instanceof Error ? error.message : '請稍後重試'));
+      console.error('完整版PDF下載請求失敗:', error);
+      setPdfError(error instanceof Error ? error.message : '下載完整版PDF時發生錯誤，請重試');
+      alert('完整版PDF下載失敗: ' + (error instanceof Error ? error.message : '請稍後重試'));
       setPdfLoading(false);
     }
   };
@@ -250,7 +245,7 @@ function SundayGuideContent() {
             onClick={handleDownloadPDF}
             disabled={pdfLoading}
           >
-            {pdfLoading ? '生成預覽中...' : '下载PDF(简体中文)'}
+            {pdfLoading ? '生成預覽中...' : '下载完整版(简体中文)'}
           </button>
         </div>
         {pdfError && <div className={styles.errorMessage}>{pdfError}</div>}
@@ -264,18 +259,7 @@ function SundayGuideContent() {
   return (
     <div className={styles.container}>
       <h1 className={styles.title}>主日信息导航</h1>
-      {fileName && (
-        <div className={styles.fileInfo}>
-          <div className={styles.fileNameBox}>
-            <span className={styles.fileIcon}>📄</span>
-            <span>{fileName}</span>
-          </div>
-          <div className={styles.uploadTimeBox}>
-            <span className={styles.timeIcon}>🕒</span>
-            <span>{uploadTime || '未知時間'}</span>
-          </div>
-        </div>
-      )}
+      {/* 檔案名稱與上傳時間顯示已隱藏 */}
       <div className={styles.buttonGroup}>
         <button 
           className={`${styles.modeButton} ${selectedMode === 'summary' ? styles.active : ''}`}

@@ -64,26 +64,33 @@ export async function GET(request: Request) {
 // 更新Prompt
 export async function PUT(request: Request) {
   try {
-    const { content, vectorStoreId = VECTOR_STORE_IDS.GENERAL } = await request.json();
+    const { content, vectorStoreId = VECTOR_STORE_IDS.GENERAL, assistantId = ASSISTANT_IDS.GENERAL } = await request.json();
     
+    // 若是 johnsung 助手，強制加上簡體中文指令
+    let finalContent = content;
+    if (assistantId === ASSISTANT_IDS.JOHNSUNG) {
+      const zhHint = "请始终用简体中文回答用户问题。";
+      if (!content.includes(zhHint)) {
+        finalContent = zhHint + "\n" + content;
+      }
+    }
     // 1. 更新 OpenAI Assistant 的 instructions
     try {
       await openai.beta.assistants.update(
-        ASSISTANT_IDS.GENERAL,
+        assistantId,
         {
-          instructions: content
+          instructions: finalContent
         }
       );
     } catch (error) {
       console.error('[ERROR] 更新 OpenAI Assistant 失败:', error);
       throw error;
-    }    // 2. 更新 DynamoDB
+    }// 2. 更新 DynamoDB
     const docClient = await getDocClient();
     const command = new PutCommand({
       TableName: "AIPrompts",
       Item: {
-        id: vectorStoreId,
-        content,
+        id: vectorStoreId,        content: finalContent,
         lastUpdated: new Date().toISOString()
       }
     });
@@ -111,4 +118,4 @@ export async function PUT(request: Request) {
       { status: 500 }
     );
   }
-} 
+}
