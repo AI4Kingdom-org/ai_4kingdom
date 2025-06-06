@@ -124,13 +124,6 @@ function SundayGuideContent() {
     }
   }, [user, setConfig]);
   
-  // 頁面載入時自動選擇 summary 模式並載入內容
-  useEffect(() => {
-    if (user?.user_id && !sermonContent && !selectedMode) {
-      handleModeSelect('summary');
-    }
-  }, [user, sermonContent, selectedMode]);
-
   const handleModeSelect = async (mode: GuideMode) => {
     setSelectedMode(mode);
     setLoading(true);
@@ -279,6 +272,10 @@ function SundayGuideContent() {
         >
           查经指引
         </button>
+      </div>
+      {/* 新增：按鈕下方小字體提醒 */}
+      <div style={{ fontSize: '12px', color: '#0070f3', marginTop: 8, marginBottom: 8 }}>
+        * 当前显示为您最近上传的文件内容。
       </div>
 
       {sermonContent ? (

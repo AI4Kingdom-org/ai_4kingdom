@@ -132,6 +132,14 @@ export async function POST(request: Request) {
     const assistantId = formData.get('assistantId') as string;
     const userId = formData.get('userId') as string; // 獲取 userId
 
+    // 標準化用戶 ID 的處理
+    let parsedUserId = userId;
+    if (userId && !isNaN(Number(userId))) {
+      parsedUserId = userId;
+    } else if (!userId) {
+      parsedUserId = 'unknown';
+    }
+
     console.log('请求参数详情:', {
       文件信息: file ? {
         名称: file.name,
@@ -165,7 +173,7 @@ export async function POST(request: Request) {
       }, { status: 400 });
     }
 
-    // 转换文件格式
+    // 轉換文件格式
     console.log('[DEBUG] 開始轉換文件格式');
     const buffer = await file.arrayBuffer();
     const blob = new Blob([buffer]);
@@ -212,60 +220,36 @@ export async function POST(request: Request) {
       
       console.log(`[DEBUG] 步驟 3: ${currentStep}成功，耗時: ${Date.now() - stepStartTime}ms`);
 
-      // 4. 更新 DynamoDB 记录
-      currentStep = '更新 DynamoDB 記錄';
+      // 步驟 4: 呼叫 process-document 產生 summary/devotional/bibleStudy
+      currentStep = '產生 summary/devotional/bibleStudy';
       stepStartTime = Date.now();
       console.log(`[DEBUG] 步驟 4: 開始${currentStep}`);
-      
-      const docClient = await createDynamoDBClient();
-      const tableName = process.env.NEXT_PUBLIC_SUNDAY_GUIDE_TABLE || 'SundayGuide';
-      
-      // 標準化用戶 ID 的處理
-      let parsedUserId = userId;
-      
-      // 如果 userId 是數字字符串，保留原始字符串形式
-      if (userId && !isNaN(Number(userId))) {
-        console.log(`[DEBUG] 用戶 ID "${userId}" 是數字格式的字符串`);
-        parsedUserId = userId; // 保持字符串形式
-      } else if (!userId) {
-        console.log(`[DEBUG] 未提供用戶 ID，使用默認值 "unknown"`);
-        parsedUserId = 'unknown';
-      } else {
-        console.log(`[DEBUG] 使用字符串用戶 ID: "${userId}"`);
-      }
-      
-      console.log(`[DEBUG] 使用數據表: ${tableName}，用戶 ID (${typeof parsedUserId}): ${parsedUserId}`);
-      
-      const item = {
-        assistantId,
-        vectorStoreId: vectorStore.id,
-        fileId: openaiFile.id,
-        fileName: file.name,
-        fileSize: file.size,
-        fileType: file.type,
-        userId: parsedUserId, // 使用處理後的 userId
-        uploadTimestamp: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        Timestamp: new Date().toISOString() // 添加 Timestamp 作為主鍵
-      };
-      
-      console.log(`[DEBUG] 即將寫入的 DynamoDB 記錄:`, JSON.stringify(item, null, 2));
-      
-      const command = new PutCommand({
-        TableName: tableName,
-        Item: item
+      // 呼叫內部 API 處理內容
+      const processRes = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL || ''}/api/sunday-guide/process-document`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          assistantId,
+          vectorStoreId: vectorStore.id,
+          fileName: file.name,
+          userId: parsedUserId
+        })
       });
-
-      const result = await docClient.send(command);
-      console.log(`[DEBUG] 步驟 4: ${currentStep}成功，响應:`, JSON.stringify(result, null, 2));
-      console.log(`[DEBUG] 整個處理流程完成，總耗時: ${Date.now() - startTime}ms`);
-
+      const processJson = await processRes.json();
+      if (!processRes.ok) {
+        throw new Error(processJson.error || '文件內容處理失敗');
+      }
+      console.log(`[DEBUG] 步驟 4: ${currentStep}成功，響應:`, processJson);
+      // 回傳 summary/devotional/bibleStudy 狀態
       return NextResponse.json({
         success: true,
         vectorStoreId: vectorStore.id,
         fileId: openaiFile.id,
         fileName: file.name,
-        userId: parsedUserId, // 返回用戶 ID
+        userId: parsedUserId,
+        summary: processJson.summary || null,
+        devotional: processJson.devotional || null,
+        bibleStudy: processJson.bibleStudy || null,
         processingTime: Date.now() - startTime
       });
     } catch (processError) {
