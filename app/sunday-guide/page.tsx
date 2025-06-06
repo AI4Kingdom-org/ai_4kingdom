@@ -30,6 +30,8 @@ export default function SundayGuide() {
   const [showLatestFile, setShowLatestFile] = useState(true);
   // 新增：右側顯示當月上傳的五筆檔案記錄
   const [recentFiles, setRecentFiles] = useState<Array<{ fileName: string, uploadDate: string }>>([]);
+  // 新增：本月是否已達上傳上限
+  const [isMonthlyLimitReached, setIsMonthlyLimitReached] = useState(false);
 
   // 檢查用戶是否有足夠的 Credits
   useEffect(() => {
@@ -77,6 +79,7 @@ export default function SundayGuide() {
   const fetchRecentFiles = async () => {
     if (!user?.user_id) {
       setRecentFiles([]);
+      setIsMonthlyLimitReached(false);
       return;
     }
     try {
@@ -103,11 +106,14 @@ export default function SundayGuide() {
             day: '2-digit'
           })
         })));
+        setIsMonthlyLimitReached(monthFiles.length >= 5);
       } else {
         setRecentFiles([]);
+        setIsMonthlyLimitReached(false);
       }
     } catch (error) {
       setRecentFiles([]);
+      setIsMonthlyLimitReached(false);
       console.error('獲取檔案記錄失敗:', error);
     }
   };
@@ -158,21 +164,34 @@ export default function SundayGuide() {
             setIsProcessing={setIsProcessing} 
             setUploadProgress={setUploadProgress}
             setUploadTime={setUploadTime}
-            disabled={isUploadDisabled} // 使用新的狀態來控制按鈕的禁用
+            disabled={isUploadDisabled || isMonthlyLimitReached} // 新增條件：本月超過5筆禁止上傳
           />
-          {uploadTime && (
-            <div className={styles.uploadTimeContainer}>
-              <p>处理完成时间: {uploadTime}</p>
+          {isMonthlyLimitReached && (
+            <div className={styles.creditWarning} style={{ backgroundColor: '#ffeaea', color: '#b71c1c', borderLeft: '4px solid #e53935', marginTop: 12 }}>
+              <p>本月上传已达上限（5笔），请等到下月1日后再上传新文件。</p>
             </div>
           )}
           
-          {/* 顯示最新上傳的文檔記錄已隱藏 */}
+          {/* 添加處理時間提示說明 */}
+          {isProcessing && (
+            <div className={styles.processingAlert}>
+              <p>文件处理需要一些时间（约 3-5 分钟），请勿关闭此页面。处理完成后将自动显示结果。</p>
+            </div>
+          )}
+          {uploadTime && (
+            <div className={styles.uploadTimeContainer}>
+              <p>处理完成时间: {uploadTime}</p>
+              <p className={styles.processingNote}>* 文件处理需要较长时间，请耐心等待完整处理</p>
+            </div>
+          )}
+          
+          {/* 显示最新上传的文档记录已隐藏 */}
         </section>
-        {/* 右側顯示本月五筆最新檔案記錄 */}
+        {/* 右侧显示本月五筆最新文件记录 */}
         <aside className={styles.recentFilesAside}>
-          <h4 className={styles.recentFilesTitle}>本月上傳記錄</h4>
+          <h4 className={styles.recentFilesTitle}>本月五筆上传记录</h4>
           {recentFiles.length === 0 ? (
-            <div className={styles.noRecentFiles}>本月尚無上傳記錄</div>
+            <div className={styles.noRecentFiles}>本月尚无上传记录</div>
           ) : (
             <ul className={styles.recentFilesList}>
               {recentFiles.map((file, idx) => (
