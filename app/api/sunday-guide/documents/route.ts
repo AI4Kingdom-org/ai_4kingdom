@@ -240,7 +240,8 @@ export async function POST(request: Request) {
         throw new Error(processJson.error || '文件內容處理失敗');
       }
       console.log(`[DEBUG] 步驟 4: ${currentStep}成功，響應:`, processJson);
-      // 回傳 summary/devotional/bibleStudy 狀態
+      // 回傳成功狀態，但不包含處理時間，因為實際的處理尚未完成
+      // 處理時間將由 process-document 計算並存入資料庫，通過 check-result API 獲取
       return NextResponse.json({
         success: true,
         vectorStoreId: vectorStore.id,
@@ -250,7 +251,7 @@ export async function POST(request: Request) {
         summary: processJson.summary || null,
         devotional: processJson.devotional || null,
         bibleStudy: processJson.bibleStudy || null,
-        processingTime: Date.now() - startTime
+        processingStarted: true  // 改為標記處理已開始，而非返回處理時間
       });
     } catch (processError) {
       // 詳細記錄處理過程中的錯誤

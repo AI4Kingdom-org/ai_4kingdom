@@ -56,6 +56,8 @@ export default function AssistantManager({
   const [processingStatus, setProcessingStatus] = useState<string>('idle');
   const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const [fileExists, setFileExists] = useState<boolean>(false);  // 新增：檔案是否已存在的狀態
+  // 新增：處理完成訊息顯示狀態
+  const [showFinalResult, setShowFinalResult] = useState(false);
   
   // 獲取PDT時間的輔助函數
   const getPDTTime = () => {
@@ -233,36 +235,32 @@ export default function AssistantManager({
 
   const checkProcessingStatus = async () => {
     try {
-      const statusResponse = await fetch(`/api/sunday-guide/progress?vectorStoreId=${VECTOR_STORE_IDS.JOHNSUNG}&fileName=${encodeURIComponent(uploadedFileName)}`);
-      
+      const statusResponse = await fetch(`/api/sunday-guide/progress?vectorStoreId=${VECTOR_STORE_IDS.SUNDAY_GUIDE}&fileName=${encodeURIComponent(uploadedFileName)}`);
       if (!statusResponse.ok) {
         console.error('检查处理状态失败:', statusResponse.status);
         return;
       }
-      
       const statusData = await statusResponse.json();
-      
-      if (statusData.status === 'completed') {
-        // 处理完成，获取结果
+      // 僅在所有 summary/devotional/bibleStudy 都完成時才顯示耗時
+      const allCompleted = statusData.status === 'completed' &&
+        statusData.result &&
+        statusData.result.summary &&
+        statusData.result.devotional &&
+        statusData.result.bibleStudy;
+      if (allCompleted) {
         setProcessingStatus('completed');
         setProcessingComplete(true);
         setProcessing(false);
-        
         if (pollingIntervalRef.current) {
           clearInterval(pollingIntervalRef.current);
           pollingIntervalRef.current = null;
         }
-        
-        // 設置時間相關信息
         const pdtTime = getPDTTime();
         setUploadTime(pdtTime);
-        
         if (startTime) {
           const timeSpentStr = calculateTimeSpent(startTime, statusData.processingTime);
           setTimeSpent(timeSpentStr);
         }
-        
-        // 更新任务状态
         setTaskStatus({
           upload: 'completed',
           summary: 'completed',
@@ -270,25 +268,19 @@ export default function AssistantManager({
           devotional: 'completed',
           bibleStudy: 'completed'
         });
-        
-        // 設置處理結果
         if (statusData.result) {
           handleFileProcessed(statusData.result);
         }
-        
         setUploadProgress(100);
       } else if (statusData.status === 'failed') {
-        // 处理失败
         setProcessingStatus('failed');
         setProcessingError(statusData.error || '文件处理失败');
         setProcessing(false);
-        
         if (pollingIntervalRef.current) {
           clearInterval(pollingIntervalRef.current);
           pollingIntervalRef.current = null;
         }
       } else if (statusData.status === 'processing') {
-        // 更新处理阶段
         setProcessingStatus('processing');
         if (statusData.stage === 'summary') {
           setTaskStatus(prev => ({ ...prev, summary: 'processing' }));
@@ -350,29 +342,19 @@ export default function AssistantManager({
         try {
           // 直接查询数据库结果
           const resultResponse = await fetch(`/api/sunday-guide/check-result?vectorStoreId=${VECTOR_STORE_IDS.SUNDAY_GUIDE}&fileName=${encodeURIComponent(uploadedFileName)}`);
-          
           if (!resultResponse.ok) {
-            // 如果请求失败，等待后再试
             setTimeout(checkResult, 5000);
             return;
           }
-          
           const result = await resultResponse.json();
-          
-          if (result.found) {
-            // 处理完成，更新界面
+          if (result.found && result.processingTime) {
             setProcessingComplete(true);
             setProcessing(false);
-            
-            // 设置处理时间
+            setShowFinalResult(true); // 只有這裡才顯示完成訊息
             const pdtTime = getPDTTime();
             setUploadTime(pdtTime);
-            
-            // 计算处理时间
             const processingTime = calculateTimeSpent(startProcessingTime, result.processingTime);
             setTimeSpent(processingTime);
-            
-            // 更新任务状态
             setTaskStatus({
               upload: 'completed',
               summary: 'completed',
@@ -380,32 +362,23 @@ export default function AssistantManager({
               devotional: 'completed',
               bibleStudy: 'completed'
             });
-            
-            // 设置完成进度
             setUploadProgress(100);
-            
-            // 回调函数，使用处理过的方法更新信用点数
             handleFileProcessed(result);
-            
           } else {
-            // 未找到处理结果，继续轮询
-            setTimeout(checkResult, 5000);
+            setShowFinalResult(false); // 未完成時不顯示
+            setTimeout(checkResult, 3000);
           }
         } catch (err) {
-          console.error('检查处理结果错误:', err);
-          // 发生错误时，继续轮询
           setTimeout(checkResult, 5000);
         }
       };
       
-      // 开始轮询检查结果
-      setTimeout(checkResult, 5000);
+      // 开始轮询检查结果，设置更短的初始间隔，以更快检测到处理完成
+      setTimeout(checkResult, 2000);
       
-      // 每 30 秒更新一次处理阶段，让用户看到进展
+      // 每 20 秒更新一次处理阶段，让用户看到进展（缩短更新间隔）
       let currentStage = 0;
-      const stages = ['summary', 'fullText', 'devotional', 'bibleStudy'];
-      
-      const updateStage = () => {
+      const stages = ['summary', 'fullText', 'devotional', 'bibleStudy'];          const updateStage = () => {
         if (!processingComplete && processing) {
           currentStage = (currentStage + 1) % stages.length;
           setTaskStatus(prev => {
@@ -424,14 +397,19 @@ export default function AssistantManager({
               newStatus[stages[i] as keyof TaskStatus] = 'idle';
             }
             
+            // 更新进度条，给用户更明确的进展提示
+            const progressPercentage = Math.min(80, 20 + (currentStage * 20));
+            setUploadProgress(progressPercentage);
+            
             return newStatus;
           });
           
-          setTimeout(updateStage, 30000);
+          // 缩短更新间隔到20秒
+          setTimeout(updateStage, 20000);
         }
       };
       
-      setTimeout(updateStage, 30000);
+      setTimeout(updateStage, 15000);
       
     } catch (err) {
       console.error('文件处理错误:', err);
@@ -580,6 +558,9 @@ export default function AssistantManager({
                   {taskStatus.bibleStudy === 'processing' && '生成查经指引中...'}
                 </span>
               )}
+              <div style={{fontSize: '0.8rem', marginTop: '0.3rem', color: '#666'}}>
+                此過程可能需要幾分鐘，請耐心等待完整處理結果
+              </div>
             </div>
           )}
           
@@ -595,7 +576,7 @@ export default function AssistantManager({
         </div>
       </div>
       
-      {fileName && timeSpent && processingComplete && (
+      {fileName && timeSpent && showFinalResult && (
         <div className={stylesGuide.timeSpent}>
           <span>
             <span className={stylesGuide.timeIcon}>⏱</span> 
