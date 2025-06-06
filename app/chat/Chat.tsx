@@ -211,6 +211,19 @@ export default function Chat({ type, assistantId, vectorStoreId }: ChatProps) {
     window.scrollTo(0, 0);
   }, []);
 
+  // 監聽 homeschool prompt 更新事件，收到時重新載入訊息
+  useEffect(() => {
+    const handleHomeschoolUpdate = () => {
+      if (currentThreadId && user) {
+        fetchMessageHistory(currentThreadId);
+      }
+    };
+    window.addEventListener('homeschool_data_updated', handleHomeschoolUpdate);
+    return () => {
+      window.removeEventListener('homeschool_data_updated', handleHomeschoolUpdate);
+    };
+  }, [currentThreadId, user]);
+
   if (loading) return <div>加载中...</div>;
   if (error) return <div>认证错误: {error}</div>;
   if (!user) return (

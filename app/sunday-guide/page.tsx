@@ -130,9 +130,10 @@ export default function SundayGuide() {
   const handleFileProcessed = async (content: ProcessedContent) => {
     setProcessedContent(content);
     setIsProcessing(false);
-    
+
     // 文件處理完成後重新獲取最新的文件記錄並刷新信用點數使用量
     await fetchLatestFileRecord();
+    await fetchRecentFiles(); // 新增：處理完成後即時刷新本月上傳記錄
     await refreshUsage();
   };
 
@@ -176,7 +177,7 @@ export default function SundayGuide() {
             <ul className={styles.recentFilesList}>
               {recentFiles.map((file, idx) => (
                 <li key={idx} className={styles.recentFileItem}>
-                  <span className={styles.fileIndex}>{idx + 1}. </span>
+                  <span className={styles.fileIndex}>{recentFiles.length - idx}. </span>
                   <span className={styles.fileName}>{file.fileName}</span>
                   <span className={styles.uploadDate}>{file.uploadDate}</span>
                 </li>
