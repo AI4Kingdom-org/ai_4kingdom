@@ -69,16 +69,17 @@ function HomeschoolPromptContent() {
 
       if (response.ok) {
         const data = await response.json();
-        // 更新 Chat Context 中的配置，现在包含 threadId
         setConfig({ 
           type: CHAT_TYPES.HOMESCHOOL,
           assistantId: ASSISTANT_IDS.HOMESCHOOL,
           threadId: data.threadId,
           vectorStoreId: VECTOR_STORE_IDS.HOMESCHOOL
         });
-        // 新增：通知其他頁面 homeschool prompt 已更新
+        // 跨分頁通知
+        localStorage.setItem('homeschool_data_updated', Date.now().toString());
         window.dispatchEvent(new Event('homeschool_data_updated'));
         setMessage('保存成功');
+        // 移除強制跳轉
       } else {
         throw new Error('保存失败');
       }
