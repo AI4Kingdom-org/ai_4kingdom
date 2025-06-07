@@ -29,7 +29,7 @@ export default function SundayGuide() {
   // 添加是否顯示前次記錄的狀態
   const [showLatestFile, setShowLatestFile] = useState(true);
   // 新增：右側顯示當月上傳的五筆檔案記錄
-  const [recentFiles, setRecentFiles] = useState<Array<{ fileName: string, uploadDate: string }>>([]);
+  const [recentFiles, setRecentFiles] = useState<Array<{ fileName: string, uploadDate: string, fileId: string }>>([]);
   // 新增：本月是否已達上傳上限
   const [isMonthlyLimitReached, setIsMonthlyLimitReached] = useState(false);
 
@@ -104,7 +104,8 @@ export default function SundayGuide() {
             year: 'numeric',
             month: '2-digit',
             day: '2-digit'
-          })
+          }),
+          fileId: rec.fileId || ''
         })));
         setIsMonthlyLimitReached(monthFiles.length >= 5);
       } else {
@@ -116,6 +117,13 @@ export default function SundayGuide() {
       setIsMonthlyLimitReached(false);
       console.error('獲取檔案記錄失敗:', error);
     }
+  };
+
+  // 點擊 recent file 取得內容，改為直接開新分頁顯示完整版
+  const handleRecentFileClick = (fileId: string, fileName: string) => {
+    if (!user?.user_id || !fileId) return;
+    const url = `/api/sunday-guide/download-pdf?includeAll=true&userId=${user.user_id}&assistantId=${ASSISTANT_IDS.SUNDAY_GUIDE}&fileId=${fileId}&previewOnly=true`;
+    window.open(url, '_blank');
   };
 
   // 組件掛載時獲取最新的文件記錄
@@ -184,8 +192,6 @@ export default function SundayGuide() {
               <p className={styles.processingNote}>* 文件处理需要较长时间，请耐心等待完整处理</p>
             </div>
           )}
-          
-          {/* 显示最新上传的文档记录已隐藏 */}
         </section>
         {/* 右侧显示本月五筆最新文件记录 */}
         <aside className={styles.recentFilesAside}>
@@ -195,7 +201,7 @@ export default function SundayGuide() {
           ) : (
             <ul className={styles.recentFilesList}>
               {recentFiles.map((file, idx) => (
-                <li key={idx} className={styles.recentFileItem}>
+                <li key={file.fileId || idx} className={styles.recentFileItem} style={{ cursor: 'default' }}>
                   <span className={styles.fileIndex}>{recentFiles.length - idx}. </span>
                   <span className={styles.fileName}>{file.fileName}</span>
                   <span className={styles.uploadDate}>{file.uploadDate}</span>

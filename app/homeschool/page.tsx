@@ -21,8 +21,10 @@ function HomeschoolContent() {
 
             try {
                 const response = await fetch(`/api/homeschool-prompt?userId=${user.user_id}`);
+                console.log('[DEBUG] /api/homeschool-prompt response:', response);
                 if (response.ok) {
                     const data = await response.json();
+                    console.log('[DEBUG] /api/homeschool-prompt data:', data);
                     if (data.threadId) {
                         setThreadId(data.threadId);
                         setConfig({
@@ -46,6 +48,24 @@ function HomeschoolContent() {
         }
     }, [user?.user_id, setConfig]);
 
+    useEffect(() => {
+        const handleUpdate = () => {
+            window.location.reload(); // 直接整頁重載
+        };
+        // 新增 storage 事件監聽，支援跨分頁同步
+        const handleStorage = (e: StorageEvent) => {
+            if (e.key === 'homeschool_data_updated') {
+                handleUpdate();
+            }
+        };
+        window.addEventListener('homeschool_data_updated', handleUpdate);
+        window.addEventListener('storage', handleStorage);
+        return () => {
+            window.removeEventListener('homeschool_data_updated', handleUpdate);
+            window.removeEventListener('storage', handleStorage);
+        };
+    }, [user?.user_id, setConfig]);
+
     if (authLoading || isLoading) {
         return <div>加载中...</div>;
     }
@@ -57,6 +77,7 @@ function HomeschoolContent() {
     return (
         <div className={styles.container}>
             <Chat 
+                key={threadId || 'empty'} // 讓 threadId 變動時 Chat 強制 remount
                 type={CHAT_TYPES.HOMESCHOOL}
                 assistantId={ASSISTANT_IDS.HOMESCHOOL}
                 vectorStoreId={VECTOR_STORE_IDS.HOMESCHOOL}
