@@ -7,11 +7,13 @@ export const CHAT_TYPES: Record<string, ChatType> = {
   BIBLE_STUDY: 'bible-study',
   SPIRITUAL_PARTNER: 'spiritual-partner',
   CHILDREN_MENTAL: 'children-mental',
-  JOHNSUNG: 'johnsung'
+  JOHNSUNG: 'johnsung',
+  TEEN_CONSOLE: 'teen-console',
+  HOME_CONSOLE: 'home-console'
 } as const;
 
 
-export type ChatType = 'general' | 'sunday-guide' | 'bible-study' | 'homeschool' | 'spiritual-partner' | 'children-mental' | 'johnsung';
+export type ChatType = 'general' | 'sunday-guide' | 'bible-study' | 'homeschool' | 'spiritual-partner' | 'children-mental' | 'johnsung' | 'teen-console' | 'home-console';
 
 
 export interface ChatTypeConfig {
@@ -67,9 +69,21 @@ export const CHAT_TYPE_CONFIGS: Record<ChatType, ChatTypeConfig> = {
     description: '宋尚节牧师解答属灵问题',
     assistantId: ASSISTANT_IDS.JOHNSUNG,
     vectorStoreId: VECTOR_STORE_IDS.JOHNSUNG
+  },
+  'teen-console': {
+    type: 'teen-console',
+    title: '儿童辅导',
+    description: '儿童心理辅导',
+    assistantId: ASSISTANT_IDS.TEEN_CONSOLE,
+    vectorStoreId: VECTOR_STORE_IDS.TEEN_CONSOLE
+  },
+  'home-console': {
+    type: 'home-console',
+    title: '家庭辅导',
+    description: '家庭关系咨询',
+    assistantId: ASSISTANT_IDS.HOME_CONSOLE,
+    vectorStoreId: VECTOR_STORE_IDS.HOME_CONSOLE
   }
-
-
 
 };
 
@@ -107,6 +121,14 @@ export const CHAT_CONFIGS: Record<ChatType, ChatConfig> = {
   'johnsung': {
     title: '與宋尚节牧师对话',
     description: '宋尚节牧师解答属灵问题'
+  },
+  'teen-console': {
+    title: '儿童辅导',
+    description: '儿童心理辅导'
+  },
+  'home-console': {
+    title: '家庭辅导',
+    description: '家庭关系咨询'
   }
 
 }; 
