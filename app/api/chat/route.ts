@@ -296,42 +296,54 @@ async function* streamRunResults(
 
 export async function POST(request: Request) {
   try {
-    const { message, threadId, userId, config } = await request.json();
+    console.log('[DEBUG] 接收到聊天請求:', {
+      method: request.method,
+      url: request.url,
+      contentType: request.headers.get('content-type'),
+      timestamp: new Date().toISOString()
+    });
 
-    // 檢查是否為模擬測試請求
-    if (config.mock && config.mockUsage) {
-      console.log('[DEBUG] 接收到模擬測試請求:', {
-        userId,
-        usage: config.mockUsage
+    // 驗證請求體
+    let requestBody;
+    try {
+      requestBody = await request.json();
+      console.log('[DEBUG] 解析請求體成功:', {
+        hasMessage: !!requestBody.message,
+        hasConfig: !!requestBody.config,
+        hasUserId: !!requestBody.userId,
+        configType: requestBody.config?.type
       });
+    } catch (parseError) {
+      console.error('[ERROR] 解析請求體失敗:', parseError);
+      const origin = request.headers.get('origin');
+      const headers = setCORSHeaders(origin);
+      return NextResponse.json({ 
+        error: '請求格式無效',
+        details: '無法解析請求體'
+      }, { 
+        status: 400,
+        headers 
+      });
+    }
 
-      // 模拟用户使用量更新（在实际环境中，您需要实现相应的API）
-      try {
-        // 导入 updateMonthlyTokenUsage 函数
-        const { updateMonthlyTokenUsage } = require('../../utils/monthlyTokenUsage');
-        
-        // 更新用户的月度使用统计
-        await updateMonthlyTokenUsage(userId, config.mockUsage);
-        
-        console.log('[DEBUG] 模拟更新使用统计成功');
-        
-        // 返回模擬回應
-        return NextResponse.json({
-          success: true,
-          reply: `這是一個模擬回應。已成功消耗 ${config.mockUsage.total_tokens} tokens。`,
-          threadId: threadId || `mock_thread_${Date.now()}`,
-          debug: {
-            mockUsage: config.mockUsage,
-            timestamp: new Date().toISOString()
-          }
-        });
-      } catch (mockError) {
-        console.error('[ERROR] 模擬更新使用統計失敗:', mockError);
-        return NextResponse.json({
-          error: '模擬更新使用統計失敗',
-          details: mockError instanceof Error ? mockError.message : '未知錯誤'
-        }, { status: 500 });
-      }
+    const { message, threadId, userId, config } = requestBody;
+
+    // 驗證必要參數
+    if (!message || !config || !config.assistantId) {
+      console.error('[ERROR] 缺少必要參數:', {
+        hasMessage: !!message,
+        hasConfig: !!config,
+        hasAssistantId: !!config?.assistantId
+      });
+      const origin = request.headers.get('origin');
+      const headers = setCORSHeaders(origin);
+      return NextResponse.json({ 
+        error: '缺少必要參數',
+        details: '需要 message, config 和 assistantId'
+      }, { 
+        status: 400,
+        headers 
+      });
     }
 
     // 验证助手
@@ -345,6 +357,11 @@ export async function POST(request: Request) {
         errorMessage: error instanceof Error ? error.message : String(error),
         statusCode: (error as any)?.status || 'unknown'
       });
+      
+      // 獲取 origin 並設置 CORS 標頭
+      const origin = request.headers.get('origin');
+      const headers = setCORSHeaders(origin);
+      
       return NextResponse.json({ 
         error: '助手ID无效',
         details: {
@@ -352,7 +369,10 @@ export async function POST(request: Request) {
           assistantId: config?.assistantId,
           type: error instanceof Error ? error.name : typeof error
         }
-      }, { status: 400 });
+      }, { 
+        status: 400,
+        headers 
+      });
     }
 
     let activeThreadId = threadId;
@@ -433,12 +453,17 @@ export async function POST(request: Request) {
         }
       });
       
+      // 設置 CORS 標頭
+      const origin = request.headers.get('origin');
+      const corsHeaders = setCORSHeaders(origin);
+      
       // 返回流式响应
       return new Response(stream, {
         headers: {
           'Content-Type': 'text/event-stream',
           'Cache-Control': 'no-cache',
-          'Connection': 'keep-alive'
+          'Connection': 'keep-alive',
+          ...Object.fromEntries(corsHeaders.entries())
         }
       });
     }      // 非流式请求的处理 - 所有檔案視為系統資源，無需用戶過濾
@@ -508,6 +533,10 @@ export async function POST(request: Request) {
       }
     }
     
+    // 設置 CORS 標頭
+    const origin = request.headers.get('origin');
+    const headers = setCORSHeaders(origin);
+    
     return NextResponse.json({
       success: true,
       reply: assistantReply,
@@ -516,7 +545,7 @@ export async function POST(request: Request) {
         runStatus: runStatus.status,
         messageCount: messages.data.length
       }
-    });
+    }, { headers });
 
   } catch (error) {
     console.error('[ERROR] 聊天API错误:', {
@@ -525,10 +554,18 @@ export async function POST(request: Request) {
       message: error instanceof Error ? error.message : String(error),
       stack: error instanceof Error ? error.stack : undefined
     });
+    
+    // 獲取 origin 並設置 CORS 標頭
+    const origin = request.headers.get('origin');
+    const headers = setCORSHeaders(origin);
+    
     return NextResponse.json({ 
       error: error instanceof Error ? error.message : '未知错误',
       details: error instanceof Error ? error.stack : undefined
-    }, { status: 500 });
+    }, { 
+      status: 500,
+      headers 
+    });
   }
 }
 

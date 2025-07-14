@@ -197,12 +197,28 @@ export function ChatProvider({
         });
 
         if (!response.ok) {
-            const errorData = await response.json();
+            let errorData: any = {};
+            try {
+                const responseText = await response.text();
+                if (responseText.trim()) {
+                    errorData = JSON.parse(responseText);
+                } else {
+                    errorData = { error: `HTTP ${response.status}: ${response.statusText}` };
+                }
+            } catch (parseError) {
+                // 如果無法解析 JSON，使用響應狀態作為錯誤信息
+                errorData = { 
+                    error: `HTTP ${response.status}: ${response.statusText}`,
+                    details: '響應格式無效'
+                };
+            }
+            
             console.error('[ERROR] 发送消息失败:', {
                 status: response.status,
+                statusText: response.statusText,
                 error: errorData
             });
-            throw new Error(errorData.error || '发送失败');
+            throw new Error(errorData.error || `发送失败 (${response.status})`);
         }
 
         // 檢查是否為流式回應
@@ -292,7 +308,18 @@ export function ChatProvider({
             return { success: true, threadId: finalThreadId };
         } else {
             // 傳統的非流式回應處理
-            const data = await response.json();
+            let data: any = {};
+            try {
+                const responseText = await response.text();
+                if (responseText.trim()) {
+                    data = JSON.parse(responseText);
+                } else {
+                    throw new Error('空響應內容');
+                }
+            } catch (parseError) {
+                console.error('[ERROR] 解析非流式響應失敗:', parseError);
+                throw new Error('響應格式無效');
+            }
 
             if (data.success) {                setMessages(prev => [
                     ...prev,
