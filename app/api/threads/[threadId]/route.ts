@@ -9,11 +9,11 @@ const openai = new OpenAI({
 
 export async function DELETE(
   request: Request,
-  { params }: { params: { threadId: string } }
+  context: { params: { threadId: string } }
 ) {
   try {
     const userId = request.headers.get('user-id');
-    const threadId = params.threadId;
+    const { threadId } = context.params;
     
     console.log('[DEBUG] 开始删除对话:', { userId, threadId });
 
@@ -64,4 +64,4 @@ export async function DELETE(
       { status: 500 }
     );
   }
-} 
+}
