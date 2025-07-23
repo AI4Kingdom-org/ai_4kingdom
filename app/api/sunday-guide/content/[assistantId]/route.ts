@@ -42,6 +42,9 @@ export async function GET(
     const { searchParams } = new URL(request.url);
     const type = searchParams.get('type');  // 獲取內容類型
     const userId = searchParams.get('userId'); // 獲取用戶 ID
+    const fileId = searchParams.get('fileId'); // 獲取檔案 ID
+    
+    console.log('[DEBUG] API 請求參數:', { assistantId, type, userId, fileId });
     
     // 確認必要參數
     if (!type) {
@@ -50,16 +53,45 @@ export async function GET(
     
     const docClient = await createDynamoDBClient();
     
-    const command = new ScanCommand({
-      TableName: SUNDAY_GUIDE_TABLE,
-      FilterExpression: 'assistantId = :assistantId',
-      ExpressionAttributeValues: {
-        ':assistantId': assistantId
-      }
-    });
+    let command;
+    if (fileId) {
+      // 如果提供了 fileId，根據 fileId 查詢特定檔案
+      command = new ScanCommand({
+        TableName: SUNDAY_GUIDE_TABLE,
+        FilterExpression: 'assistantId = :assistantId AND fileId = :fileId',
+        ExpressionAttributeValues: {
+          ':assistantId': assistantId,
+          ':fileId': fileId
+        }
+      });
+    } else if (userId) {
+      // 如果只提供了 userId，查詢該用戶最新的檔案
+      command = new ScanCommand({
+        TableName: SUNDAY_GUIDE_TABLE,
+        FilterExpression: 'assistantId = :assistantId AND (userId = :userId OR UserId = :userId)',
+        ExpressionAttributeValues: {
+          ':assistantId': assistantId,
+          ':userId': userId
+        }
+      });
+    } else {
+      // 沒有特定條件，查詢所有檔案
+      command = new ScanCommand({
+        TableName: SUNDAY_GUIDE_TABLE,
+        FilterExpression: 'assistantId = :assistantId',
+        ExpressionAttributeValues: {
+          ':assistantId': assistantId
+        }
+      });
+    }
 
     const response = await docClient.send(command);
     const items = response.Items;
+
+    console.log('[DEBUG] 查詢結果:', { itemCount: items?.length || 0, hasItems: !!items });
+    if (items && items.length > 0) {
+      console.log('[DEBUG] 第一筆記錄:', JSON.stringify(items[0]).substring(0, 300));
+    }
 
     if (!items || items.length === 0) {
       return NextResponse.json({ error: '未找到內容' }, { status: 404 });
@@ -69,6 +101,17 @@ export async function GET(
     const latestItem = items.sort((a, b) => 
       new Date(b.Timestamp).getTime() - new Date(a.Timestamp).getTime()
     )[0];
+
+    console.log('[DEBUG] 選中的記錄:', { 
+      fileName: latestItem.fileName, 
+      fileId: latestItem.fileId, 
+      timestamp: latestItem.Timestamp,
+      hasContent: {
+        summary: !!latestItem.summary,
+        devotional: !!latestItem.devotional,
+        bibleStudy: !!latestItem.bibleStudy
+      }
+    });
 
     // 根據類型返回對應內容
     let content: string | null = null;

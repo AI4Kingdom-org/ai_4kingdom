@@ -53,6 +53,11 @@ const traditionalToSimplified: Record<string, string> = {
 };
 
 function SundayGuideContent() {
+  // 檔案列表與選擇的 unique id
+  const [fileList, setFileList] = useState<Array<{ fileName: string, uploadTime: string, fileUniqueId: string }>>([]);
+  const [selectedFileUniqueId, setSelectedFileUniqueId] = useState<string | null>(null);
+  // 新增：從 localStorage 讀取選中的檔案 ID
+  const [selectedFileFromSundayGuide, setSelectedFileFromSundayGuide] = useState<{ fileId: string, fileName: string } | null>(null);
   const { user } = useAuth();
   const { setConfig } = useChat();
   const { refreshUsage } = useCredit();
@@ -121,23 +126,117 @@ function SundayGuideContent() {
       
       // 獲取檔案資訊
       fetchLatestFileInfo();
+      
+      // 檢查 localStorage 是否有選中的檔案
+      const storedFileId = localStorage.getItem('selectedFileId');
+      const storedFileName = localStorage.getItem('selectedFileName');
+      console.log('[DEBUG] localStorage 檢查:', { storedFileId, storedFileName });
+      
+      if (storedFileId && storedFileName) {
+        console.log('[DEBUG] 設定選中檔案:', { fileId: storedFileId, fileName: storedFileName });
+        setSelectedFileFromSundayGuide({ fileId: storedFileId, fileName: storedFileName });
+        setSelectedFileUniqueId(storedFileId);
+        setFileName(storedFileName);
+        // 設定上傳時間為空，因為這是從其他頁面選擇的
+        setUploadTime('');
+      }
     }
   }, [user, setConfig]);
+
+  // 監聽跨頁面文件選擇變化
+  useEffect(() => {
+    // 使用 BroadcastChannel 監聽跨頁面文件選擇
+    const channel = new BroadcastChannel('file-selection');
+    
+    const handleFileSelection = (event: MessageEvent) => {
+      console.log('[DEBUG] 收到文件選擇廣播:', event.data);
+      
+      if (event.data.type === 'FILE_SELECTED' && event.data.fileId && event.data.fileName) {
+        console.log('[DEBUG] 其他頁面選中了檔案，準備重新載入頁面');
+        console.log('[DEBUG] 選中檔案:', { fileId: event.data.fileId, fileName: event.data.fileName });
+        
+        // 延遲一下再重新載入，確保資料完全更新
+        setTimeout(() => {
+          window.location.reload();
+        }, 100);
+      }
+    };
+
+    channel.addEventListener('message', handleFileSelection);
+
+    // 清理函數
+    return () => {
+      channel.removeEventListener('message', handleFileSelection);
+      channel.close();
+    };
+  }, []);
   
   const handleModeSelect = async (mode: GuideMode) => {
     setSelectedMode(mode);
     setLoading(true);
     try {
       const userId = user?.user_id || '';
-      const response = await fetch(
-        `/api/sunday-guide/content/${ASSISTANT_IDS.SUNDAY_GUIDE}?type=${mode}&userId=${encodeURIComponent(userId)}`
-      );
-      if (!response.ok) throw new Error('獲取內容失敗');
-      const data = await response.json();
-      setSermonContent(data.content);
+      // 優先使用從 /sunday-guide 選中的檔案 ID
+      const targetFileId = selectedFileFromSundayGuide?.fileId || selectedFileUniqueId;
+      
+      console.log(`[DEBUG] 正在獲取 ${mode} 內容，用戶ID: ${userId}，檔案ID: ${targetFileId}`);
+      console.log(`[DEBUG] selectedFileFromSundayGuide:`, selectedFileFromSundayGuide);
+      console.log(`[DEBUG] selectedFileUniqueId:`, selectedFileUniqueId);
+      
+      // 如果有來自 Sunday Guide 的選擇，直接使用該檔案 ID 查詢
+      if (selectedFileFromSundayGuide?.fileId) {
+        console.log(`[DEBUG] 使用來自 Sunday Guide 的選擇: ${selectedFileFromSundayGuide.fileId}`);
+        
+        let apiUrl = `/api/sunday-guide/content/${ASSISTANT_IDS.SUNDAY_GUIDE}?type=${mode}&userId=${encodeURIComponent(userId)}&fileId=${encodeURIComponent(selectedFileFromSundayGuide.fileId)}`;
+        
+        console.log(`[DEBUG] API URL:`, apiUrl);
+        
+        const response = await fetch(apiUrl);
+        
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({ error: '未知錯誤' }));
+          throw new Error(`獲取內容失敗: ${response.status} - ${errorData.error || response.statusText}`);
+        }
+        
+        const data = await response.json();
+        console.log(`[DEBUG] 成功獲取 ${mode} 內容，長度: ${data.content?.length || 0}`);
+        
+        setSermonContent(data.content);
+        
+        // 更新當前文件資訊顯示
+        setFileName(selectedFileFromSundayGuide.fileName);
+        setUploadTime(''); // 來自其他頁面選擇，不顯示上傳時間
+        
+      } else {
+        // 沒有來自 Sunday Guide 的選擇，使用原來的邏輯
+        let apiUrl = `/api/sunday-guide/content/${ASSISTANT_IDS.SUNDAY_GUIDE}?type=${mode}&userId=${encodeURIComponent(userId)}`;
+        if (targetFileId) {
+          apiUrl += `&fileId=${encodeURIComponent(targetFileId)}`;
+        }
+        
+        console.log(`[DEBUG] API URL:`, apiUrl);
+        
+        const response = await fetch(apiUrl);
+        
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({ error: '未知錯誤' }));
+          throw new Error(`獲取內容失敗: ${response.status} - ${errorData.error || response.statusText}`);
+        }
+        
+        const data = await response.json();
+        console.log(`[DEBUG] 成功獲取 ${mode} 內容，長度: ${data.content?.length || 0}`);
+        
+        setSermonContent(data.content);
+        
+        // 按下按鈕後即時更新最新文件資訊
+        await fetchLatestFileInfo();
+      }
+      
       await refreshUsage();
     } catch (error) {
       console.error('獲取內容失敗:', error);
+      // 添加用戶友好的錯誤提示
+      alert(`獲取內容失敗: ${error instanceof Error ? error.message : '請稍後重試'}`);
     } finally {
       setLoading(false);
     }
@@ -147,26 +246,46 @@ function SundayGuideContent() {
   const fetchLatestFileInfo = async () => {
     try {
       const userId = user?.user_id || '';
+      console.log(`[DEBUG] 正在獲取用戶 ${userId} 的最新文件資訊`);
+      
       const response = await fetch(
         `/api/sunday-guide/documents?assistantId=${ASSISTANT_IDS.SUNDAY_GUIDE}&userId=${encodeURIComponent(userId)}`
       );
-      if (!response.ok) throw new Error('獲取文件資訊失敗');
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: '未知錯誤' }));
+        throw new Error(`獲取文件資訊失敗: ${response.status} - ${errorData.error || response.statusText}`);
+      }
+      
       const data = await response.json();
+      console.log(`[DEBUG] 獲取到 ${data.records?.length || 0} 條文件記錄`);
       
       if (data.success && data.records && data.records.length > 0) {
-        // 按時間排序，獲取最新記錄
-        const latestRecord = [...data.records].sort(
+        // 依照時間排序
+        const sortedRecords = [...data.records].sort(
           (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
-        )[0];
-        
+        );
+        setFileList(sortedRecords.map(rec => ({
+          fileName: rec.fileName || '未命名文件',
+          uploadTime: rec.updatedAt,
+          fileUniqueId: rec.fileUniqueId || rec.fileId // 兼容 fileId
+        })));
+        // 預設選擇最新一筆
+        const latestRecord = sortedRecords[0];
         setFileName(latestRecord.fileName || '未命名文件');
-        
-        // 格式化上傳時間，只顯示日期，使用洛杉磯地區格式
         const uploadDate = new Date(latestRecord.updatedAt);
         setUploadTime(uploadDate.toLocaleDateString('en-US', { timeZone: 'America/Los_Angeles' }));
+        setSelectedFileUniqueId(latestRecord.fileUniqueId || latestRecord.fileId);
+      } else {
+        setFileList([]);
+        setFileName('尚未上傳文件');
+        setUploadTime('');
+        setSelectedFileUniqueId(null);
       }
     } catch (error) {
       console.error('獲取文件資訊失敗:', error);
+      setFileName('獲取文件資訊失敗');
+      setUploadTime('');
     }
   };
 
@@ -252,32 +371,71 @@ function SundayGuideContent() {
   return (
     <div className={styles.container}>
       <h1 className={styles.title}>主日信息导航</h1>
-      {/* 檔案名稱與上傳時間顯示已隱藏 */}
+      {/* 顯示檔案資訊 - 優先顯示來自 Sunday Guide 的選擇 */}
+      {selectedFileFromSundayGuide ? (
+        <div style={{ fontSize: '13px', color: '#0070f3', marginBottom: 12, textAlign: 'center' }}>
+          <div style={{ fontSize: '12px', color: '#666', marginBottom: 4 }}>
+            來自 Sunday Guide 選擇: {selectedFileFromSundayGuide.fileName}
+          </div>
+        </div>
+      ) : (
+        fileName && fileName !== '尚未上傳文件' && fileName !== '獲取文件資訊失敗' && (
+          <div style={{ fontSize: '13px', color: '#0070f3', marginBottom: 12, textAlign: 'center' }}>
+            当前文件: {fileName}
+            {uploadTime && ` (上传时间: ${uploadTime})`}
+          </div>
+        )
+      )}
       <div className={styles.buttonGroup}>
         <button 
           className={`${styles.modeButton} ${selectedMode === 'summary' ? styles.active : ''}`}
           onClick={() => handleModeSelect('summary')}
+          disabled={!selectedFileUniqueId && !selectedFileFromSundayGuide}
         >
           信息总结
         </button>
         <button 
           className={`${styles.modeButton} ${selectedMode === 'devotional' ? styles.active : ''}`}
           onClick={() => handleModeSelect('devotional')}
+          disabled={!selectedFileUniqueId && !selectedFileFromSundayGuide}
         >
           每日灵修
         </button>
         <button 
           className={`${styles.modeButton} ${selectedMode === 'bible' ? styles.active : ''}`}
           onClick={() => handleModeSelect('bible')}
+          disabled={!selectedFileUniqueId && !selectedFileFromSundayGuide}
         >
           查经指引
         </button>
       </div>
-      {/* 新增：按鈕下方小字體提醒 */}
-      <div style={{ fontSize: '12px', color: '#0070f3', marginTop: 8, marginBottom: 8 }}>
-        * 当前显示为您最近上传的文件内容。
-      </div>
-
+      {/* 新增：按鈕下方小字體提醒 - 根據選擇狀態顯示不同提示 */}
+      {selectedFileFromSundayGuide ? (
+        <div style={{ fontSize: '12px', color: '#0070f3', marginTop: 8, marginBottom: 8 }}>
+          * 当前显示为从 Sunday Guide 选择的文件内容。
+        </div>
+      ) : (
+        fileName && fileName !== '尚未上傳文件' && fileName !== '獲取文件資訊失敗' && (
+          <div style={{ fontSize: '12px', color: '#0070f3', marginTop: 8, marginBottom: 8 }}>
+            * 当前显示为您最近上传的文件内容。
+          </div>
+        )
+      )}
+      {/* 顯示當前用戶 ID */}
+      {user?.user_id && (
+        <div style={{ fontSize: '11px', color: '#666', marginTop: 4, marginBottom: 8, fontFamily: 'monospace' }}>
+          当前用户: {user.user_id}
+        </div>
+      )}
+      {/* 當用戶沒有可訪問的文件時顯示提示 */}
+      {(!fileName || fileName === '尚未上傳文件' || fileName === '獲取文件資訊失敗') && (
+        <div style={{ fontSize: '14px', color: '#ff6b6b', marginTop: 8, marginBottom: 16, textAlign: 'center', padding: '12px', backgroundColor: '#fff5f5', borderRadius: '8px', border: '1px solid #ffebee' }}>
+          {fileName === '獲取文件資訊失敗' ? 
+            '無法獲取文件資訊，請檢查網絡連接或聯繫管理員' : 
+            '您尚未上傳任何文件，請先上傳文件後再使用此功能'
+          }
+        </div>
+      )}
       {sermonContent ? (
         <div className={styles.contentWrapper}>
           <div className={`${styles.contentArea} ${styles.hasContent}`}>

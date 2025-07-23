@@ -32,6 +32,8 @@ export default function SundayGuide() {
   const [recentFiles, setRecentFiles] = useState<Array<{ fileName: string, uploadDate: string, fileId: string }>>([]);
   // 新增：本月是否已達上傳上限
   const [isMonthlyLimitReached, setIsMonthlyLimitReached] = useState(false);
+  // 新增：選中的檔案 ID
+  const [selectedFileId, setSelectedFileId] = useState<string | null>(null);
 
   // 檢查用戶是否有足夠的 Credits
   useEffect(() => {
@@ -201,7 +203,37 @@ export default function SundayGuide() {
           ) : (
             <ul className={styles.recentFilesList}>
               {recentFiles.map((file, idx) => (
-                <li key={file.fileId || idx} className={styles.recentFileItem} style={{ cursor: 'default' }}>
+                <li 
+                  key={file.fileId || idx} 
+                  className={styles.recentFileItem} 
+                  style={{ 
+                    cursor: 'pointer',
+                    backgroundColor: selectedFileId === file.fileId ? '#e3f2fd' : '#fff',
+                    color: selectedFileId === file.fileId ? '#333' : '#333',
+                    border: selectedFileId === file.fileId ? '2px solid #0070f3' : '2px solid #ddd',
+                    borderRadius: '4px',
+                    padding: '4px'
+                  }}
+                  onClick={() => {
+                    setSelectedFileId(file.fileId);
+                    // 儲存到 localStorage 以便 /user-sunday-guide 使用
+                    localStorage.setItem('selectedFileId', file.fileId);
+                    localStorage.setItem('selectedFileName', file.fileName);
+                    
+                    // 使用 BroadcastChannel 廣播文件選擇事件
+                    const channel = new BroadcastChannel('file-selection');
+                    channel.postMessage({
+                      type: 'FILE_SELECTED',
+                      fileId: file.fileId,
+                      fileName: file.fileName,
+                      timestamp: Date.now()
+                    });
+                    channel.close();
+                    
+                    console.log('[DEBUG] 已選中檔案並廣播事件:', { fileId: file.fileId, fileName: file.fileName });
+                  }}
+                  title="點擊選擇此檔案"
+                >
                   <span className={styles.fileIndex}>{recentFiles.length - idx}. </span>
                   <span className={styles.fileName}>{file.fileName}</span>
                   <span className={styles.uploadDate}>{file.uploadDate}</span>
