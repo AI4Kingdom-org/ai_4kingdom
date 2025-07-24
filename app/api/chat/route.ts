@@ -410,10 +410,11 @@ export async function POST(request: Request) {
         userId,
         assistantId: config.assistantId,
         vectorStoreId: config.vectorStoreId || 'none'
-      });        // 建立执行 - 所有檔案視為系統資源，無需用戶過濾
-      const run = await openai.beta.threads.runs.create(activeThreadId, {
+      });        // 使用 OpenAI SDK 的 stream 功能
+      const runStream = openai.beta.threads.runs.stream(activeThreadId, {
         assistant_id: config.assistantId,
         max_completion_tokens: 1000,
+        instructions: "請不要在回覆中包含任何引用標記、數字標記或來源標註，直接提供清晰的回答。",
         ...(config.vectorStoreId ? {
           tool_resources: {
             file_search: {
@@ -430,26 +431,20 @@ export async function POST(request: Request) {
         // OpenAI API 不支援 user_filter 參數，移除相關日誌
       });
       
-      // 创建流式响应
+      // 将 OpenAI 的事件流直接管道到 Next.js 的响应流
       const stream = new ReadableStream({
         async start(controller) {
-          // 启动流式传输
-          try {
-            const encoder = new TextEncoder();
-            
-            // 传输生成的结果
-            for await (const chunk of streamRunResults(openai, activeThreadId, run.id, userId)) {
-              controller.enqueue(encoder.encode(`data: ${chunk}\n\n`));
+          const encoder = new TextEncoder();
+          for await (const event of runStream) {
+            // 只發送包含數據的事件
+            if (event.data) {
+              controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
             }
-            
-            controller.close();
-          } catch (error) {
-            console.error('[ERROR] 流式傳輸失敗:', error);
-            const errorMessage = error instanceof Error ? error.message : '流式傳輸失敗';
-            const encoder = new TextEncoder();
-            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ error: errorMessage })}\n\n`));
-            controller.close();
           }
+          controller.close();
+        },
+        cancel() {
+          console.log('[DEBUG] 客戶端斷開連接，串流已取消');
         }
       });
       
