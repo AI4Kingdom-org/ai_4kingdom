@@ -168,12 +168,85 @@ export function ChatProvider({
     setIsLoading(true);
     setError(null);
 
+    // 打字機效果的變數
+    let typewriterTimer: NodeJS.Timeout | null = null;
+    let typewriterCurrent = '';
+    let typewriterIndex = 0;
+    let typewriterTarget = '';
+    let isTypewriterRunning = false;
+    
+    // 開始打字機效果
+    const startTypewriterEffect = (initialText: string) => {
+      if (isTypewriterRunning) return;
+      
+      typewriterCurrent = '';
+      typewriterIndex = 0;
+      typewriterTarget = initialText;
+      isTypewriterRunning = true;
+      
+      const typeNextChar = () => {
+        if (typewriterIndex < typewriterTarget.length) {
+          typewriterCurrent += typewriterTarget[typewriterIndex];
+          typewriterIndex++;
+          
+          // 更新UI
+          setMessages(prev => {
+            const newMessages = [...prev];
+            const lastMessage = newMessages[newMessages.length - 1];
+            if (lastMessage && lastMessage.sender === 'bot') {
+              lastMessage.text = typewriterCurrent;
+            }
+            return newMessages;
+          });
+          
+          // 設置下一個字符的延遲（可調整速度）
+          typewriterTimer = setTimeout(typeNextChar, 20); // 20ms 每個字符，更快
+        } else if (typewriterIndex < typewriterTarget.length) {
+          // 如果目標文字變長了，繼續打字
+          typewriterTimer = setTimeout(typeNextChar, 20);
+        }
+      };
+      
+      typeNextChar();
+    };
+    
+    // 更新打字機目標文字
+    const updateTypewriterTarget = (newText: string) => {
+      typewriterTarget = newText;
+      
+      // 如果打字機還沒開始，現在開始
+      if (!isTypewriterRunning && newText.length > 0) {
+        startTypewriterEffect(newText);
+      }
+      // 如果打字機已經追上當前目標，繼續打字
+      else if (typewriterIndex >= typewriterCurrent.length && typewriterIndex < typewriterTarget.length) {
+        if (typewriterTimer) clearTimeout(typewriterTimer);
+        const typeNextChar = () => {
+          if (typewriterIndex < typewriterTarget.length) {
+            typewriterCurrent += typewriterTarget[typewriterIndex];
+            typewriterIndex++;
+            
+            setMessages(prev => {
+              const newMessages = [...prev];
+              const lastMessage = newMessages[newMessages.length - 1];
+              if (lastMessage && lastMessage.sender === 'bot') {
+                lastMessage.text = typewriterCurrent;
+              }
+              return newMessages;
+            });
+            
+            typewriterTimer = setTimeout(typeNextChar, 20);
+          }
+        };
+        typewriterTimer = setTimeout(typeNextChar, 20);
+      }
+    };
+
     try {
         // 先添加使用者訊息
         setMessages(prev => [...prev, { sender: 'user', text: message }]);
         
         // 創建一個暫時的機器人回應，用於流式更新
-        let streamingContent = '';
         let finalThreadId = currentThreadId;
         let currentReferences: DocumentReference[] = [];
         
@@ -223,8 +296,8 @@ export function ChatProvider({
 
         // 檢查是否為流式回應
         if (response.headers.get('Content-Type')?.includes('text/event-stream')) {
-            // 處理流式回應            // 添加一個暫時的機器人回應
-            setMessages(prev => [...prev, { sender: 'bot', text: '', references: [] }]);
+            // 處理流式回應：先顯示「思考中」訊息
+            setMessages(prev => [...prev, { sender: 'bot', text: 'AI正在思考中，請稍候...', references: [] }]);
 
             const reader = response.body?.getReader();
             if (!reader) {
@@ -233,76 +306,82 @@ export function ChatProvider({
             
             const decoder = new TextDecoder();
             let isDone = false;
+            let accumulatedText = ''; // 累積所有接收到的文字
+            let isFirstChunk = true;
             
-            // 讀取並處理流數據
+            // 讀取並處理流數據，即時開始打字機效果
             while (!isDone) {
                 const { value, done } = await reader.read();
                 if (done) {
                     isDone = true;
                     break;
                 }
-
-                // 解碼接收到的數據
-                const chunk = decoder.decode(value);
-                const lines = chunk.split('\n\n');
                 
+                const chunk = decoder.decode(value, { stream: true });
+                const lines = chunk.split('\n\n').filter(line => line.trim() !== '');
+
                 for (const line of lines) {
-                    if (line.trim() && line.startsWith('data: ')) {
+                    if (line.startsWith('data: ')) {
                         try {
-                            const jsonStr = line.substring(6);
-                            const data = JSON.parse(jsonStr);
-                              if (data.content) {
-                                // 更新流式內容
-                                streamingContent += data.content;
-                                
-                                // 更新最後一個機器人訊息
-                                setMessages(prev => {
-                                    const newMessages = [...prev];
-                                    if (newMessages.length > 0 && newMessages[newMessages.length - 1].sender === 'bot') {                                        newMessages[newMessages.length - 1].text = streamingContent;
-                                        // 保留任何已有的參考來源
-                                        newMessages[newMessages.length - 1].references = currentReferences;
+                            const eventData = JSON.parse(line.substring(6));
+                            const event = eventData.event;
+                            const data = eventData.data;
+
+                            if (event === 'thread.message.delta') {
+                                const delta = data.delta.content?.[0];
+                                if (delta?.type === 'text' && delta.text?.value) {
+                                    let textValue = delta.text.value;
+                                    
+                                    // 移除各種 citation 標記格式
+                                    textValue = textValue
+                                        .replace(/【\d+】/g, '')           // 【1】、【2】
+                                        .replace(/\[\d+\]/g, '')          // [1]、[2] 
+                                        .replace(/\(\d+\)/g, '')          // (1)、(2)
+                                        .replace(/^\d+\.\s*/gm, '')       // 開頭的 "1. "、"2. "
+                                        .replace(/【.*?】/g, '')          // 【任何內容】
+                                        .replace(/\[.*?\]/g, '')          // [任何內容]
+                                        .replace(/\*\*\d+\*\*/g, '')      // **1**、**2**
+                                        .replace(/\d+\s*\)/g, '')         // 1)、2)
+                                        .replace(/\[\[.*?\]\]/g, '')      // [[任何內容]]
+                                        .replace(/†\d*/g, '')             // †1、†2
+                                        .replace(/‡\d*/g, '')             // ‡1、‡2
+                                        .replace(/§\d*/g, '');            // §1、§2
+                                    
+                                    // 累積文字並更新打字機
+                                    accumulatedText += textValue;
+                                    
+                                    if (isFirstChunk && accumulatedText.length > 0) {
+                                        // 第一次收到內容時，開始打字機效果
+                                        startTypewriterEffect(accumulatedText);
+                                        isFirstChunk = false;
+                                    } else {
+                                        // 更新打字機目標
+                                        updateTypewriterTarget(accumulatedText);
                                     }
-                                    return newMessages;
-                                });
-                            }
-                            
-                            // 處理參考來源資訊
-                            if (data.references && Array.isArray(data.references)) {
-                                // 更新當前參考來源
-                                currentReferences = data.references;
-                                
-                                // 更新最後一個機器人訊息以包含參考來源
-                                setMessages(prev => {
-                                    const newMessages = [...prev];
-                                    if (newMessages.length > 0 && newMessages[newMessages.length - 1].sender === 'bot') {
-                                        newMessages[newMessages.length - 1].references = currentReferences;
-                                    }
-                                    return newMessages;
-                                });
-                                
-                                console.log('[DEBUG] 收到文档引用:', data.references.length);
-                            }
-                            
-                            if (data.threadId) {
-                                finalThreadId = data.threadId;
-                                setCurrentThreadId(finalThreadId);
-                            }
-                            
-                            if (data.error) {
-                                setError(data.error);
-                                break;
-                            }
-                            
-                            if (data.done) {
-                                isDone = true;
-                                console.log('[DEBUG] 流式響應完成，總token:', data.usage);
-                                break;
+                                }
+                            } else if (event === 'thread.run.completed') {
+                                finalThreadId = data.thread_id;
                             }
                         } catch (e) {
                             console.error('[ERROR] 解析流數據失敗:', e, line.substring(6));
                         }
                     }
                 }
+            }
+            
+            // 確保最終文字完全顯示
+            if (accumulatedText && typewriterCurrent !== accumulatedText) {
+                // 等待一段時間讓打字機完成，然後強制顯示完整內容
+                setTimeout(() => {
+                    setMessages(prev => {
+                        const newMessages = [...prev];
+                        const lastMessage = newMessages[newMessages.length - 1];
+                        if (lastMessage && lastMessage.sender === 'bot') {
+                            lastMessage.text = accumulatedText;
+                        }
+                        return newMessages;
+                    });
+                }, Math.max(0, (accumulatedText.length - typewriterCurrent.length) * 20 + 100));
             }
             
             return { success: true, threadId: finalThreadId };
@@ -321,12 +400,28 @@ export function ChatProvider({
                 throw new Error('響應格式無效');
             }
 
-            if (data.success) {                setMessages(prev => [
+            if (data.success) {
+                // 移除回覆中的各種 citation 標記格式
+                const cleanReply = data.reply ? data.reply
+                    .replace(/【\d+】/g, '')           // 【1】、【2】
+                    .replace(/\[\d+\]/g, '')          // [1]、[2] 
+                    .replace(/\(\d+\)/g, '')          // (1)、(2)
+                    .replace(/^\d+\.\s*/gm, '')       // 開頭的 "1. "、"2. "
+                    .replace(/【.*?】/g, '')          // 【任何內容】
+                    .replace(/\[.*?\]/g, '')          // [任何內容]
+                    .replace(/\*\*\d+\*\*/g, '')      // **1**、**2**
+                    .replace(/\d+\s*\)/g, '')         // 1)、2)
+                    .replace(/\[\[.*?\]\]/g, '')      // [[任何內容]]
+                    .replace(/†\d*/g, '')             // †1、†2
+                    .replace(/‡\d*/g, '')             // ‡1、‡2
+                    .replace(/§\d*/g, '') : '';       // §1、§2
+                
+                setMessages(prev => [
                     ...prev,
                     { sender: 'user', text: message },
                     { 
                       sender: 'bot', 
-                      text: data.reply, 
+                      text: cleanReply, 
                       references: data.references || [] 
                     }
                 ]);
@@ -336,6 +431,11 @@ export function ChatProvider({
             return data;
         }
     } catch (error) {
+        // 清理打字機定時器
+        if (typewriterTimer) {
+          clearTimeout(typewriterTimer);
+        }
+        
         console.error('[ERROR] 发送消息失败:', error);
         setError(error instanceof Error ? error.message : '发送消息失败');
         throw error;
