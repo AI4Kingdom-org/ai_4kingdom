@@ -49,17 +49,23 @@ export default function TokenManagementPage() {
       const cacheBuster = new Date().getTime();
       const response = await fetch(`/api/usage/all?_=${cacheBuster}`);
       
+      console.log('[DEBUG] API 回應狀態:', response.status);
+      
       if (!response.ok) {
         const errorData = await response.json();
+        console.error('[DEBUG] API 錯誤:', errorData);
         throw new Error(errorData.error || '無法獲取使用量數據');
       }
 
       const data = await response.json();
+      console.log('[DEBUG] API 回應數據:', data);
       
       if (data.success && Array.isArray(data.usage)) {
+        console.log('[DEBUG] 成功獲取', data.usage.length, '個用戶的數據');
         setUsageData(data.usage);
         setLastRefreshTime(new Date());
       } else {
+        console.log('[DEBUG] API 回應格式異常:', data);
         setUsageData([]);
       }
     } catch (err) {
