@@ -88,38 +88,64 @@ export async function GET(request: Request) {
       }
     });
     
-    const response = await docClient.send(scanCommand);
-      // 格式化數據，轉換為更易讀的格式
-    const usageData = response.Items || [];
-      // 為每個用戶獲取訂閱信息
-    const enrichedUsageData = await Promise.all(usageData.map(async (item) => {      // 嘗試獲取用戶訂閱信息
-      const subscription = await getUserSubscription(item.UserId);
+    const monthlyResponse = await docClient.send(scanCommand);
+    const monthlyUsageData = monthlyResponse.Items || [];
+    
+    // 同時掃描所有歷史使用記錄來獲取所有用戶 ID
+    const allUsersCommand = new ScanCommand({
+      TableName: "MonthlyTokenUsage",
+      ProjectionExpression: "UserId"
+    });
+    
+    const allUsersResponse = await docClient.send(allUsersCommand);
+    const allUserIds = [...new Set((allUsersResponse.Items || []).map(item => item.UserId))];
+    
+    console.log('[DEBUG] 找到的所有用戶 ID:', allUserIds);
+    console.log('[DEBUG] 當月有使用記錄的用戶:', monthlyUsageData.map(item => item.UserId));
+    
+    // 為每個找到的用戶 ID 創建使用記錄（包括本月沒有使用的用戶）
+    const enrichedUsageData = await Promise.all(allUserIds.map(async (userId) => {
+      // 查找該用戶的當月使用記錄
+      const userMonthlyData = monthlyUsageData.find(item => item.UserId === userId);
+      
+      // 嘗試獲取用戶訂閱信息
+      const subscription = await getUserSubscription(userId);
       console.log('[DEBUG] User subscription for aggregated usage data:', {
-        userId: item.UserId,
+        userId,
         status: subscription.status,
         type: subscription.type,
         isDefault: !subscription.plan_id || subscription.plan_id === null
       });
+      
       // getUserSubscription 現在總是會返回有效的訂閱，所以不需要使用可選鏈運算符
       const subscriptionType = subscription.type.toLowerCase();
       const tokenLimit = TOKEN_LIMITS[subscriptionType as keyof typeof TOKEN_LIMITS] || TOKEN_LIMITS.free;
       
+      // 如果用戶有當月使用記錄，使用實際數據；否則使用默認值（0使用量）
+      const totalTokens = userMonthlyData?.totalTokens || 0;
+      const promptTokens = userMonthlyData?.promptTokens || 0;
+      const completionTokens = userMonthlyData?.completionTokens || 0;
+      const retrievalTokens = userMonthlyData?.retrievalTokens || 0;
+      const lastUpdated = userMonthlyData?.lastUpdated || new Date().toISOString();
+      
       // 根據用戶訂閱類型計算 token 額度
       return {
-        userId: item.UserId,
-        totalTokens: item.totalTokens || 0,
-        promptTokens: item.promptTokens || 0,
-        completionTokens: item.completionTokens || 0,
-        retrievalTokens: item.retrievalTokens || 0,
-        yearMonth: item.YearMonth,
-        lastUpdated: item.lastUpdated,        subscription: subscriptionType,
+        userId,
+        totalTokens,
+        promptTokens,
+        completionTokens,
+        retrievalTokens,
+        yearMonth,
+        lastUpdated,
+        subscription: subscriptionType,
         subscriptionExpiry: subscription.expiry || null,
-        remainingTokens: Math.max(0, tokenLimit - (item.totalTokens || 0)),
+        remainingTokens: Math.max(0, tokenLimit - totalTokens),
         totalCredits: Math.floor(tokenLimit / TOKEN_TO_CREDIT_RATIO),
-        remainingCredits: Math.floor(Math.max(0, tokenLimit - (item.totalTokens || 0)) / TOKEN_TO_CREDIT_RATIO)
+        remainingCredits: Math.floor(Math.max(0, tokenLimit - totalTokens) / TOKEN_TO_CREDIT_RATIO)
       };
     }));
-      return NextResponse.json({
+    
+    return NextResponse.json({
       success: true,
       usage: enrichedUsageData,
       yearMonth

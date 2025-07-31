@@ -28,10 +28,8 @@ export default function SundayGuide() {
   const [latestFile, setLatestFile] = useState<{ fileName: string, uploadDate: string } | null>(null);
   // 添加是否顯示前次記錄的狀態
   const [showLatestFile, setShowLatestFile] = useState(true);
-  // 新增：右側顯示當月上傳的五筆檔案記錄
+  // 新增：右側顯示用戶所有上傳的檔案記錄
   const [recentFiles, setRecentFiles] = useState<Array<{ fileName: string, uploadDate: string, fileId: string }>>([]);
-  // 新增：本月是否已達上傳上限
-  const [isMonthlyLimitReached, setIsMonthlyLimitReached] = useState(false);
   // 新增：選中的檔案 ID
   const [selectedFileId, setSelectedFileId] = useState<string | null>(null);
 
@@ -77,29 +75,31 @@ export default function SundayGuide() {
     }
   };
   
-  // 取得本月五筆最新檔案
+  // 取得所有用戶上傳檔案
   const fetchRecentFiles = async () => {
     if (!user?.user_id) {
+      console.log('[DEBUG] 用戶未登入或無 user_id:', user);
       setRecentFiles([]);
-      setIsMonthlyLimitReached(false);
       return;
     }
     try {
-      const now = new Date();
-      const year = now.getFullYear();
-      const month = String(now.getMonth() + 1).padStart(2, '0');
-      const monthStart = `${year}-${month}-01T00:00:00.000Z`;
-      // 查詢本月所有檔案
-      const response = await fetch(`/api/sunday-guide/documents?assistantId=${ASSISTANT_IDS.SUNDAY_GUIDE}&userId=${user.user_id}`);
-      if (!response.ok) throw new Error('獲取檔案記錄失敗');
+      const apiUrl = `/api/sunday-guide/documents?assistantId=${ASSISTANT_IDS.SUNDAY_GUIDE}&userId=${user.user_id}`;
+      console.log('[DEBUG] 請求 API URL:', apiUrl);
+      console.log('[DEBUG] 當前用戶:', user);
+      
+      const response = await fetch(apiUrl);
+      if (!response.ok) {
+        console.error('[DEBUG] API 回應失敗:', response.status, response.statusText);
+        throw new Error('獲取檔案記錄失敗');
+      }
+      
       const data = await response.json();
+      console.log('[DEBUG] API 回應數據:', data);
+      
       if (data.success && data.records && data.records.length > 0) {
-        // 過濾本月檔案並排序
-        const monthFiles = data.records.filter((rec: any) => {
-          const d = new Date(rec.updatedAt);
-          return d >= new Date(monthStart);
-        }).sort((a: any, b: any) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
-        setRecentFiles(monthFiles.slice(0, 5).map((rec: any) => ({
+        // 直接排序所有檔案，取前20筆
+        const sortedFiles = data.records.sort((a: any, b: any) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+        const recentFilesData = sortedFiles.slice(0, 20).map((rec: any) => ({
           fileName: rec.fileName || '未命名文件',
           uploadDate: new Date(rec.updatedAt).toLocaleDateString('en-US', {
             timeZone: 'America/Los_Angeles',
@@ -108,16 +108,16 @@ export default function SundayGuide() {
             day: '2-digit'
           }),
           fileId: rec.fileId || ''
-        })));
-        setIsMonthlyLimitReached(monthFiles.length >= 5);
+        }));
+        console.log('[DEBUG] 處理後的檔案數據:', recentFilesData);
+        setRecentFiles(recentFilesData);
       } else {
+        console.log('[DEBUG] 無檔案記錄或 API 失敗:', data);
         setRecentFiles([]);
-        setIsMonthlyLimitReached(false);
       }
     } catch (error) {
+      console.error('[DEBUG] 獲取檔案記錄失敗:', error);
       setRecentFiles([]);
-      setIsMonthlyLimitReached(false);
-      console.error('獲取檔案記錄失敗:', error);
     }
   };
 
@@ -149,7 +149,7 @@ export default function SundayGuide() {
 
     // 文件處理完成後重新獲取最新的文件記錄並刷新信用點數使用量
     await fetchLatestFileRecord();
-    await fetchRecentFiles(); // 新增：處理完成後即時刷新本月上傳記錄
+    await fetchRecentFiles(); // 新增：處理完成後即時刷新上傳記錄
     await refreshUsage();
   };
 
@@ -174,13 +174,8 @@ export default function SundayGuide() {
             setIsProcessing={setIsProcessing} 
             setUploadProgress={setUploadProgress}
             setUploadTime={setUploadTime}
-            disabled={isUploadDisabled || isMonthlyLimitReached} // 新增條件：本月超過5筆禁止上傳
+            disabled={isUploadDisabled} // 已移除本月上傳上限
           />
-          {isMonthlyLimitReached && (
-            <div className={styles.creditWarning} style={{ backgroundColor: '#ffeaea', color: '#b71c1c', borderLeft: '4px solid #e53935', marginTop: 12 }}>
-              <p>本月上传已达上限（5笔），请等到下月1日后再上传新文件。</p>
-            </div>
-          )}
           
           {/* 添加處理時間提示說明 */}
           {isProcessing && (
@@ -195,13 +190,13 @@ export default function SundayGuide() {
             </div>
           )}
         </section>
-        {/* 右侧显示本月五筆最新文件记录 */}
+        {/* 右側顯示用戶所有上傳記錄 */}
         <aside className={styles.recentFilesAside}>
-          <h4 className={styles.recentFilesTitle}>本月五筆上传记录</h4>
+          <h4 className={styles.recentFilesTitle}>上传记录</h4>
           {recentFiles.length === 0 ? (
-            <div className={styles.noRecentFiles}>本月尚无上传记录</div>
+            <div className={styles.noRecentFiles}>尚无上传记录</div>
           ) : (
-            <ul className={styles.recentFilesList}>
+            <ul className={styles.recentFilesListScrollable}>
               {recentFiles.map((file, idx) => (
                 <li 
                   key={file.fileId || idx} 
@@ -216,11 +211,8 @@ export default function SundayGuide() {
                   }}
                   onClick={() => {
                     setSelectedFileId(file.fileId);
-                    // 儲存到 localStorage 以便 /user-sunday-guide 使用
                     localStorage.setItem('selectedFileId', file.fileId);
                     localStorage.setItem('selectedFileName', file.fileName);
-                    
-                    // 使用 BroadcastChannel 廣播文件選擇事件
                     const channel = new BroadcastChannel('file-selection');
                     channel.postMessage({
                       type: 'FILE_SELECTED',
@@ -229,7 +221,6 @@ export default function SundayGuide() {
                       timestamp: Date.now()
                     });
                     channel.close();
-                    
                     console.log('[DEBUG] 已選中檔案並廣播事件:', { fileId: file.fileId, fileName: file.fileName });
                   }}
                   title="點擊選擇此檔案"
