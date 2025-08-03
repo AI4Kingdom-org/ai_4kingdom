@@ -2,6 +2,7 @@
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { FEATURE_ACCESS } from '../types/auth';
+import { canUserUpload } from '../config/userPermissions';
 import type { UserData, AuthState, AuthContextType, FeatureKey, MemberRole } from '../types/auth';
 
 interface User {
@@ -89,7 +90,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (data.success) {
         setUser({
-          user_id: data.user_id,
+          user_id: String(data.user_id), // 確保 user_id 是字串類型
           nonce: data.nonce,
           username: data.username,
           email: data.email,
@@ -163,6 +164,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return userRoles.some(role => requiredRoles.includes(role));
   };
 
+  // 新增：檢查用戶是否可以上傳文件
+  const canUploadFiles = (): boolean => {
+    console.log('[DEBUG] canUploadFiles called with user:', {
+      user_id: user?.user_id,
+      user_type: typeof user?.user_id,
+      user: user
+    });
+    return canUserUpload(user?.user_id);
+  };
+
   // 初始化时检查认证状态
   useEffect(() => {
     checkAuth();
@@ -190,7 +201,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     getSubscriptionType,
     isSubscriptionValid,
     hasRole,
-    canAccessFeature
+    canAccessFeature,
+    canUploadFiles
   };
 
   return (

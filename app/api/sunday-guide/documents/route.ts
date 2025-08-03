@@ -12,11 +12,17 @@ export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const assistantId = searchParams.get('assistantId');
-    let userId = searchParams.get('userId'); // 添加獲取 userId 查詢參數
+    let userId = searchParams.get('userId');
+    const allUsers = searchParams.get('allUsers') === 'true'; // 新增：是否獲取所有用戶的文檔
+    const page = parseInt(searchParams.get('page') || '1');
+    const limit = parseInt(searchParams.get('limit') || '10');
     
     console.log('[DEBUG] 請求參數:', {
       assistantId,
       userId,
+      allUsers,
+      page,
+      limit,
       url: request.url
     });
     
@@ -38,8 +44,8 @@ export async function GET(request: Request) {
       expressionAttributeValues[":assistantId"] = assistantId;
     }
     
-    // 如果提供了userId，加入過濾條件 - 使用 OR 條件同時檢查字符串和數字類型
-    if (userId) {
+    // 如果不是獲取所有用戶的文檔且提供了userId，加入用戶過濾條件
+    if (!allUsers && userId) {
       // 檢查 userId 是否可以轉換為數字
       const numericUserId = !isNaN(Number(userId)) ? Number(userId) : null;
       
@@ -73,22 +79,45 @@ export async function GET(request: Request) {
       itemCount: result.Items?.length || 0,
       firstItem: result.Items && result.Items.length > 0 ? JSON.stringify(result.Items[0]).substring(0, 200) : '無記錄'
     });
+
+    // 處理查詢結果
+    let records = result.Items?.map(item => ({
+      assistantId: item.assistantId,
+      vectorStoreId: item.vectorStoreId,
+      fileId: item.fileId,
+      fileName: item.fileName || '未命名文件',
+      updatedAt: item.updatedAt || item.Timestamp,
+      userId: item.userId || item.UserId || '-',
+      summary: item.summary ? '已生成' : '未生成',
+      fullText: item.fullText ? '已生成' : '未生成',
+      devotional: item.devotional ? '已生成' : '未生成', 
+      bibleStudy: item.bibleStudy ? '已生成' : '未生成'
+    })) || [];
+
+    // 按時間排序（最新的在前面）
+    records = records.sort((a, b) => {
+      const dateA = new Date(a.updatedAt).getTime();
+      const dateB = new Date(b.updatedAt).getTime();
+      return dateB - dateA;
+    });
+
+    // 如果是分頁請求，進行分頁處理
+    const totalCount = records.length;
+    let paginatedRecords = records;
+    
+    if (allUsers && page && limit) {
+      const startIndex = (page - 1) * limit;
+      const endIndex = startIndex + limit;
+      paginatedRecords = records.slice(startIndex, endIndex);
+    }
     
     // 返回結果
     return NextResponse.json({
       success: true,
-      records: result.Items?.map(item => ({
-        assistantId: item.assistantId,
-        vectorStoreId: item.vectorStoreId,
-        fileId: item.fileId,
-        fileName: item.fileName || '未命名文件',
-        updatedAt: item.updatedAt || item.Timestamp,
-        userId: item.userId || item.UserId || '-', // 統一使用 userId 並兼容舊數據
-        summary: item.summary ? '已生成' : '未生成',
-        fullText: item.fullText ? '已生成' : '未生成',
-        devotional: item.devotional ? '已生成' : '未生成', 
-        bibleStudy: item.bibleStudy ? '已生成' : '未生成'
-      })) || []
+      records: paginatedRecords,
+      totalCount: totalCount,
+      currentPage: page,
+      totalPages: Math.ceil(totalCount / limit)
     });
     
   } catch (error) {

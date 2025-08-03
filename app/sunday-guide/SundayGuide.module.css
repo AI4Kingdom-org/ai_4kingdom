@@ -448,3 +448,48 @@
   content: "🕒";
   margin-right: 8px;
 }
+
+/* 分頁控制樣式 */
+.pagination {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin-top: 1rem;
+  padding: 1rem 0;
+  gap: 1rem;
+  border-top: 1px solid #e5e5e5;
+}
+
+.paginationButton {
+  background: #007bff;
+  color: white;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: background-color 0.3s;
+}
+
+.paginationButton:hover:not(:disabled) {
+  background: #0056b3;
+}
+
+.paginationButton:disabled {
+  background: #ccc;
+  cursor: not-allowed;
+}
+
+.paginationInfo {
+  font-size: 0.9rem;
+  color: #666;
+  font-weight: 500;
+}
+
+/* 上傳者信息樣式 */
+.uploaderInfo {
+  font-size: 0.7rem;
+  color: #999;
+  margin-left: 0.5rem;
+  font-style: italic;
+}
