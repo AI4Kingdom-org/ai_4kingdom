@@ -41,6 +41,5 @@ export interface AuthContextType extends AuthState {
   isSubscriptionValid: () => boolean;
   hasRole: (role: MemberRole) => boolean;
   canAccessFeature: (feature: FeatureKey) => boolean;
-}
-
-// ... 其他类型定义保持不变 ... 
+  canUploadFiles: () => boolean; // 新增上傳權限檢查方法
+} 
