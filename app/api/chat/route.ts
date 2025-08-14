@@ -414,7 +414,6 @@ export async function POST(request: Request) {
       const runStream = openai.beta.threads.runs.stream(activeThreadId, {
         assistant_id: config.assistantId,
         max_completion_tokens: 1000,
-        instructions: "請不要在回覆中包含任何引用標記、數字標記或來源標註，直接提供清晰的回答。",
         ...(config.vectorStoreId ? {
           tool_resources: {
             file_search: {
