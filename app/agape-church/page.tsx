@@ -29,6 +29,7 @@ export default function AgapeChurchPage() {
   const [latestFile, setLatestFile] = useState<{ fileName: string, uploadDate: string } | null>(null);
   const [showLatestFile, setShowLatestFile] = useState(true);
   const [recentFiles, setRecentFiles] = useState<Array<{ fileName: string, uploadDate: string, fileId: string, uploaderId?: string }>>([]);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [selectedFileId, setSelectedFileId] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
@@ -74,6 +75,29 @@ export default function AgapeChurchPage() {
       } else { setRecentFiles([]); setTotalPages(1); }
     } catch {
       setRecentFiles([]); setTotalPages(1);
+    }
+  };
+
+  const handleDelete = async (fileId: string, uploaderId?: string) => {
+    if (!user?.user_id) return;
+    if (!fileId) return;
+    if (uploaderId?.toString() !== user.user_id.toString()) return; // 前端保護
+    if (!confirm('確定刪除此文件記錄？此操作不可回復。')) return;
+    try {
+      setDeletingId(fileId);
+      const qs = new URLSearchParams({ fileId, unitId: 'agape', userId: user.user_id });
+      const res = await fetch(`/api/sunday-guide/documents?${qs.toString()}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        alert('刪除失敗: ' + (data.error || res.status));
+      } else {
+        await fetchAllFileRecords(currentPage);
+        if (selectedFileId === fileId) setSelectedFileId(null);
+      }
+    } catch (e: any) {
+      alert('刪除時發生錯誤: ' + (e.message || '未知錯誤'));
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -159,7 +183,26 @@ export default function AgapeChurchPage() {
                     <span className={styles.fileIndex}>{((currentPage - 1) * filesPerPage) + idx + 1}. </span>
                     <span className={styles.fileName}>{file.fileName}</span>
                     <span className={styles.uploadDate}>{file.uploadDate}</span>
-                    {file.uploaderId && (<span className={styles.uploaderInfo}>上传: {file.uploaderId}</span>)}
+                    {/* 隱藏上傳者顯示：保留 uploaderId 供刪除權限判斷，但不渲染文字 */}
+                    {/* {file.uploaderId && (<span className={styles.uploaderInfo}>上传: {file.uploaderId}</span>)} */}
+                    {/* 刪除按鈕：僅原上傳者可見 */}
+                    {file.uploaderId && user?.user_id && file.uploaderId.toString() === user.user_id.toString() && (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); handleDelete(file.fileId, file.uploaderId); }}
+                        disabled={deletingId === file.fileId}
+                        style={{
+                          marginLeft: 8,
+                          background: 'none',
+                          border: 'none',
+                          color: 'crimson',
+                          cursor: 'pointer',
+                          fontSize: '14px'
+                        }}
+                        title="刪除此文件"
+                      >
+                        {deletingId === file.fileId ? '刪除中...' : '🗑'}
+                      </button>
+                    )}
                   </li>
                 ))}
               </ul>
