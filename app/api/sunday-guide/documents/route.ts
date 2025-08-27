@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import OpenAI from 'openai';
 import { createDynamoDBClient } from '../../../utils/dynamodb';
 import { PutCommand, ScanCommand } from "@aws-sdk/lib-dynamodb";
+import { ASSISTANT_IDS, findUnitByAssistantId, getSundayGuideUnitConfig } from '@/app/config/constants';
+import { canUploadToSundayGuideUnit } from '@/app/config/userPermissions';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
@@ -11,7 +13,8 @@ const openai = new OpenAI({
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
-    const assistantId = searchParams.get('assistantId');
+  const assistantId = searchParams.get('assistantId');
+  const agapeFilter = searchParams.get('agapeFilter') === 'true';
     let userId = searchParams.get('userId');
     const allUsers = searchParams.get('allUsers') === 'true'; // 新增：是否獲取所有用戶的文檔
     const page = parseInt(searchParams.get('page') || '1');
@@ -38,10 +41,17 @@ export async function GET(request: Request) {
     let filterExpressions = [];
     const expressionAttributeValues: Record<string, any> = {};
     
-    // 如果提供了assistantId，加入過濾條件
-    if (assistantId) {
-      filterExpressions.push("assistantId = :assistantId");
-      expressionAttributeValues[":assistantId"] = assistantId;
+    // Agape 公開瀏覽特殊處理：
+    // 現在 Agape 與 Sunday Guide 共用 assistantId；若 agapeFilter=true 則忽略傳入的 assistantId 過濾，稍後用 unitId / 舊 assistantId 二次篩選。
+    if (!agapeFilter) {
+      if (assistantId) {
+        filterExpressions.push("assistantId = :assistantId");
+        expressionAttributeValues[":assistantId"] = assistantId;
+      } else {
+        // 未指定 assistantId 且非 agapeFilter → 排除舊 Agape 專用助手資料
+        filterExpressions.push("assistantId <> :agapeAid");
+        expressionAttributeValues[":agapeAid"] = ASSISTANT_IDS.AGAPE_CHURCH;
+      }
     }
     
     // 如果不是獲取所有用戶的文檔且提供了userId，加入用戶過濾條件
@@ -81,13 +91,29 @@ export async function GET(request: Request) {
     });
 
     // 處理查詢結果
-    let records = result.Items?.map(item => ({
+    let recordsRaw = result.Items || [];
+
+    // agapeFilter: 僅顯示屬於 agape 單位的記錄：
+    // 條件1：item.unitId === 'agape'（新模式）
+    // 或 條件2：舊記錄 assistantId === AGAPE_CHURCH（遺留模式，可能沒有 unitId）
+    if (agapeFilter) {
+      const unitCfg = getSundayGuideUnitConfig('agape');
+      const allowed = unitCfg.allowedUploaders.map((u: string) => u.toString());
+      recordsRaw = recordsRaw.filter(item => {
+        const uploader = (item.uploadedBy || item.userId || item.UserId || '').toString();
+        const itemUnit = (item.unitId || '').toString();
+        return itemUnit === 'agape' && allowed.includes(uploader);
+      });
+    }
+
+    let records = recordsRaw.map(item => ({
       assistantId: item.assistantId,
       vectorStoreId: item.vectorStoreId,
       fileId: item.fileId,
       fileName: item.fileName || '未命名文件',
       updatedAt: item.updatedAt || item.Timestamp,
       userId: item.userId || item.UserId || '-',
+      unitId: item.unitId || findUnitByAssistantId(item.assistantId),
       summary: item.summary ? '已生成' : '未生成',
       fullText: item.fullText ? '已生成' : '未生成',
       devotional: item.devotional ? '已生成' : '未生成', 

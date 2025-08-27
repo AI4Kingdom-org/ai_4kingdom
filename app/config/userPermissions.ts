@@ -38,3 +38,17 @@ export const getAllPermittedUsers = (): string[] => {
 export const getPermissionGroupSize = (groupName: keyof typeof PERMISSION_GROUPS): number => {
   return PERMISSION_GROUPS[groupName].length;
 };
+
+// 動態單位（牧者助手）上傳權限：優先使用單位配置的 allowedUploaders（於 constants SUNDAY_GUIDE_UNITS）
+import { getSundayGuideUnitConfig } from './constants';
+
+export function canUploadToSundayGuideUnit(unitId: string | undefined, userId: string | undefined): boolean {
+  if (!userId) return false;
+  const cfg = getSundayGuideUnitConfig(unitId);
+  if (cfg.allowedUploaders.length === 0) {
+    // 若該單位清單為空：default 單位走全域 canUserUpload；其他單位禁止上傳（安全預設）
+    if (!unitId || unitId === 'default') return canUserUpload(userId);
+    return false;
+  }
+  return cfg.allowedUploaders.includes(userId);
+}

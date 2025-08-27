@@ -163,7 +163,7 @@ export default function SundayGuide() {
   };
 
   return (
-    <WithChat>
+  <WithChat chatType="sunday-guide">
       <div className={styles.container}>
         <UserIdDisplay />
         {/* 只有有權限的用戶才能看到文件上傳區塊 */}

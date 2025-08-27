@@ -21,14 +21,15 @@ export async function GET(request: Request) {
     
     const docClient = await createDynamoDBClient();
     
-    // 查詢處理結果
+    // 查詢處理結果 - 修改為使用 generationStatus 或 completed
     const params = {
       TableName: SUNDAY_GUIDE_TABLE,
-      FilterExpression: "vectorStoreId = :vectorStoreId AND fileName = :fileName AND completed = :completed",
+      FilterExpression: "vectorStoreId = :vectorStoreId AND fileName = :fileName AND (generationStatus = :completed OR (attribute_not_exists(generationStatus) AND completed = :completedFlag))",
       ExpressionAttributeValues: {
         ":vectorStoreId": vectorStoreId,
         ":fileName": fileName,
-        ":completed": true
+        ":completed": "completed",
+        ":completedFlag": true
       }
     };
 

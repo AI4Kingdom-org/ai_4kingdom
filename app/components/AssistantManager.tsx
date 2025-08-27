@@ -17,6 +17,8 @@ interface AssistantManagerProps {
   setUploadProgress: (progress: number) => void;
   setUploadTime: (time: string) => void;
   disabled?: boolean; // 添加 disabled 屬性支援
+  assistantId?: string; // 新增：可覆寫助手 ID
+  vectorStoreId?: string; // 新增：可覆寫向量庫 ID
 }
 
 interface TaskStatus {
@@ -32,7 +34,9 @@ export default function AssistantManager({
   setIsProcessing, 
   setUploadProgress,
   setUploadTime,
-  disabled = false // 設置默認值為 false
+  disabled = false,
+  assistantId = ASSISTANT_IDS.SUNDAY_GUIDE,
+  vectorStoreId = VECTOR_STORE_IDS.SUNDAY_GUIDE
 }: AssistantManagerProps) {
   const { refreshUsage } = useCredit();
   const { user } = useAuth(); // 添加 useAuth 以獲取用戶 ID
@@ -142,7 +146,10 @@ export default function AssistantManager({
       }
       
       // 開始上傳文件
-      const uploadResponse = await fetch(`/api/vector-store/upload?vectorStoreId=${VECTOR_STORE_IDS.SUNDAY_GUIDE}&assistantId=${ASSISTANT_IDS.SUNDAY_GUIDE}`, {
+    // 若父頁面以 agape 模式使用（透過 localStorage flag 或全局約定），可在這裡加入 unitId=agape；
+    // 簡化：若當前 URL 包含 agape-church 則附加 unitId=agape
+    const isAgapeContext = typeof window !== 'undefined' && window.location.pathname.includes('agape-church');
+  const uploadResponse = await fetch(`/api/vector-store/upload?vectorStoreId=${vectorStoreId}&assistantId=${assistantId}${isAgapeContext ? '&unitId=agape' : ''}` , {
         method: 'POST',
         body: formData
       });
@@ -235,7 +242,7 @@ export default function AssistantManager({
 
   const checkProcessingStatus = async () => {
     try {
-      const statusResponse = await fetch(`/api/sunday-guide/progress?vectorStoreId=${VECTOR_STORE_IDS.SUNDAY_GUIDE}&fileName=${encodeURIComponent(uploadedFileName)}`);
+  const statusResponse = await fetch(`/api/sunday-guide/progress?vectorStoreId=${vectorStoreId}&fileName=${encodeURIComponent(uploadedFileName)}`);
       if (!statusResponse.ok) {
         console.error('检查处理状态失败:', statusResponse.status);
         return;
@@ -313,8 +320,8 @@ export default function AssistantManager({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          assistantId: ASSISTANT_IDS.SUNDAY_GUIDE,
-          vectorStoreId: VECTOR_STORE_IDS.SUNDAY_GUIDE,
+          assistantId,
+          vectorStoreId,
           fileName: uploadedFileName,
           userId: user?.user_id || '-' // 添加用户 ID
         })
@@ -341,7 +348,7 @@ export default function AssistantManager({
       const checkResult = async () => {
         try {
           // 直接查询数据库结果
-          const resultResponse = await fetch(`/api/sunday-guide/check-result?vectorStoreId=${VECTOR_STORE_IDS.SUNDAY_GUIDE}&fileName=${encodeURIComponent(uploadedFileName)}`);
+          const resultResponse = await fetch(`/api/sunday-guide/check-result?vectorStoreId=${vectorStoreId}&fileName=${encodeURIComponent(uploadedFileName)}`);
           if (!resultResponse.ok) {
             setTimeout(checkResult, 5000);
             return;
