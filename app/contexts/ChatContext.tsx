@@ -251,6 +251,19 @@ export function ChatProvider({
         let currentReferences: DocumentReference[] = [];
         
         // 使用流式 API 發送請求
+        // 判斷是否為 agape 單位（以 localStorage 選檔案時可能保存 unitId 或直接依賴 URL）
+        let unitId: string | undefined;
+        try {
+          if (typeof window !== 'undefined') {
+            if (window.location.pathname.includes('agape-church')) unitId = 'agape';
+            else {
+              // 可擴充：從 localStorage 或 config 取得
+              const storedUnit = localStorage.getItem('currentUnitId');
+              if (storedUnit) unitId = storedUnit;
+            }
+          }
+        } catch {}
+
         const response = await fetch('/api/chat', {
             method: 'POST',
             headers: {
@@ -265,7 +278,8 @@ export function ChatProvider({
                     assistantId: config?.assistantId,
                     vectorStoreId: config?.vectorStoreId,
                     stream: true // 啟用流式輸出
-                }
+                },
+                unitId
             })
         });
 

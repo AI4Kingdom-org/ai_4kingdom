@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import OpenAI from 'openai';
 import { createDynamoDBClient } from '@/app/utils/dynamodb';
 import { PutCommand, ScanCommand } from "@aws-sdk/lib-dynamodb";
+import { findUnitByAssistantId, getSundayGuideUnitConfig, VECTOR_STORE_IDS } from '@/app/config/constants';
+import { canUploadToSundayGuideUnit } from '@/app/config/userPermissions';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
@@ -115,8 +117,9 @@ async function checkFileNameExists(fileName: string, assistantId: string) {
 export async function POST(request: Request) {
   try {
     const url = new URL(request.url);
-    const vectorStoreId = url.searchParams.get('vectorStoreId');
-    const assistantId = url.searchParams.get('assistantId');
+  const vectorStoreId = url.searchParams.get('vectorStoreId');
+  const assistantId = url.searchParams.get('assistantId');
+  const unitIdParam = url.searchParams.get('unitId');
 
     console.log('[DEBUG] 收到上傳請求:', {
       vectorStoreId,
@@ -136,6 +139,24 @@ export async function POST(request: Request) {
     const formData = await request.formData();
     const file = formData.get('file') as File;
     const userId = formData.get('userId') as string | null;
+
+    // 單位辨識：優先使用顯式傳入，其次 assistantId 反查
+    let unitId = findUnitByAssistantId(assistantId);
+    let unitIdOverride = false;
+    if (unitIdParam) {
+      unitId = unitIdParam as any;
+      unitIdOverride = true;
+    }
+    const unitCfg = getSundayGuideUnitConfig(unitId);
+    const isAgape = unitId === 'agape';
+
+    // 權限：若是非 default 單位，需檢查 allowedUploaders
+    if (unitId !== 'default') {
+      const allowed = canUploadToSundayGuideUnit(unitId, userId || undefined);
+      if (!allowed) {
+        return NextResponse.json({ error: '無權在此單位上傳' }, { status: 403 });
+      }
+    }
     
     if (!file) {
       console.error('[ERROR] 沒有找到文件');
@@ -181,11 +202,29 @@ export async function POST(request: Request) {
           file_id: uploadedFile.id
         }
       );
-      console.log(`[DEBUG] 文件成功添加到 Vector Store`);      // 3. 寫入 DynamoDB，包含詳細資訊
+      console.log(`[DEBUG] 文件成功添加到 Vector Store`);
+
+      // Agape 單位：為了聊天檢索隔離，還需同步到專用向量庫（若不同）
+      if (isAgape && vectorStoreId !== VECTOR_STORE_IDS.AGAPE_CHURCH) {
+        try {
+          console.log('[DEBUG] 同步文件到 Agape 專用向量庫 (聊天隔離)', {
+            agapeVectorStore: VECTOR_STORE_IDS.AGAPE_CHURCH,
+            fileId: uploadedFile.id
+          });
+          await openai.beta.vectorStores.files.create(
+            VECTOR_STORE_IDS.AGAPE_CHURCH,
+            { file_id: uploadedFile.id }
+          );
+          console.log('[DEBUG] 已同步到 Agape 專用向量庫');
+        } catch (syncErr) {
+          console.warn('[WARN] 同步到 Agape 專用向量庫失敗（不阻斷流程）', syncErr);
+        }
+      }
+      // 3. 寫入 DynamoDB，包含詳細資訊
       try {
         const docClient = await createDynamoDBClient();
         const tableName = process.env.NEXT_PUBLIC_SUNDAY_GUIDE_TABLE || 'SundayGuide';
-        await docClient.send(new PutCommand({
+    await docClient.send(new PutCommand({
           TableName: tableName,
           Item: {
             assistantId,
@@ -198,9 +237,14 @@ export async function POST(request: Request) {
             uploadTimestamp: new Date().toISOString(),
             updatedAt: new Date().toISOString(),
             Timestamp: new Date().toISOString(), // 添加必要的 Timestamp 主鍵
-            completed: true, // 新增 completed 欄位，設為 true
-            isSystemResource: true, // 標記為系統資源，所有用戶可訪問
-            accessType: 'public' // 標記為公共訪問
+      completed: false, // 初始不標記完成，等待內容生成
+      generationStatus: 'pending', // 新增：pending | processing | completed | failed
+      attemptCount: 0,
+            isSystemResource: unitId === 'default', // default 維持公共
+            accessType: unitCfg.accessType || (unitId === 'default' ? 'public' : 'restricted'),
+            unitId,
+            unitIdOverride,
+            uploadedBy: userId || 'unknown'
           }
         }));
         console.log('[DEBUG] 已寫入 DynamoDB，標記為系統資源');

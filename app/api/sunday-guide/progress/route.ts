@@ -22,13 +22,15 @@ export async function GET(request: Request) {
     
     const docClient = await createDynamoDBClient();
     
-    // 1. 首先檢查是否已處理完成
+    // 1. 首先檢查是否已處理完成 - 使用 generationStatus 或舊的 completed 欄位
     const completedParams = {
       TableName: SUNDAY_GUIDE_TABLE,
-      FilterExpression: "vectorStoreId = :vectorStoreId AND fileName = :fileName",
+      FilterExpression: "vectorStoreId = :vectorStoreId AND fileName = :fileName AND (generationStatus = :completed OR (attribute_not_exists(generationStatus) AND completed = :completedFlag))",
       ExpressionAttributeValues: {
         ":vectorStoreId": vectorStoreId,
-        ":fileName": fileName
+        ":fileName": fileName,
+        ":completed": "completed",
+        ":completedFlag": true
       }
     };
 
@@ -40,16 +42,34 @@ export async function GET(request: Request) {
         new Date(b.Timestamp || "").getTime() - new Date(a.Timestamp || "").getTime()
       )[0];
       
-      return NextResponse.json({
-        status: 'completed',
-        result: {
-          summary: latestItem.summary,
-          fullText: latestItem.fullText,
-          devotional: latestItem.devotional,
-          bibleStudy: latestItem.bibleStudy
-        },
-        processingTime: latestItem.processingTime
-      });
+      // 檢查是否真的有內容（避免 completed=true 但內容空白）
+      const hasContent = latestItem.summary && latestItem.devotional && latestItem.bibleStudy;
+      
+      if (hasContent) {
+        return NextResponse.json({
+          status: 'completed',
+          result: {
+            summary: latestItem.summary,
+            fullText: latestItem.fullText,
+            devotional: latestItem.devotional,
+            bibleStudy: latestItem.bibleStudy
+          },
+          processingTime: latestItem.processingTime
+        });
+      } else if (latestItem.generationStatus === 'failed') {
+        return NextResponse.json({
+          status: 'failed',
+          error: latestItem.lastError || '處理失敗',
+          stage: 'unknown'
+        });
+      } else {
+        // 標記為完成但無內容，可能仍在處理中
+        return NextResponse.json({
+          status: 'processing',
+          stage: latestItem.generationStatus === 'processing' ? 'unknown' : 'summary',
+          progress: 50
+        });
+      }
     }
     
     // 2. 否則檢查進度表中的狀態

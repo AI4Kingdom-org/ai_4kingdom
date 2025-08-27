@@ -154,7 +154,7 @@ const openai = new OpenAI({
 });
 
 // 函數用於提取文檔引用
-function extractDocumentReferences(toolCall: any, currentUserId?: string): any[] {
+async function extractDocumentReferences(toolCall: any, currentUserId?: string, opts?: { agapeOnly?: boolean; agapeSet?: Set<string> }): Promise<any[]> {
   try {
     if (toolCall?.type !== 'file_search' || !toolCall?.output) {
       return [];
@@ -167,17 +167,19 @@ function extractDocumentReferences(toolCall: any, currentUserId?: string): any[]
       
       // 對於johnsung和sunday-guide的文件，這些是共享資源，所以不需要檢查擁有者
       // 將所有文件都視為系統資源，而不是私人資源
-      return parsedOutput.citations.map((citation: any) => {
-        return {
-          fileName: citation.file_name || citation.fileName || '未知檔案',
-          filePath: citation.file_path || citation.filePath || '',
-          pageNumber: citation.page_number || citation.pageNumber || null,
-          text: citation.text || '',
-          fileId: citation.file_id || citation.fileId || '',
-          isCurrentUserFile: false, // 所有文件都視為系統資源
-          uploadedBy: "系統資源" // 統一顯示為系統資源，不顯示具體用戶
-        };
-      });
+      let cites = parsedOutput.citations;
+      if (opts?.agapeOnly && opts.agapeSet) {
+        cites = cites.filter((c: any) => opts.agapeSet!.has(c.file_id || c.fileId));
+      }
+      return cites.map((citation: any) => ({
+        fileName: citation.file_name || citation.fileName || '未知檔案',
+        filePath: citation.file_path || citation.filePath || '',
+        pageNumber: citation.page_number || citation.pageNumber || null,
+        text: citation.text || '',
+        fileId: citation.file_id || citation.fileId || '',
+        isCurrentUserFile: false,
+        uploadedBy: '系統資源'
+      }));
     }
     
     return [];
@@ -192,7 +194,8 @@ async function* streamRunResults(
   openai: OpenAI,
   threadId: string,
   runId: string,
-  userId?: string
+  userId?: string,
+  opts?: { agapeOnly?: boolean }
 ) {
   let runStatus = await openai.beta.threads.runs.retrieve(threadId, runId);
   let lastMessageId: string | null = null;
@@ -229,11 +232,21 @@ async function* streamRunResults(
     let references: any[] = [];
     
     // 提取文檔引用
+  const agapeSet: Set<string> | undefined = opts?.agapeOnly ? await (async () => {
+      try {
+        const docClient = await getDocClient();
+        const table = process.env.NEXT_PUBLIC_SUNDAY_GUIDE_TABLE || 'SundayGuide';
+        const { ScanCommand } = await import('@aws-sdk/lib-dynamodb');
+        const res = await docClient.send(new ScanCommand({ TableName: table, FilterExpression: 'unitId = :u', ExpressionAttributeValues: { ':u': 'agape' } }));
+        return new Set((res.Items || []).map(r => r.fileId).filter(Boolean));
+      } catch { return new Set(); }
+    })() : undefined;
+
     if (runStatus.required_action?.type === 'submit_tool_outputs') {
       const toolCalls = runStatus.required_action.submit_tool_outputs.tool_calls;
       for (const call of toolCalls) {
         if (call.function.name === 'file_search') {
-          const callReferences = extractDocumentReferences(call, userId);
+          const callReferences = await extractDocumentReferences(call, userId, { agapeOnly: opts?.agapeOnly, agapeSet });
           references = [...references, ...callReferences];
         }
       }
@@ -249,7 +262,7 @@ async function* streamRunResults(
       for (const step of retrievalSteps) {
         const toolOutputs = (step.step_details as any).retrieval_tool_calls || [];
         for (const tool of toolOutputs) {
-          const toolReferences = extractDocumentReferences(tool, userId);
+          const toolReferences = await extractDocumentReferences(tool, userId, { agapeOnly: opts?.agapeOnly, agapeSet });
           references = [...references, ...toolReferences];
         }
       }
@@ -326,7 +339,7 @@ export async function POST(request: Request) {
       });
     }
 
-    const { message, threadId, userId, config } = requestBody;
+  const { message, threadId, userId, config, unitId } = requestBody;
 
     // 驗證必要參數
     if (!message || !config || !config.assistantId) {
@@ -344,6 +357,21 @@ export async function POST(request: Request) {
         status: 400,
         headers 
       });
+    }
+
+    // 單位識別（目前僅支援 agape 額外隔離）
+    const isAgapeUnit = unitId === 'agape' || (config?.type === 'sunday-guide' && typeof request.headers.get('referer') === 'string' && request.headers.get('referer')?.includes('agape-church'));
+
+    // 如為 agape 強制覆寫 vectorStoreId 為專用向量庫（若存在）
+    if (isAgapeUnit) {
+      try {
+        const { VECTOR_STORE_IDS } = await import('../../config/constants');
+        if (VECTOR_STORE_IDS.AGAPE_CHURCH) {
+          config.vectorStoreId = VECTOR_STORE_IDS.AGAPE_CHURCH;
+        }
+      } catch (e) {
+        console.warn('[WARN] 無法載入 VECTOR_STORE_IDS 以覆寫 Agape 向量庫', e);
+      }
     }
 
     // 验证助手
@@ -418,7 +446,6 @@ export async function POST(request: Request) {
           tool_resources: {
             file_search: {
               vector_store_ids: [config.vectorStoreId]
-              // 不使用用戶過濾，所有文件可被所有用戶訪問
             }
           }
         } : {})
@@ -468,7 +495,6 @@ export async function POST(request: Request) {
         tool_resources: {
           file_search: {
             vector_store_ids: [config.vectorStoreId]
-            // 不使用用戶過濾，所有文件可被所有用戶訪問
           }
         }
       } : {})

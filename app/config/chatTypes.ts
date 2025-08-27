@@ -42,7 +42,10 @@ export const CHAT_TYPE_CONFIGS: Record<ChatType, ChatTypeConfig> = {
   'sunday-guide': {
     type: 'sunday-guide',
     title: '主日导读',
-    description: '主日经文导读助手'
+  description: '主日经文导读助手',
+  // 補上實際使用的牧者助手與向量庫，避免預設 fallback 到 GENERAL
+  assistantId: ASSISTANT_IDS.SUNDAY_GUIDE,
+  vectorStoreId: VECTOR_STORE_IDS.SUNDAY_GUIDE
   },
   'bible-study': {
     type: 'bible-study',
