@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import OpenAI from 'openai';
 import { createDynamoDBClient } from '../../../utils/dynamodb';
-import { PutCommand, ScanCommand } from "@aws-sdk/lib-dynamodb";
+import { PutCommand, ScanCommand, DeleteCommand } from "@aws-sdk/lib-dynamodb";
 import { ASSISTANT_IDS, findUnitByAssistantId, getSundayGuideUnitConfig } from '@/app/config/constants';
 import { canUploadToSundayGuideUnit } from '@/app/config/userPermissions';
 
@@ -351,5 +351,66 @@ export async function POST(request: Request) {
     console.error('[FATAL] 文件上傳處理失敗:', errorResponse);
     
     return NextResponse.json(errorResponse, { status: 500 });
+  }
+}
+
+// 單筆刪除：僅允許該筆上傳者且 unitId=agape (公開瀏覽) 刪除
+export async function DELETE(request: Request) {
+  try {
+    const url = new URL(request.url);
+    const fileId = url.searchParams.get('fileId');
+    const unitId = url.searchParams.get('unitId');
+    const userId = url.searchParams.get('userId');
+
+    if (!fileId || !unitId || !userId) {
+      return NextResponse.json({ success: false, error: '缺少必要參數 fileId / unitId / userId' }, { status: 400 });
+    }
+    if (unitId !== 'agape') {
+      return NextResponse.json({ success: false, error: '目前僅支援 agape 單位刪除' }, { status: 400 });
+    }
+
+    const docClient = await createDynamoDBClient();
+    const tableName = process.env.NEXT_PUBLIC_SUNDAY_GUIDE_TABLE || 'SundayGuide';
+
+    // 以 fileId 掃描定位紀錄（後續可用 GSI 優化）
+    const scanRes = await docClient.send(new ScanCommand({
+      TableName: tableName,
+      FilterExpression: 'fileId = :fid',
+      ExpressionAttributeValues: { ':fid': fileId }
+    }));
+    const items = scanRes.Items || [];
+    if (items.length === 0) {
+      return NextResponse.json({ success: false, error: '找不到檔案紀錄' }, { status: 404 });
+    }
+
+    // 若有多筆同 fileId，取最新
+    const target = items.sort((a: any, b: any) => new Date(b.Timestamp).getTime() - new Date(a.Timestamp).getTime())[0];
+    const uploader = (target.uploadedBy || target.userId || target.UserId || '').toString();
+    const recordUnit = (target.unitId || '').toString();
+
+    if (uploader !== userId.toString()) {
+      return NextResponse.json({ success: false, error: '無刪除權限 (非上傳者)' }, { status: 403 });
+    }
+    if (recordUnit !== 'agape') {
+      return NextResponse.json({ success: false, error: '紀錄非 agape 單位或缺少單位資訊' }, { status: 400 });
+    }
+
+    const assistantId = target.assistantId;
+    const timestamp = target.Timestamp;
+    if (!assistantId || !timestamp) {
+      return NextResponse.json({ success: false, error: '紀錄缺少主鍵 (assistantId / Timestamp)' }, { status: 500 });
+    }
+
+    await docClient.send(new DeleteCommand({
+      TableName: tableName,
+      Key: { assistantId, Timestamp: timestamp }
+    }));
+
+    // TODO: 若需連動刪除 OpenAI vector store 或文件，於此擴充（需要保存 vectorStoreId / openai file id）
+
+    return NextResponse.json({ success: true, message: '刪除成功', fileId });
+  } catch (error) {
+    console.error('[DELETE /api/sunday-guide/documents] 失敗', error);
+    return NextResponse.json({ success: false, error: '刪除失敗' }, { status: 500 });
   }
 }
