@@ -15,7 +15,8 @@ const nextConfig = {
           },
           {
             key: 'Access-Control-Allow-Origin',
-            value: 'https://ai4kingdom.com',
+            // 使用主要網域環境變數，預設改為 .org；若需要多來源請在各 API route 動態處理 CORS
+            value: process.env.NEXT_PUBLIC_PRIMARY_DOMAIN || 'https://ai4kingdom.org',
           },
         ],
       },

@@ -24,7 +24,7 @@ async function getUserSubscription(userId: string): Promise<Subscription> {
   try {
     // 在伺服器端 API 路由中不使用 credentials: 'include'，因為沒有用户瀏覽器 cookies
     const response = await fetch(
-      `https://ai4kingdom.com/wp-json/custom/v1/validate_session`,
+      `${process.env.WP_API_BASE || process.env.NEXT_PUBLIC_WP_API_BASE || 'https://ai4kingdom.org/wp-json/custom/v1'}/validate_session`,
       {
         method: 'POST',
         headers: {

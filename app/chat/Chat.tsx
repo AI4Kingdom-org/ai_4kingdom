@@ -231,7 +231,7 @@ export default function Chat({ type, assistantId, vectorStoreId }: ChatProps) {
       <p>请先登录后使用</p>
       <button 
         className={styles.loginButton}
-        onClick={() => window.open('https://ai4kingdom.com/login', '_blank')}
+  onClick={() => window.open(`${process.env.NEXT_PUBLIC_PRIMARY_DOMAIN || 'https://ai4kingdom.org'}/login`, '_blank')}
       >
         去登录
       </button>

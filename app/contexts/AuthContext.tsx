@@ -28,11 +28,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const API_BASE = 'https://ai4kingdom.com';
+  // 主要站台與 WordPress API 基底改為環境變數，可於過渡期保留 fallback
+  const API_BASE = process.env.NEXT_PUBLIC_PRIMARY_DOMAIN || 'https://ai4kingdom.org';
+  const WP_API_BASE = process.env.NEXT_PUBLIC_WP_API_BASE || `${API_BASE}/wp-json/custom/v1`;
 
   const makeRequest = async (endpoint: string, options: RequestInit) => {
     try {
-      const response = await fetch(`${API_BASE}/wp-json/custom/v1/${endpoint}`, {
+  const response = await fetch(`${WP_API_BASE}/${endpoint}`, {
         ...options,
         headers: {
           'Content-Type': 'application/json',
@@ -56,7 +58,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const login = async (username: string, password: string): Promise<boolean> => {
     try {
-      const response = await fetch(`${API_BASE}/wp-json/custom/v1/login`, {
+  const response = await fetch(`${WP_API_BASE}/login`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
