@@ -27,6 +27,9 @@ export default function UserPermissionsPage() {
   // Agape 單位專屬上傳者
   const [agapeUploaders, setAgapeUploaders] = useState<string[]>([]);
   const [newAgapeUserId, setNewAgapeUserId] = useState('');
+  // East Christ Home 單位專屬上傳者
+  const [eastUploaders, setEastUploaders] = useState<string[]>([]);
+  const [newEastUserId, setNewEastUserId] = useState('');
 
   // 檢查當前用戶是否為管理員
   const isAdmin = user?.user_id === '1' || PERMISSION_GROUPS.ADMINS.includes(user?.user_id || '');
@@ -38,7 +41,7 @@ export default function UserPermissionsPage() {
         text: '您沒有權限訪問此頁面'
       });
     } else {
-      loadCurrentPermissions();
+  loadCurrentPermissions();
     }
   }, [isAdmin]);
 
@@ -52,7 +55,8 @@ export default function UserPermissionsPage() {
       if (data.success) {
         setPermittedUsers(data.data.uploadPermittedUsers);
         setPermissionGroups(data.data.permissionGroups);
-        await loadAgapeUploaders();
+  await loadAgapeUploaders();
+  await loadEastUploaders();
         await fetchUserDetails();
       } else {
         throw new Error(data.error);
@@ -64,7 +68,8 @@ export default function UserPermissionsPage() {
         text: '加載權限配置失敗'
       });
       // 使用默認配置
-      await loadAgapeUploaders();
+  await loadAgapeUploaders();
+  await loadEastUploaders();
       await fetchUserDetails();
     } finally {
       setLoading(false);
@@ -81,6 +86,19 @@ export default function UserPermissionsPage() {
       }
     } catch (e) {
       console.error('載入 Agape 單位上傳者失敗', e);
+    }
+  };
+
+  // 讀取 East Christ Home 單位 allowedUploaders
+  const loadEastUploaders = async () => {
+    try {
+      const res = await fetch('/api/admin/sunday-guide-units');
+      const data = await res.json();
+      if (data.success) {
+        setEastUploaders(data.data.units.eastChristHome?.allowedUploaders || []);
+      }
+    } catch (e) {
+      console.error('載入 East Christ Home 單位上傳者失敗', e);
     }
   };
 
@@ -275,6 +293,53 @@ export default function UserPermissionsPage() {
     }
   };
 
+  // 更新 East 單位 allowedUploaders
+  const updateEastUploaders = async (uploaders: string[]) => {
+    try {
+      const res = await fetch('/api/admin/sunday-guide-units', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ unitId: 'eastChristHome', allowedUploaders: uploaders, userId: user?.user_id })
+      });
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error || '更新失敗');
+      return true;
+    } catch (e) {
+      console.error('更新 East 上傳者失敗', e);
+      setMessage({ type: 'error', text: '更新 East 上傳者失敗' });
+      return false;
+    }
+  };
+
+  const addEastUploader = async () => {
+    if (!newEastUserId.trim()) {
+      setMessage({ type: 'error', text: '請輸入用戶ID' });
+      return;
+    }
+    if (eastUploaders.includes(newEastUserId.trim())) {
+      setMessage({ type: 'error', text: '該用戶已在 East 上傳清單中' });
+      return;
+    }
+    const updated = [...eastUploaders, newEastUserId.trim()];
+    const ok = await updateEastUploaders(updated);
+    if (ok) {
+      setEastUploaders(updated);
+      setNewEastUserId('');
+      setMessage({ type: 'success', text: 'East 上傳者已新增' });
+      await fetchUserDetails();
+    }
+  };
+
+  const removeEastUploader = async (uId: string) => {
+    if (!confirm(`確定要移除用戶 ${userDetails[uId]?.displayName || uId} 的 East 上傳權限嗎？`)) return;
+    const updated = eastUploaders.filter(id => id !== uId);
+    const ok = await updateEastUploaders(updated);
+    if (ok) {
+      setEastUploaders(updated);
+      setMessage({ type: 'success', text: 'East 上傳者已移除' });
+    }
+  };
+
   const addAgapeUploader = async () => {
     if (!newAgapeUserId.trim()) {
       setMessage({ type: 'error', text: '請輸入用戶ID' });
@@ -417,6 +482,42 @@ export default function UserPermissionsPage() {
                     {userDetails[userId]?.email && <span className={styles.userEmail}>{userDetails[userId].email}</span>}
                   </div>
                   <button onClick={() => removeAgapeUploader(userId)} className={styles.removeButton}>移除</button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>
+
+      {/* East Christ Home 單位專屬上傳權限管理 */}
+      <div className={styles.section}>
+        <h2 className={styles.sectionTitle}>East Christ Home 單位專屬上傳權限</h2>
+        <div className={styles.addUserForm}>
+          <input
+            type="text"
+            placeholder="輸入用戶ID"
+            value={newEastUserId}
+            onChange={(e) => setNewEastUserId(e.target.value)}
+            className={styles.input}
+          />
+          <button onClick={addEastUploader} className={styles.button}>添加 East 上傳權限</button>
+        </div>
+        <div className={styles.userList}>
+          <h3>East 具有上傳權限的用戶</h3>
+          {loading ? (
+            <div className={styles.loading}>載入中...</div>
+          ) : eastUploaders.length === 0 ? (
+            <div className={styles.noUsers}>暫無用戶</div>
+          ) : (
+            <ul className={styles.list}>
+              {eastUploaders.map(userId => (
+                <li key={userId} className={styles.listItem}>
+                  <div className={styles.userInfo}>
+                    <strong>{userDetails[userId]?.displayName || `用戶${userId}`}</strong>
+                    <span className={styles.userId}>ID: {userId}</span>
+                    {userDetails[userId]?.email && <span className={styles.userEmail}>{userDetails[userId].email}</span>}
+                  </div>
+                  <button onClick={() => removeEastUploader(userId)} className={styles.removeButton}>移除</button>
                 </li>
               ))}
             </ul>

@@ -146,10 +146,12 @@ export default function AssistantManager({
       }
       
       // 開始上傳文件
-    // 若父頁面以 agape 模式使用（透過 localStorage flag 或全局約定），可在這裡加入 unitId=agape；
-    // 簡化：若當前 URL 包含 agape-church 則附加 unitId=agape
-    const isAgapeContext = typeof window !== 'undefined' && window.location.pathname.includes('agape-church');
-  const uploadResponse = await fetch(`/api/vector-store/upload?vectorStoreId=${vectorStoreId}&assistantId=${assistantId}${isAgapeContext ? '&unitId=agape' : ''}` , {
+    // 單位上下文：agape 或 eastChristHome（依 URL 判斷）
+    const pathname = typeof window !== 'undefined' ? window.location.pathname : '';
+    const unitQS = pathname.includes('agape-church')
+      ? '&unitId=agape'
+      : (pathname.includes('east-christ-home') ? '&unitId=eastChristHome' : '');
+  const uploadResponse = await fetch(`/api/vector-store/upload?vectorStoreId=${vectorStoreId}&assistantId=${assistantId}${unitQS}` , {
         method: 'POST',
         body: formData
       });
