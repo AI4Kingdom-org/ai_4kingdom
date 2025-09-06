@@ -150,7 +150,7 @@ export default function AssistantManager({
     const pathname = typeof window !== 'undefined' ? window.location.pathname : '';
     const unitQS = pathname.includes('agape-church')
       ? '&unitId=agape'
-      : (pathname.includes('east-christ-home') ? '&unitId=eastChristHome' : '');
+      : (pathname.includes('east-christ-home') ? '&unitId=eastChristHome' : (pathname.includes('jian-zhu') ? '&unitId=jianZhu' : ''));
   const uploadResponse = await fetch(`/api/vector-store/upload?vectorStoreId=${vectorStoreId}&assistantId=${assistantId}${unitQS}` , {
         method: 'POST',
         body: formData

@@ -44,7 +44,14 @@ export const SUNDAY_GUIDE_UNITS = {
   eastChristHome: {
     assistantId: ASSISTANT_IDS.SUNDAY_GUIDE,
     vectorStoreId: VECTOR_STORE_IDS.SUNDAY_GUIDE,
-    allowedUploaders: [ '1', '24'] as string[],
+    allowedUploaders: [ '1', '24', '22'] as string[],
+    accessType: 'public' as const
+  },
+  // Jian Zhu：沿用 Sunday Guide 助手/向量庫，透過 unitId 分流
+  jianZhu: {
+    assistantId: ASSISTANT_IDS.SUNDAY_GUIDE,
+    vectorStoreId: VECTOR_STORE_IDS.SUNDAY_GUIDE,
+    allowedUploaders: [ '1', '24', '22', '6'] as string[],
     accessType: 'public' as const
   }
 } as const;
