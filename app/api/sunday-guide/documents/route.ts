@@ -15,6 +15,7 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
   const assistantId = searchParams.get('assistantId');
   const agapeFilter = searchParams.get('agapeFilter') === 'true';
+  const unitIdParam = searchParams.get('unitId') || undefined; // 新增：通用 unitId 過濾
     let userId = searchParams.get('userId');
     const allUsers = searchParams.get('allUsers') === 'true'; // 新增：是否獲取所有用戶的文檔
     const page = parseInt(searchParams.get('page') || '1');
@@ -43,7 +44,8 @@ export async function GET(request: Request) {
     
     // Agape 公開瀏覽特殊處理：
     // 現在 Agape 與 Sunday Guide 共用 assistantId；若 agapeFilter=true 則忽略傳入的 assistantId 過濾，稍後用 unitId / 舊 assistantId 二次篩選。
-    if (!agapeFilter) {
+  // 若指定 unitId 或 agapeFilter，先不以 assistantId 篩選（改以二次過濾）
+  if (!agapeFilter && !unitIdParam) {
       if (assistantId) {
         filterExpressions.push("assistantId = :assistantId");
         expressionAttributeValues[":assistantId"] = assistantId;
@@ -93,16 +95,17 @@ export async function GET(request: Request) {
     // 處理查詢結果
     let recordsRaw = result.Items || [];
 
-    // agapeFilter: 僅顯示屬於 agape 單位的記錄：
-    // 條件1：item.unitId === 'agape'（新模式）
-    // 或 條件2：舊記錄 assistantId === AGAPE_CHURCH（遺留模式，可能沒有 unitId）
-    if (agapeFilter) {
-      const unitCfg = getSundayGuideUnitConfig('agape');
+    // 單位過濾：
+    // - 若有 unitIdParam：僅顯示該單位，並依該單位 allowedUploaders 篩選（公開瀏覽頁面 allUsers=true 場景）
+    // - 若 agapeFilter=true（相容舊參數）：行為等同 unitIdParam='agape'
+    const effectiveUnit = unitIdParam || (agapeFilter ? 'agape' : undefined);
+    if (effectiveUnit) {
+      const unitCfg = getSundayGuideUnitConfig(effectiveUnit);
       const allowed = unitCfg.allowedUploaders.map((u: string) => u.toString());
       recordsRaw = recordsRaw.filter(item => {
         const uploader = (item.uploadedBy || item.userId || item.UserId || '').toString();
         const itemUnit = (item.unitId || '').toString();
-        return itemUnit === 'agape' && allowed.includes(uploader);
+        return itemUnit === effectiveUnit && (allowed.length === 0 || allowed.includes(uploader));
       });
     }
 
@@ -365,8 +368,8 @@ export async function DELETE(request: Request) {
     if (!fileId || !unitId || !userId) {
       return NextResponse.json({ success: false, error: '缺少必要參數 fileId / unitId / userId' }, { status: 400 });
     }
-    if (unitId !== 'agape') {
-      return NextResponse.json({ success: false, error: '目前僅支援 agape 單位刪除' }, { status: 400 });
+    if (!['agape', 'eastChristHome'].includes(unitId)) {
+      return NextResponse.json({ success: false, error: '不支援的單位' }, { status: 400 });
     }
 
     const docClient = await createDynamoDBClient();
@@ -391,8 +394,8 @@ export async function DELETE(request: Request) {
     if (uploader !== userId.toString()) {
       return NextResponse.json({ success: false, error: '無刪除權限 (非上傳者)' }, { status: 403 });
     }
-    if (recordUnit !== 'agape') {
-      return NextResponse.json({ success: false, error: '紀錄非 agape 單位或缺少單位資訊' }, { status: 400 });
+    if (recordUnit !== unitId) {
+      return NextResponse.json({ success: false, error: '紀錄單位與請求單位不一致或缺少單位資訊' }, { status: 400 });
     }
 
     const assistantId = target.assistantId;
