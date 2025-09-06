@@ -1,65 +1,242 @@
 "use client";
 
-import { useEffect, useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { useAuth } from '../../contexts/AuthContext';
+import { useChat } from '../../contexts/ChatContext';
+import { useCredit } from '../../contexts/CreditContext';
+import Chat from '../../components/Chat/Chat';
 import WithChat from '../../components/layouts/WithChat';
-import styles from '../../sunday-guide/SundayGuide.module.css';
+import styles from '../../user-sunday-guide/page.module.css';
+import { CHAT_TYPES } from '../../config/chatTypes';
+import { ASSISTANT_IDS, VECTOR_STORE_IDS } from '../../config/constants';
+import ReactMarkdown from 'react-markdown';
 
-interface FileItem { fileId: string; fileName: string; uploaderId?: string; updatedAt?: string; }
+type GuideMode = 'summary' | 'devotional' | 'bible' | null;
 
-export default function JianZhuNavigatorPage() {
-  const [files, setFiles] = useState<FileItem[]>([]);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
-  const filesPerPage = 20;
+interface JianZhuRecord {
+  fileName: string;
+  uploadTime: string;
+  fileUniqueId: string; // reuse fileId
+  fileId?: string;
+}
 
-  const fetchFiles = async (page: number = 1) => {
+function JianZhuNavigatorContent() {
+  const [fileList, setFileList] = useState<JianZhuRecord[]>([]);
+  const [selectedFileUniqueId, setSelectedFileUniqueId] = useState<string | null>(null);
+  const { user } = useAuth();
+  const { setConfig } = useChat();
+  const { refreshUsage } = useCredit();
+  const [selectedMode, setSelectedMode] = useState<GuideMode>(null);
+  const [sermonContent, setSermonContent] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const contentRef = useRef<HTMLDivElement>(null);
+  const [fileName, setFileName] = useState<string>('');
+  const [uploadTime, setUploadTime] = useState<string>('');
+  const [pdfLoading, setPdfLoading] = useState(false);
+  const [pdfError, setPdfError] = useState<string | null>(null);
+
+  // 初始化 chat 設定為共用 Sunday Guide 助手/向量庫
+  useEffect(() => {
+    if (user?.user_id) {
+      setConfig({
+        type: CHAT_TYPES.SUNDAY_GUIDE,
+        assistantId: ASSISTANT_IDS.SUNDAY_GUIDE,
+        vectorStoreId: VECTOR_STORE_IDS.SUNDAY_GUIDE,
+        userId: user.user_id
+      });
+      fetchFiles();
+      try { localStorage.setItem('currentUnitId', 'jianZhu'); } catch {}
+    }
+  }, [user, setConfig]);
+
+  const fetchFiles = async () => {
     try {
-      const res = await fetch(`/api/sunday-guide/documents?page=${page}&limit=${filesPerPage}&allUsers=true&unitId=jianZhu`);
-      if (!res.ok) throw new Error('讀取失敗');
+      const res = await fetch(`/api/sunday-guide/documents?unitId=jianZhu&allUsers=true`);
+  if (!res.ok) throw new Error('获取文件记录失败');
       const data = await res.json();
-      if (data.success && data.records) {
-        const sorted = data.records.sort((a: any, b: any) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
-        const mapped = sorted.map((rec: any) => ({ fileId: rec.fileId, fileName: rec.fileName || '未命名', uploaderId: rec.userId, updatedAt: rec.updatedAt }));
-        setFiles(mapped);
-        setTotalPages(Math.ceil((data.totalCount || mapped.length) / filesPerPage));
-      } else { setFiles([]); setTotalPages(1); }
-    } catch { setFiles([]); setTotalPages(1); }
+      if (data.success && data.records?.length) {
+        const sorted = [...data.records].sort((a: any, b: any) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+        const mapped: JianZhuRecord[] = sorted.map((r: any) => ({
+          fileName: r.fileName || '未命名文件',
+          uploadTime: r.updatedAt,
+          fileUniqueId: r.fileId,
+          fileId: r.fileId
+        }));
+        setFileList(mapped);
+        // 從 localStorage 恢復選擇，否則取最新一筆
+        const storedId = typeof window !== 'undefined' ? localStorage.getItem('selectedFileId') : null;
+        const storedName = typeof window !== 'undefined' ? localStorage.getItem('selectedFileName') : null;
+        const storedItem = storedId ? mapped.find(m => m.fileUniqueId === storedId) : null;
+        const target = storedItem || mapped[0];
+        setSelectedFileUniqueId(target.fileUniqueId);
+        setFileName(storedItem ? (storedName || storedItem.fileName) : target.fileName);
+        setUploadTime(new Date(target.uploadTime).toLocaleDateString('zh-TW'));
+      } else {
+        setFileList([]);
+        setFileName('尚未上传文件');
+        setUploadTime('');
+        setSelectedFileUniqueId(null);
+      }
+    } catch (e) {
+      console.error(e);
+      setFileList([]);
+      setFileName('获取文件信息失败');
+      setUploadTime('');
+      setSelectedFileUniqueId(null);
+    }
   };
 
-  useEffect(() => { fetchFiles(1); localStorage.setItem('currentUnitId', 'jianZhu'); }, []);
+  const broadcastSelection = (fileId: string, name: string) => {
+    try {
+      localStorage.setItem('selectedFileId', fileId);
+      localStorage.setItem('selectedFileName', name);
+      localStorage.setItem('currentUnitId', 'jianZhu');
+      const channel = new BroadcastChannel('file-selection');
+      channel.postMessage({
+        type: 'FILE_SELECTED',
+        assistantId: ASSISTANT_IDS.SUNDAY_GUIDE,
+        fileId,
+        fileName: name,
+        ts: Date.now()
+      });
+      channel.close();
+    } catch (err) {
+      console.warn('broadcastSelection error', err);
+    }
+  };
+
+  useEffect(() => {
+    const channel = new BroadcastChannel('file-selection');
+    const handler = (e: MessageEvent) => {
+      const data = e.data;
+      if (data?.type === 'FILE_SELECTED' && data.assistantId === ASSISTANT_IDS.SUNDAY_GUIDE) {
+        setSelectedFileUniqueId(data.fileId);
+        setFileName(data.fileName);
+        setUploadTime('');
+        setSermonContent(null);
+        setSelectedMode(null);
+      }
+    };
+    channel.addEventListener('message', handler);
+    return () => { channel.removeEventListener('message', handler); channel.close(); };
+  }, []);
+
+  const handleModeSelect = async (mode: GuideMode) => {
+    if (!selectedFileUniqueId) return;
+    setSelectedMode(mode);
+    setLoading(true);
+    try {
+      const userId = user?.user_id || '';
+      const apiUrl = `/api/sunday-guide/content/${ASSISTANT_IDS.SUNDAY_GUIDE}?type=${mode}&userId=${encodeURIComponent(userId)}&fileId=${encodeURIComponent(selectedFileUniqueId)}`;
+      const response = await fetch(apiUrl);
+      if (!response.ok) {
+        const errData = await response.json().catch(()=>({error:'未知错误'}));
+        throw new Error(`获取内容失败: ${response.status} - ${errData.error || response.statusText}`);
+      }
+      const data = await response.json();
+      setSermonContent(data.content);
+      await refreshUsage();
+    } catch (e) {
+      console.error(e);
+      alert(e instanceof Error ? e.message : '请稍后重试');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const renderContent = () => {
+  if (loading) return <div className={styles.loading}>加载中，请稍候...</div>;
+    if (!sermonContent) return null;
+  const titles: Record<string,string> = { summary: '讲道总结', devotional: '每日灵修', bible: '查经指引' };
+    return (
+      <div className={styles.contentBox}>
+        <div className={styles.contentHeader}>
+          <h2>{titles[selectedMode!]}</h2>
+          {sermonContent && (
+            <button
+              style={{ marginLeft: 8 }}
+              className={styles.downloadButton}
+              onClick={() => handleDownloadPDF()}
+              disabled={pdfLoading}
+            >
+        {pdfLoading ? '生成中...' : '下载完整版'}
+            </button>
+          )}
+        </div>
+        {pdfError && <div className={styles.errorMessage}>{pdfError}</div>}
+        <div className={styles.markdownContent} ref={contentRef}>
+          <ReactMarkdown>{sermonContent}</ReactMarkdown>
+        </div>
+      </div>
+    );
+  };
+
+  const handleDownloadPDF = () => {
+    setPdfError(null);
+    setPdfLoading(true);
+    try {
+      const userId = user?.user_id || '';
+      const base = '/api/sunday-guide/download-pdf';
+      const params = new URLSearchParams();
+      params.set('assistantId', ASSISTANT_IDS.SUNDAY_GUIDE);
+      params.set('userId', userId);
+      params.set('includeAll', 'true');
+      const url = `${base}?${params.toString()}`;
+      window.open(url, '_blank');
+      setTimeout(()=> setPdfLoading(false), 1200);
+    } catch (err) {
+      console.error('PDF 下载失败', err);
+      setPdfError(err instanceof Error ? err.message : '下载失败');
+      setPdfLoading(false);
+    }
+  };
 
   return (
-    <WithChat chatType="sunday-guide">
-      <div className={styles.navigatorContainer}>
-        <h2 className={styles.sectionTitle}>Jian Zhu Navigator</h2>
-        {files.length === 0 ? (
-          <div className={styles.noRecentFiles}>沒有可瀏覽文檔</div>
-        ) : (
-          <ul className={styles.recentFilesListScrollable}>
-            {files.map((file, idx) => (
-              <li
-                key={file.fileId || idx}
-                className={styles.recentFileItem}
-                style={{ cursor: 'pointer' }}
-                onClick={() => {
-                  try {
-                    localStorage.setItem('selectedFileId', file.fileId);
-                    localStorage.setItem('selectedFileName', file.fileName);
-                    localStorage.setItem('currentUnitId', 'jianZhu');
-                    const channel = new BroadcastChannel('file-selection');
-                    channel.postMessage({ type: 'FILE_SELECTED', fileId: file.fileId, fileName: file.fileName, ts: Date.now() });
-                    channel.close();
-                  } catch {}
-                }}
-              >
-                <span className={styles.fileIndex}>{idx + 1}. </span>
-                <span className={styles.fileName}>{file.fileName}</span>
-                <span className={styles.uploadDate}>{file.updatedAt ? new Date(file.updatedAt).toLocaleDateString('zh-TW') : ''}</span>
-              </li>
-            ))}
-          </ul>
-        )}
+    <div className={styles.container}>
+      <h1 className={styles.title}>主日信息导航</h1>
+      {fileName && fileName !== '尚未上传文件' && fileName !== '获取文件信息失败' && (
+        <div style={{ fontSize: '13px', color: '#0070f3', marginBottom: 12, textAlign: 'center' }}>
+          当前文件: {fileName} {uploadTime && `(上传时间: ${uploadTime})`}
+        </div>
+      )}
+      <div className={styles.buttonGroup}>
+        <button className={`${styles.modeButton} ${selectedMode === 'summary' ? styles.active : ''}`} onClick={()=>handleModeSelect('summary')} disabled={!selectedFileUniqueId}>信息总结</button>
+        <button className={`${styles.modeButton} ${selectedMode === 'devotional' ? styles.active : ''}`} onClick={()=>handleModeSelect('devotional')} disabled={!selectedFileUniqueId}>每日灵修</button>
+        <button className={`${styles.modeButton} ${selectedMode === 'bible' ? styles.active : ''}`} onClick={()=>handleModeSelect('bible')} disabled={!selectedFileUniqueId}>查经指引</button>
       </div>
+      {(!fileName || fileName === '尚未上传文件' || fileName === '获取文件信息失败') && (
+        <div style={{ fontSize: '14px', color: '#ff6b6b', marginTop: 8, marginBottom: 16, textAlign: 'center', padding: '12px', backgroundColor: '#fff5f5', borderRadius: '8px', border: '1px solid #ffebee' }}>
+          {fileName === '获取文件信息失败' ? '无法获取文件信息，请稍后重试' : '目前尚无可用文件'}
+        </div>
+      )}
+      {sermonContent ? (
+        <div className={styles.contentWrapper}>
+          <div className={`${styles.contentArea} ${styles.hasContent}`}>{renderContent()}</div>
+          <div className={styles.chatSection}>
+            {/* 與 East/Agape 相同的 Chat 區塊 */}
+            <Chat
+              type={CHAT_TYPES.SUNDAY_GUIDE}
+              assistantId={ASSISTANT_IDS.SUNDAY_GUIDE}
+              vectorStoreId={VECTOR_STORE_IDS.SUNDAY_GUIDE}
+              userId={user?.user_id || ''}
+            />
+          </div>
+        </div>
+      ) : (
+        <div className={styles.emptyState}><p>请先选择要查看的内容类型</p></div>
+      )}
+      {/* 若需顯示底部文件列表，可依需求補上。此版本與 East/Agape 對齊呈現。 */}
+    </div>
+  );
+}
+
+export default function JianZhuNavigatorPage() {
+  const { user, loading } = useAuth();
+  if (loading) return <div>Loading...</div>;
+  if (!user) return <div>请先登录</div>;
+  return (
+    <WithChat chatType={CHAT_TYPES.SUNDAY_GUIDE}>
+      <JianZhuNavigatorContent />
     </WithChat>
   );
 }
