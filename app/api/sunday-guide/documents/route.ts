@@ -368,7 +368,7 @@ export async function DELETE(request: Request) {
     if (!fileId || !unitId || !userId) {
       return NextResponse.json({ success: false, error: '缺少必要參數 fileId / unitId / userId' }, { status: 400 });
     }
-    if (!['agape', 'eastChristHome'].includes(unitId)) {
+  if (!['agape', 'eastChristHome', 'jianZhu'].includes(unitId)) {
       return NextResponse.json({ success: false, error: '不支援的單位' }, { status: 400 });
     }
 

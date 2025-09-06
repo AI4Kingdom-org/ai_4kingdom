@@ -255,8 +255,9 @@ export function ChatProvider({
     let unitId: string | undefined;
         try {
           if (typeof window !== 'undefined') {
-            if (window.location.pathname.includes('agape-church')) unitId = 'agape';
-      else if (window.location.pathname.includes('east-christ-home')) unitId = 'eastChristHome';
+    if (window.location.pathname.includes('agape-church')) unitId = 'agape';
+  else if (window.location.pathname.includes('east-christ-home')) unitId = 'eastChristHome';
+  else if (window.location.pathname.includes('jian-zhu')) unitId = 'jianZhu';
       else {
               // 可擴充：從 localStorage 或 config 取得
               const storedUnit = localStorage.getItem('currentUnitId');

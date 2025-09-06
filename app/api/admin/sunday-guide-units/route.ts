@@ -19,12 +19,14 @@ export async function GET() {
   const fileContent = fs.readFileSync(CONSTANTS_FILE_PATH, 'utf8');
   const agapeUploaders = parseUnitAllowedUploaders(fileContent, 'agape');
   const eastUploaders = parseUnitAllowedUploaders(fileContent, 'eastChristHome');
+  const jianZhuUploaders = parseUnitAllowedUploaders(fileContent, 'jianZhu');
     return NextResponse.json({
       success: true,
       data: {
         units: {
       agape: { allowedUploaders: agapeUploaders },
-      eastChristHome: { allowedUploaders: eastUploaders }
+      eastChristHome: { allowedUploaders: eastUploaders },
+      jianZhu: { allowedUploaders: jianZhuUploaders }
         }
       }
     });
@@ -49,7 +51,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: '沒有權限執行此操作' }, { status: 403 });
     }
 
-    if (!['agape', 'eastChristHome'].includes(unitId)) {
+  if (!['agape', 'eastChristHome', 'jianZhu'].includes(unitId)) {
       return NextResponse.json({ success: false, error: '不支援的單位' }, { status: 400 });
     }
 

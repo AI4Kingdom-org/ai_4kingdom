@@ -30,6 +30,9 @@ export default function UserPermissionsPage() {
   // East Christ Home 單位專屬上傳者
   const [eastUploaders, setEastUploaders] = useState<string[]>([]);
   const [newEastUserId, setNewEastUserId] = useState('');
+  // Jian Zhu 單位專屬上傳者
+  const [jianZhuUploaders, setJianZhuUploaders] = useState<string[]>([]);
+  const [newJianZhuUserId, setNewJianZhuUserId] = useState('');
 
   // 檢查當前用戶是否為管理員
   const isAdmin = user?.user_id === '1' || PERMISSION_GROUPS.ADMINS.includes(user?.user_id || '');
@@ -52,11 +55,12 @@ export default function UserPermissionsPage() {
       const response = await fetch('/api/admin/permissions');
       const data = await response.json();
       
-      if (data.success) {
+    if (data.success) {
         setPermittedUsers(data.data.uploadPermittedUsers);
         setPermissionGroups(data.data.permissionGroups);
   await loadAgapeUploaders();
   await loadEastUploaders();
+  await loadJianZhuUploaders();
         await fetchUserDetails();
       } else {
         throw new Error(data.error);
@@ -70,6 +74,7 @@ export default function UserPermissionsPage() {
       // 使用默認配置
   await loadAgapeUploaders();
   await loadEastUploaders();
+  await loadJianZhuUploaders();
       await fetchUserDetails();
     } finally {
       setLoading(false);
@@ -99,6 +104,19 @@ export default function UserPermissionsPage() {
       }
     } catch (e) {
       console.error('載入 East Christ Home 單位上傳者失敗', e);
+    }
+  };
+
+  // 讀取 Jian Zhu 單位 allowedUploaders
+  const loadJianZhuUploaders = async () => {
+    try {
+      const res = await fetch('/api/admin/sunday-guide-units');
+      const data = await res.json();
+      if (data.success) {
+        setJianZhuUploaders(data.data.units.jianZhu?.allowedUploaders || []);
+      }
+    } catch (e) {
+      console.error('載入 Jian Zhu 單位上傳者失敗', e);
     }
   };
 
@@ -311,6 +329,24 @@ export default function UserPermissionsPage() {
     }
   };
 
+  // 更新 Jian Zhu 單位 allowedUploaders
+  const updateJianZhuUploaders = async (uploaders: string[]) => {
+    try {
+      const res = await fetch('/api/admin/sunday-guide-units', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ unitId: 'jianZhu', allowedUploaders: uploaders, userId: user?.user_id })
+      });
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error || '更新失敗');
+      return true;
+    } catch (e) {
+      console.error('更新 Jian Zhu 上傳者失敗', e);
+      setMessage({ type: 'error', text: '更新 Jian Zhu 上傳者失敗' });
+      return false;
+    }
+  };
+
   const addEastUploader = async () => {
     if (!newEastUserId.trim()) {
       setMessage({ type: 'error', text: '請輸入用戶ID' });
@@ -337,6 +373,35 @@ export default function UserPermissionsPage() {
     if (ok) {
       setEastUploaders(updated);
       setMessage({ type: 'success', text: 'East 上傳者已移除' });
+    }
+  };
+
+  const addJianZhuUploader = async () => {
+    if (!newJianZhuUserId.trim()) {
+      setMessage({ type: 'error', text: '請輸入用戶ID' });
+      return;
+    }
+    if (jianZhuUploaders.includes(newJianZhuUserId.trim())) {
+      setMessage({ type: 'error', text: '該用戶已在 Jian Zhu 上傳清單中' });
+      return;
+    }
+    const updated = [...jianZhuUploaders, newJianZhuUserId.trim()];
+    const ok = await updateJianZhuUploaders(updated);
+    if (ok) {
+      setJianZhuUploaders(updated);
+      setNewJianZhuUserId('');
+      setMessage({ type: 'success', text: 'Jian Zhu 上傳者已新增' });
+      await fetchUserDetails();
+    }
+  };
+
+  const removeJianZhuUploader = async (uId: string) => {
+    if (!confirm(`確定要移除用戶 ${userDetails[uId]?.displayName || uId} 的 Jian Zhu 上傳權限嗎？`)) return;
+    const updated = jianZhuUploaders.filter(id => id !== uId);
+    const ok = await updateJianZhuUploaders(updated);
+    if (ok) {
+      setJianZhuUploaders(updated);
+      setMessage({ type: 'success', text: 'Jian Zhu 上傳者已移除' });
     }
   };
 
@@ -518,6 +583,42 @@ export default function UserPermissionsPage() {
                     {userDetails[userId]?.email && <span className={styles.userEmail}>{userDetails[userId].email}</span>}
                   </div>
                   <button onClick={() => removeEastUploader(userId)} className={styles.removeButton}>移除</button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>
+
+      {/* Jian Zhu 單位專屬上傳權限管理 */}
+      <div className={styles.section}>
+        <h2 className={styles.sectionTitle}>Jian Zhu 單位專屬上傳權限</h2>
+        <div className={styles.addUserForm}>
+          <input
+            type="text"
+            placeholder="輸入用戶ID"
+            value={newJianZhuUserId}
+            onChange={(e) => setNewJianZhuUserId(e.target.value)}
+            className={styles.input}
+          />
+          <button onClick={addJianZhuUploader} className={styles.button}>添加 Jian Zhu 上傳權限</button>
+        </div>
+        <div className={styles.userList}>
+          <h3>Jian Zhu 具有上傳權限的用戶</h3>
+          {loading ? (
+            <div className={styles.loading}>載入中...</div>
+          ) : jianZhuUploaders.length === 0 ? (
+            <div className={styles.noUsers}>暫無用戶</div>
+          ) : (
+            <ul className={styles.list}>
+              {jianZhuUploaders.map(userId => (
+                <li key={userId} className={styles.listItem}>
+                  <div className={styles.userInfo}>
+                    <strong>{userDetails[userId]?.displayName || `用戶${userId}`}</strong>
+                    <span className={styles.userId}>ID: {userId}</span>
+                    {userDetails[userId]?.email && <span className={styles.userEmail}>{userDetails[userId].email}</span>}
+                  </div>
+                  <button onClick={() => removeJianZhuUploader(userId)} className={styles.removeButton}>移除</button>
                 </li>
               ))}
             </ul>
