@@ -44,7 +44,7 @@ export default function AgapeChurchPage() {
   const fetchLatestFileRecord = async () => {
     if (!user?.user_id) { setLatestFile(null); return; }
     try {
-      const res = await fetch(`/api/sunday-guide/documents?assistantId=${ASSISTANT_IDS.SUNDAY_GUIDE}&userId=${user.user_id}&agapeFilter=true`);
+  const res = await fetch(`/api/sunday-guide/documents?assistantId=${ASSISTANT_IDS.AGAPE_CHURCH}&userId=${user.user_id}&agapeFilter=true`);
   if (!res.ok) throw new Error('获取文件记录失败');
       const data = await res.json();
       if (data.success && data.records?.length) {
@@ -59,7 +59,7 @@ export default function AgapeChurchPage() {
   // 获取所有 agape 单位可公开浏览的文件（只显示 allowedUploaders 上传）
   const fetchAllFileRecords = async (page: number = 1) => {
     try {
-      const res = await fetch(`/api/sunday-guide/documents?assistantId=${ASSISTANT_IDS.SUNDAY_GUIDE}&page=${page}&limit=${filesPerPage}&allUsers=true&agapeFilter=true`);
+  const res = await fetch(`/api/sunday-guide/documents?assistantId=${ASSISTANT_IDS.AGAPE_CHURCH}&page=${page}&limit=${filesPerPage}&allUsers=true&agapeFilter=true`);
   if (!res.ok) throw new Error('获取文件记录失败');
       const data = await res.json();
       if (data.success && data.records) {
@@ -135,8 +135,8 @@ export default function AgapeChurchPage() {
               setUploadProgress={setUploadProgress}
               setUploadTime={setUploadTime}
               disabled={isUploadDisabled}
-              assistantId={ASSISTANT_IDS.SUNDAY_GUIDE}
-              vectorStoreId={VECTOR_STORE_IDS.SUNDAY_GUIDE}
+              assistantId={ASSISTANT_IDS.AGAPE_CHURCH}
+              vectorStoreId={VECTOR_STORE_IDS.AGAPE_CHURCH}
             />
             {isProcessing && (
               <div className={styles.processingAlert}><p>处理中 (约数分钟)，请勿关闭页面。</p></div>
@@ -169,7 +169,7 @@ export default function AgapeChurchPage() {
                         const channel = new BroadcastChannel('file-selection');
                         channel.postMessage({
                           type: 'FILE_SELECTED',
-                          assistantId: ASSISTANT_IDS.SUNDAY_GUIDE,
+                          assistantId: ASSISTANT_IDS.AGAPE_CHURCH,
                           fileId: file.fileId,
                           fileName: file.fileName,
                           ts: Date.now()

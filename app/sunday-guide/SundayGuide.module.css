@@ -381,7 +381,7 @@
   min-height: 44px;
   display: flex;
   align-items: center;
-  padding: 4px 0;
+  padding: 4px 8px;
   margin-bottom: 0;
   font-size: 0.8rem;
   background: #f5f5f5;
@@ -398,13 +398,18 @@
   font-size: 0.8rem;
   font-weight: 500;
   color: #333;
-  flex: 1;
+  flex: 1 1 auto;
+  min-width: 0; /* 允許在 flex 內收縮，啟用省略號 */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .uploadDate {
   font-size: 0.8rem;
   color: #666;
   margin-left: 0.5rem;
+  flex-shrink: 0; /* 日期不被擠壓 */
 }
 
 .noRecentFiles {
