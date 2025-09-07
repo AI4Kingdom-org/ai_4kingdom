@@ -28,6 +28,7 @@ export default function JianZhuPage() {
   const [isUploadDisabled, setIsUploadDisabled] = useState(false);
   const [recentFiles, setRecentFiles] = useState<Array<{ fileName: string, uploadDate: string, fileId: string, uploaderId?: string }>>([]);
   const [selectedFileId, setSelectedFileId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const filesPerPage = 10;
@@ -61,6 +62,29 @@ export default function JianZhuPage() {
   useEffect(() => { fetchAllFileRecords(currentPage); }, [currentPage]);
   useEffect(() => { localStorage.setItem('currentUnitId', 'jianZhu'); }, []);
 
+  const handleDelete = async (fileId: string, uploaderId?: string) => {
+    if (!user?.user_id) return;
+    if (!fileId) return;
+    if (uploaderId?.toString() !== user.user_id.toString()) return; // 前端保護：僅原上傳者可刪除
+    if (!confirm('確定刪除此文件記錄？此操作不可回復。')) return;
+    try {
+      setDeletingId(fileId);
+      const qs = new URLSearchParams({ fileId, unitId: 'jianZhu', userId: user.user_id });
+      const res = await fetch(`/api/sunday-guide/documents?${qs.toString()}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        alert('刪除失敗: ' + (data.error || res.status));
+      } else {
+        await fetchAllFileRecords(currentPage);
+        if (selectedFileId === fileId) setSelectedFileId(null);
+      }
+    } catch (e: any) {
+      alert('刪除時發生錯誤: ' + (e.message || '未知錯誤'));
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
   const handleFileProcessed = async (content: ProcessedContent) => {
     setProcessedContent(content);
     setIsProcessing(false);
@@ -84,8 +108,8 @@ export default function JianZhuPage() {
               setUploadProgress={setUploadProgress}
               setUploadTime={setUploadTime}
               disabled={isUploadDisabled}
-              assistantId={ASSISTANT_IDS.SUNDAY_GUIDE}
-              vectorStoreId={VECTOR_STORE_IDS.SUNDAY_GUIDE}
+              assistantId={ASSISTANT_IDS.JIAN_ZHU}
+              vectorStoreId={VECTOR_STORE_IDS.JIAN_ZHU}
             />
           </section>
         )}
@@ -109,7 +133,7 @@ export default function JianZhuPage() {
                       const channel = new BroadcastChannel('file-selection');
                       channel.postMessage({
                         type: 'FILE_SELECTED',
-                        assistantId: ASSISTANT_IDS.SUNDAY_GUIDE,
+                        assistantId: ASSISTANT_IDS.JIAN_ZHU,
                         fileId: file.fileId,
                         fileName: file.fileName,
                         ts: Date.now()
@@ -121,6 +145,23 @@ export default function JianZhuPage() {
                   <span className={styles.fileIndex}>{((currentPage - 1) * filesPerPage) + idx + 1}. </span>
                   <span className={styles.fileName}>{file.fileName}</span>
                   <span className={styles.uploadDate}>{file.uploadDate}</span>
+                  {file.uploaderId && user?.user_id && file.uploaderId.toString() === user.user_id.toString() && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handleDelete(file.fileId, file.uploaderId); }}
+                      disabled={deletingId === file.fileId}
+                      style={{
+                        marginLeft: 8,
+                        background: 'none',
+                        border: 'none',
+                        color: 'crimson',
+                        cursor: 'pointer',
+                        fontSize: '14px'
+                      }}
+                      title="刪除此文件"
+                    >
+                      {deletingId === file.fileId ? '刪除中...' : '🗑'}
+                    </button>
+                  )}
                 </li>
               ))}
             </ul>

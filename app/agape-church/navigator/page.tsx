@@ -40,11 +40,11 @@ function AgapeNavigatorContent() {
   // 初始化 chat config 為 AGAPE 專用 assistant/vector store
   useEffect(() => {
     if (user?.user_id) {
-      // Agape 單位現已共用 SUNDAY_GUIDE assistant/vector store，只靠 unitId/權限隔離
+      // Agape 單位改為專用 Assistant/Vector Store
       setConfig({
         type: CHAT_TYPES.SUNDAY_GUIDE,
-        assistantId: ASSISTANT_IDS.SUNDAY_GUIDE,
-        vectorStoreId: VECTOR_STORE_IDS.SUNDAY_GUIDE,
+        assistantId: ASSISTANT_IDS.AGAPE_CHURCH,
+        vectorStoreId: VECTOR_STORE_IDS.AGAPE_CHURCH,
         userId: user.user_id
       });
       fetchAgapeFiles();
@@ -96,7 +96,7 @@ function AgapeNavigatorContent() {
       const channel = new BroadcastChannel('file-selection');
       channel.postMessage({
         type: 'FILE_SELECTED',
-  assistantId: ASSISTANT_IDS.SUNDAY_GUIDE,
+  assistantId: ASSISTANT_IDS.AGAPE_CHURCH,
         fileId,
         fileName: name,
         ts: Date.now()
@@ -112,7 +112,7 @@ function AgapeNavigatorContent() {
     const channel = new BroadcastChannel('file-selection');
     const handler = (e: MessageEvent) => {
       const data = e.data;
-  if (data?.type === 'FILE_SELECTED' && data.assistantId === ASSISTANT_IDS.SUNDAY_GUIDE) {
+  if (data?.type === 'FILE_SELECTED' && data.assistantId === ASSISTANT_IDS.AGAPE_CHURCH) {
         setSelectedFileUniqueId(data.fileId);
         setFileName(data.fileName);
         setUploadTime('');
@@ -130,7 +130,7 @@ function AgapeNavigatorContent() {
     setLoading(true);
     try {
       const userId = user?.user_id || '';
-  const apiUrl = `/api/sunday-guide/content/${ASSISTANT_IDS.SUNDAY_GUIDE}?type=${mode}&userId=${encodeURIComponent(userId)}&fileId=${encodeURIComponent(selectedFileUniqueId)}`;
+  const apiUrl = `/api/sunday-guide/content/${ASSISTANT_IDS.AGAPE_CHURCH}?type=${mode}&userId=${encodeURIComponent(userId)}&fileId=${encodeURIComponent(selectedFileUniqueId)}`;
       const response = await fetch(apiUrl);
       if (!response.ok) {
         const errData = await response.json().catch(()=>({error:'未知錯誤'}));
@@ -183,7 +183,7 @@ function AgapeNavigatorContent() {
       // 若要僅下載當前顯示模式內容，可加上 type & fileId；完整版使用 includeAll
       const base = '/api/sunday-guide/download-pdf';
       const params = new URLSearchParams();
-  params.set('assistantId', ASSISTANT_IDS.SUNDAY_GUIDE);
+  params.set('assistantId', ASSISTANT_IDS.AGAPE_CHURCH);
       params.set('userId', userId);
       params.set('includeAll', 'true');
       const url = `${base}?${params.toString()}`;
@@ -221,8 +221,8 @@ function AgapeNavigatorContent() {
             {user && (
               <Chat
                 type={CHAT_TYPES.SUNDAY_GUIDE}
-                assistantId={ASSISTANT_IDS.SUNDAY_GUIDE}
-                vectorStoreId={VECTOR_STORE_IDS.SUNDAY_GUIDE}
+                assistantId={ASSISTANT_IDS.AGAPE_CHURCH}
+                vectorStoreId={VECTOR_STORE_IDS.AGAPE_CHURCH}
                 userId={user.user_id}
               />
             )}

@@ -35,13 +35,13 @@ function JianZhuNavigatorContent() {
   const [pdfLoading, setPdfLoading] = useState(false);
   const [pdfError, setPdfError] = useState<string | null>(null);
 
-  // 初始化 chat 設定為共用 Sunday Guide 助手/向量庫
+  // 初始化 chat 設定為 Jian Zhu 專用助手/向量庫
   useEffect(() => {
     if (user?.user_id) {
       setConfig({
         type: CHAT_TYPES.SUNDAY_GUIDE,
-        assistantId: ASSISTANT_IDS.SUNDAY_GUIDE,
-        vectorStoreId: VECTOR_STORE_IDS.SUNDAY_GUIDE,
+        assistantId: ASSISTANT_IDS.JIAN_ZHU,
+        vectorStoreId: VECTOR_STORE_IDS.JIAN_ZHU,
         userId: user.user_id
       });
       fetchFiles();
@@ -94,7 +94,7 @@ function JianZhuNavigatorContent() {
       const channel = new BroadcastChannel('file-selection');
       channel.postMessage({
         type: 'FILE_SELECTED',
-        assistantId: ASSISTANT_IDS.SUNDAY_GUIDE,
+        assistantId: ASSISTANT_IDS.JIAN_ZHU,
         fileId,
         fileName: name,
         ts: Date.now()
@@ -109,7 +109,7 @@ function JianZhuNavigatorContent() {
     const channel = new BroadcastChannel('file-selection');
     const handler = (e: MessageEvent) => {
       const data = e.data;
-      if (data?.type === 'FILE_SELECTED' && data.assistantId === ASSISTANT_IDS.SUNDAY_GUIDE) {
+  if (data?.type === 'FILE_SELECTED' && data.assistantId === ASSISTANT_IDS.JIAN_ZHU) {
         setSelectedFileUniqueId(data.fileId);
         setFileName(data.fileName);
         setUploadTime('');
@@ -127,7 +127,7 @@ function JianZhuNavigatorContent() {
     setLoading(true);
     try {
       const userId = user?.user_id || '';
-      const apiUrl = `/api/sunday-guide/content/${ASSISTANT_IDS.SUNDAY_GUIDE}?type=${mode}&userId=${encodeURIComponent(userId)}&fileId=${encodeURIComponent(selectedFileUniqueId)}`;
+  const apiUrl = `/api/sunday-guide/content/${ASSISTANT_IDS.JIAN_ZHU}?type=${mode}&userId=${encodeURIComponent(userId)}&fileId=${encodeURIComponent(selectedFileUniqueId)}`;
       const response = await fetch(apiUrl);
       if (!response.ok) {
         const errData = await response.json().catch(()=>({error:'未知错误'}));
@@ -178,7 +178,7 @@ function JianZhuNavigatorContent() {
       const userId = user?.user_id || '';
       const base = '/api/sunday-guide/download-pdf';
       const params = new URLSearchParams();
-      params.set('assistantId', ASSISTANT_IDS.SUNDAY_GUIDE);
+  params.set('assistantId', ASSISTANT_IDS.JIAN_ZHU);
       params.set('userId', userId);
       params.set('includeAll', 'true');
       const url = `${base}?${params.toString()}`;
@@ -216,8 +216,8 @@ function JianZhuNavigatorContent() {
             {/* 與 East/Agape 相同的 Chat 區塊 */}
             <Chat
               type={CHAT_TYPES.SUNDAY_GUIDE}
-              assistantId={ASSISTANT_IDS.SUNDAY_GUIDE}
-              vectorStoreId={VECTOR_STORE_IDS.SUNDAY_GUIDE}
+              assistantId={ASSISTANT_IDS.JIAN_ZHU}
+              vectorStoreId={VECTOR_STORE_IDS.JIAN_ZHU}
               userId={user?.user_id || ''}
             />
           </div>
