@@ -79,7 +79,7 @@ export async function PUT(request: Request) {
       await openai.beta.assistants.update(
         assistantId,
         {
-          instructions: finalContent
+          // instructions: finalContent // 統一由後端 system instructions 主導，不在此處覆寫
         }
       );
     } catch (error) {

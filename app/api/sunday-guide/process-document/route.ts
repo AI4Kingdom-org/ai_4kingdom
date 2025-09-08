@@ -135,8 +135,7 @@ async function processDocumentAsync(params: {
     while (initialAttempts < 3) {
       initialAttempts++;
       const initialRun = await openai.beta.threads.runs.create(thread.id, {
-        assistant_id: assistantId,
-        instructions: `請使用文件搜索工具查詢並分析文件 "${fileName}"。你可以從vector store中獲取文件內容。請基於文件內容進行分析。如果找不到任何文件，請明確告知。`
+        assistant_id: assistantId
       });
       let initialRunStatus = await openai.beta.threads.runs.retrieve(thread.id, initialRun.id);
       while (initialRunStatus.status === 'queued' || initialRunStatus.status === 'in_progress') {
@@ -236,8 +235,7 @@ async function processDocumentAsync(params: {
         });
 
         const run = await openai.beta.threads.runs.create(typeThread.id, {
-          assistant_id: assistantId,
-            instructions: `請基於文件 "${fileName}" 的內容回應用戶的請求。使用文件搜索工具確保你能訪問到文件的完整內容。${prompt}`
+          assistant_id: assistantId
         });
 
         // 輪詢狀態
