@@ -268,7 +268,7 @@ interface AssistantResponse {
   name: string;
   description: string | null;
   model: string;
-  instructions: string;
+  // instructions: string; // 不再使用覆寫
   tools: Array<{ type: string }>;
   file_id?: string;  // 改为可选
 }
@@ -494,7 +494,6 @@ export async function POST(request: Request) {
       // 5. 创建 Assistant
       const assistant = await openai.beta.assistants.create({
         name: `YouTube Assistant ${timestamp}`,
-        instructions: "我是教会的牧师，在主日进行了讲道。现在，我希望让教会成员在回家后能够轻松复习和学习这篇讲道内容。讲道内容已存储在 OpenAI 的文件搜索向量存储中。请检索最相关的讲道，并按照以下要求进行处理。",
         model: "gpt-4-1106-preview",
         tools: [{ type: "file_search" }]
       });
@@ -535,7 +534,7 @@ export async function POST(request: Request) {
         status: 'active',
         type: 'youtube',
         transcription,
-        instructions: assistant.instructions,
+  // instructions: assistant.instructions,
         model: assistant.model,
         sermon_summary: sermonContent.sermon_summary,
         daily_devotion: sermonContent.daily_devotion,

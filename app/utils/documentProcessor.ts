@@ -34,8 +34,7 @@ export async function splitDocumentIfNeeded(
     
     // 執行助手
     const run = await openai.beta.threads.runs.create(thread.id, {
-      assistant_id: assistantId,
-      instructions: `請使用文件搜索工具查看此文件。僅返回文件結構概述和大小估計，不要分析內容。如果文件超過${LARGE_DOCUMENT_THRESHOLD / 1000}KB，請推薦如何按章節或邏輯部分分割。`
+      assistant_id: assistantId
     });
     
     // 等待分析完成
@@ -93,8 +92,7 @@ export async function splitDocumentIfNeeded(
     
     // 執行助手
     const segmentRun = await openai.beta.threads.runs.create(thread.id, {
-      assistant_id: assistantId,
-      instructions: `請提供文件的邏輯分割點，使每個部分可以獨立處理。回應必須是有效的JSON格式，包含3-5個分段，每個有標題和範圍。不需要分析內容。`
+      assistant_id: assistantId
     });
     
     // 等待分析完成
