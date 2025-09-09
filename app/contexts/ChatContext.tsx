@@ -343,6 +343,17 @@ export function ChatProvider({
                             const event = eventData.event;
                             const data = eventData.data;
 
+                            // 處理完成和錯誤事件
+                            if (event === 'done' || event === 'thread.run.completed') {
+                                isDone = true;
+                                break;
+                            }
+                            
+                            // 處理錯誤事件
+                            if (event === 'error') {
+                                throw new Error(eventData.error || '流式處理錯誤');
+                            }
+
                             if (event === 'thread.message.delta') {
                                 const delta = data.delta.content?.[0];
                                 if (delta?.type === 'text' && delta.text?.value) {
@@ -453,7 +464,23 @@ export function ChatProvider({
         }
         
         console.error('[ERROR] 发送消息失败:', error);
-        setError(error instanceof Error ? error.message : '发送消息失败');
+        
+        // 提供更詳細的錯誤信息
+        if (error instanceof Error) {
+            if (error.message.includes('Final run has not been received') || 
+                error.message.includes('AssistantStream')) {
+                setError('串流連接中斷，請重新發送訊息');
+            } else if (error.message.includes('token') || error.message.includes('credit')) {
+                setError('信用点数不足，发送消息失败');
+            } else if (error.message.includes('network') || error.message.includes('timeout')) {
+                setError('网络连接问题，发送消息失败');
+            } else {
+                setError(`发送消息失败: ${error.message}`);
+            }
+        } else {
+            setError('发送消息失败，请稍后重试');
+        }
+        
         throw error;
     } finally {
         setIsLoading(false);

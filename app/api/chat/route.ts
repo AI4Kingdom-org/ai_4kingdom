@@ -462,13 +462,34 @@ export async function POST(request: Request) {
       const stream = new ReadableStream({
         async start(controller) {
           const encoder = new TextEncoder();
-          for await (const event of runStream) {
-            // 只發送包含數據的事件
-            if (event.data) {
+          try {
+            for await (const event of runStream) {
+              // 發送所有事件，不只是包含 data 的事件
               controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
+              
+              // 檢查是否為最終事件
+              if (event.event === 'thread.run.completed' || 
+                  event.event === 'thread.run.failed' || 
+                  event.event === 'thread.run.cancelled' || 
+                  event.event === 'thread.run.expired') {
+                // 發送流結束標誌
+                controller.enqueue(encoder.encode(`data: ${JSON.stringify({event: 'done'})}\n\n`));
+                break;
+              }
+            }
+          } catch (error) {
+            console.error('[ERROR] 流式處理錯誤:', error);
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify({
+              event: 'error',
+              error: error instanceof Error ? error.message : '流式處理失敗'
+            })}\n\n`));
+          } finally {
+            try {
+              controller.close();
+            } catch (e) {
+              console.warn('[WARN] 流關閉時發生錯誤:', e);
             }
           }
-          controller.close();
         },
         cancel() {
           console.log('[DEBUG] 客戶端斷開連接，串流已取消');
