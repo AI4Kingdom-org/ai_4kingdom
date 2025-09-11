@@ -36,16 +36,17 @@ export const SUNDAY_GUIDE_UNITS = {
     accessType: 'public' as const
   },
   agape: {
-    assistantId: ASSISTANT_IDS.SUNDAY_GUIDE,
-    vectorStoreId: VECTOR_STORE_IDS.SUNDAY_GUIDE,
+    // 改為共用 Agape Church 專屬助手/向量庫
+    assistantId: ASSISTANT_IDS.AGAPE_CHURCH,
+    vectorStoreId: VECTOR_STORE_IDS.AGAPE_CHURCH,
   // 指定愛加倍教會可上傳使用者（填入 Cognito user_sub 或系統 user_id）
   allowedUploaders: [ '1', '24', '6', '108'] as string[],
   accessType: 'public' as const
   },
-  // East Christ Home：沿用 Sunday Guide 助手/向量庫，透過 unitId 分流
+  // East Christ Home：改為共用 Agape Church 專屬助手/向量庫
   eastChristHome: {
-    assistantId: ASSISTANT_IDS.SUNDAY_GUIDE,
-    vectorStoreId: VECTOR_STORE_IDS.SUNDAY_GUIDE,
+    assistantId: ASSISTANT_IDS.AGAPE_CHURCH,
+    vectorStoreId: VECTOR_STORE_IDS.AGAPE_CHURCH,
     allowedUploaders: [ '1', '24', '22'] as string[],
     accessType: 'public' as const
   },
