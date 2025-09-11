@@ -368,11 +368,9 @@ export async function DELETE(request: Request) {
     if (!fileId || !unitId || !userId) {
       return NextResponse.json({ success: false, error: '缺少必要參數 fileId / unitId / userId' }, { status: 400 });
     }
-  if (!['agape', 'eastChristHome', 'jianZhu'].includes(unitId)) {
+    if (!['agape', 'eastChristHome', 'jianZhu', 'default'].includes(unitId)) {
       return NextResponse.json({ success: false, error: '不支援的單位' }, { status: 400 });
-    }
-
-    const docClient = await createDynamoDBClient();
+    }    const docClient = await createDynamoDBClient();
     const tableName = process.env.NEXT_PUBLIC_SUNDAY_GUIDE_TABLE || 'SundayGuide';
 
     // 以 fileId 掃描定位紀錄（後續可用 GSI 優化）
@@ -394,8 +392,14 @@ export async function DELETE(request: Request) {
     if (uploader !== userId.toString()) {
       return NextResponse.json({ success: false, error: '無刪除權限 (非上傳者)' }, { status: 403 });
     }
-    if (recordUnit !== unitId) {
-      return NextResponse.json({ success: false, error: '紀錄單位與請求單位不一致或缺少單位資訊' }, { status: 400 });
+    
+    // 對於 default 單位，接受沒有 unitId 或 unitId 為空的記錄
+    const recordUnitMatches = (unitId === 'default') 
+      ? (!recordUnit || recordUnit === '' || recordUnit === 'default')
+      : (recordUnit === unitId);
+      
+    if (!recordUnitMatches) {
+      return NextResponse.json({ success: false, error: '紀錄單位與請求單位不一致' }, { status: 400 });
     }
 
     const assistantId = target.assistantId;

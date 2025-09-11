@@ -439,10 +439,16 @@ export async function POST(request: Request) {
         userId,
         assistantId: config.assistantId,
         vectorStoreId: config.vectorStoreId || 'none'
-      });        // 使用 OpenAI SDK 的 stream 功能
+      });        // 使用 OpenAI SDK 的 stream 功能 - 暫時移除不相容參數
       const runStream = openai.beta.threads.runs.stream(activeThreadId, {
         assistant_id: config.assistantId,
-        max_completion_tokens: 1000,
+        max_completion_tokens: 2500,     // 保留：增加回應長度
+        // 暫時註解掉可能不相容的參數進行測試
+        // max_prompt_tokens: 15000,        // 可能不相容：控制輸入上下文
+        // temperature: 0.1,                // 可能不相容：降低隨機性
+        // truncation_strategy: {           // 可能不相容：智能截斷策略
+        //   type: 'auto'
+        // },
         ...(config.vectorStoreId ? {
           tool_resources: {
             file_search: {
@@ -451,11 +457,12 @@ export async function POST(request: Request) {
           }
         } : {})
       });
-        // 记录设置
-      console.log('[DEBUG] 已設置API參數:', {
+        // 记录设置 - 臨時移除不相容參數模式
+      console.log('[DEBUG] 臨時移除不相容參數設置:', {
         assistantId: config.assistantId,
-        vectorStoreId: config.vectorStoreId ? config.vectorStoreId : '未設置'
-        // OpenAI API 不支援 user_filter 參數，移除相關日誌
+        vectorStoreId: config.vectorStoreId ? config.vectorStoreId : '未設置',
+        maxCompletionTokens: 2500,
+        note: '已暫時移除 temperature, max_prompt_tokens, truncation_strategy'
       });
       
       // 将 OpenAI 的事件流直接管道到 Next.js 的响应流
@@ -509,10 +516,16 @@ export async function POST(request: Request) {
           ...Object.fromEntries(corsHeaders.entries())
         }
       });
-    }      // 非流式请求的处理 - 所有檔案視為系統資源，無需用戶過濾
+    }      // 非流式请求的处理 - 暫時移除不相容參數
     const run = await openai.beta.threads.runs.create(activeThreadId, {
       assistant_id: config.assistantId,
-      max_completion_tokens: 1000,
+      max_completion_tokens: 2500,       // 保留：增加回應長度
+      // 暫時註解掉可能不相容的參數進行測試
+      // max_prompt_tokens: 15000,          // 可能不相容：控制輸入上下文
+      // temperature: 0.1,                  // 可能不相容：降低隨機性
+      // truncation_strategy: {             // 可能不相容：智能截斷策略
+      //   type: 'auto'
+      // },
       ...(config.vectorStoreId ? {
         tool_resources: {
           file_search: {
@@ -521,11 +534,12 @@ export async function POST(request: Request) {
         }
       } : {})
     });
-      console.log('[DEBUG] 非流式模式參數設置:', {
-      assistantId: config.assistantId,
-      vectorStoreId: config.vectorStoreId ? config.vectorStoreId : '未設置'
-      // OpenAI API 不支援 user_filter 參數，移除相關日誌
-    });
+      console.log('[DEBUG] 非流式臨時移除不相容參數設置:', {
+        assistantId: config.assistantId,
+        vectorStoreId: config.vectorStoreId ? config.vectorStoreId : '未設置',
+        maxCompletionTokens: 2500,
+        note: '已暫時移除 temperature, max_prompt_tokens, truncation_strategy'
+      });
 
     // 等待运行完成
     let runStatus = await openai.beta.threads.runs.retrieve(
