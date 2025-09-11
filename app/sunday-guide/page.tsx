@@ -32,6 +32,8 @@ export default function SundayGuide() {
   const [recentFiles, setRecentFiles] = useState<Array<{ fileName: string, uploadDate: string, fileId: string, uploaderId?: string }>>([]);
   // 新增：選中的檔案 ID
   const [selectedFileId, setSelectedFileId] = useState<string | null>(null);
+  // 新增：刪除功能相關狀態
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   // 新增：分頁相關狀態
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
@@ -116,6 +118,34 @@ export default function SundayGuide() {
       console.error('獲取文件記錄失敗:', error);
       setRecentFiles([]);
       setTotalPages(1);
+    }
+  };
+
+  // 新增：處理文件刪除功能
+  const handleDelete = async (fileId: string, uploaderId?: string) => {
+    if (!user?.user_id) return;
+    if (!fileId) return;
+    if (uploaderId?.toString() !== user.user_id.toString()) return; // 前端保護：僅原上傳者可刪除
+    if (!confirm('確定刪除此文件記錄？此操作不可回復。')) return;
+    
+    try {
+      setDeletingId(fileId);
+      const qs = new URLSearchParams({ fileId, unitId: 'default', userId: user.user_id });
+      const res = await fetch(`/api/sunday-guide/documents?${qs.toString()}`, { method: 'DELETE' });
+      const data = await res.json();
+      
+      if (!res.ok || !data.success) {
+        alert('刪除失敗: ' + (data.error || res.status));
+      } else {
+        await fetchAllFileRecords(currentPage);
+        if (selectedFileId === fileId) setSelectedFileId(null);
+        // 如果刪除的是最新文件，重新獲取最新記錄
+        await fetchLatestFileRecord();
+      }
+    } catch (e: any) {
+      alert('刪除時發生錯誤: ' + (e.message || '未知錯誤'));
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -243,6 +273,27 @@ export default function SundayGuide() {
                     <span className={styles.uploadDate}>{file.uploadDate}</span>
                     {file.uploaderId && (
                       <span className={styles.uploaderInfo}>上传者: {file.uploaderId}</span>
+                    )}
+                    {/* 添加刪除按鈕：只有上傳者本人可以看到 */}
+                    {file.uploaderId && user?.user_id && file.uploaderId.toString() === user.user_id.toString() && (
+                      <button
+                        onClick={(e) => { 
+                          e.stopPropagation(); // 阻止觸發父元素的點擊事件
+                          handleDelete(file.fileId, file.uploaderId); 
+                        }}
+                        disabled={deletingId === file.fileId}
+                        style={{
+                          marginLeft: 8,
+                          background: 'none',
+                          border: 'none',
+                          color: 'crimson',
+                          cursor: 'pointer',
+                          fontSize: '14px'
+                        }}
+                        title="刪除此文件"
+                      >
+                        {deletingId === file.fileId ? '刪除中...' : '🗑'}
+                      </button>
                     )}
                   </li>
                 ))}

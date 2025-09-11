@@ -359,20 +359,19 @@ export function ChatProvider({
                                 if (delta?.type === 'text' && delta.text?.value) {
                                     let textValue = delta.text.value;
                                     
-                                    // 移除各種 citation 標記格式
+                                    // 高品質模式：精準清洗，保留重要引用資訊
                                     textValue = textValue
-                                        .replace(/【\d+】/g, '')           // 【1】、【2】
-                                        .replace(/\[\d+\]/g, '')          // [1]、[2] 
-                                        .replace(/\(\d+\)/g, '')          // (1)、(2)
-                                        .replace(/^\d+\.\s*/gm, '')       // 開頭的 "1. "、"2. "
-                                        .replace(/【.*?】/g, '')          // 【任何內容】
-                                        .replace(/\[.*?\]/g, '')          // [任何內容]
-                                        .replace(/\*\*\d+\*\*/g, '')      // **1**、**2**
-                                        .replace(/\d+\s*\)/g, '')         // 1)、2)
-                                        .replace(/\[\[.*?\]\]/g, '')      // [[任何內容]]
-                                        .replace(/†\d*/g, '')             // †1、†2
-                                        .replace(/‡\d*/g, '')             // ‡1、‡2
-                                        .replace(/§\d*/g, '');            // §1、§2
+                                        .replace(/【\d+†】/g, '')         // 特定格式：【1†】、【2†】
+                                        .replace(/\*\*\d+\*\*/g, '')      // **1**、**2** 等粗體數字
+                                        .replace(/†\d*(?!\w)/g, '')       // †1、†2 等符號（但保留單詞內的）
+                                        .replace(/‡\d*(?!\w)/g, '')       // ‡1、‡2 等符號
+                                        .replace(/§\d*(?!\w)/g, '');      // §1、§2 等符號
+                                    
+                                    // 保留重要資訊：
+                                    // - 保留一般括號 () [] 內的經文引用
+                                    // - 保留章節編號如 "第1章"、"1:1-5" 等
+                                    // - 保留書卷名稱和經文座標
+                                    // - 只移除明確的 AI 生成引用標記
                                     
                                     // 累積文字並更新打字機
                                     accumulatedText += textValue;
@@ -428,20 +427,15 @@ export function ChatProvider({
             }
 
             if (data.success) {
-                // 移除回覆中的各種 citation 標記格式
+                // 高品質模式：精準清洗回覆，保留重要引用資訊
                 const cleanReply = data.reply ? data.reply
-                    .replace(/【\d+】/g, '')           // 【1】、【2】
-                    .replace(/\[\d+\]/g, '')          // [1]、[2] 
-                    .replace(/\(\d+\)/g, '')          // (1)、(2)
-                    .replace(/^\d+\.\s*/gm, '')       // 開頭的 "1. "、"2. "
-                    .replace(/【.*?】/g, '')          // 【任何內容】
-                    .replace(/\[.*?\]/g, '')          // [任何內容]
-                    .replace(/\*\*\d+\*\*/g, '')      // **1**、**2**
-                    .replace(/\d+\s*\)/g, '')         // 1)、2)
-                    .replace(/\[\[.*?\]\]/g, '')      // [[任何內容]]
-                    .replace(/†\d*/g, '')             // †1、†2
-                    .replace(/‡\d*/g, '')             // ‡1、‡2
-                    .replace(/§\d*/g, '') : '';       // §1、§2
+                    .replace(/【\d+†】/g, '')         // 特定格式：【1†】、【2†】
+                    .replace(/\*\*\d+\*\*/g, '')      // **1**、**2** 等粗體數字
+                    .replace(/†\d*(?!\w)/g, '')       // †1、†2 等符號（但保留單詞內的）
+                    .replace(/‡\d*(?!\w)/g, '')       // ‡1、‡2 等符號
+                    .replace(/§\d*(?!\w)/g, '') : '';  // §1、§2 等符號
+                
+                // 保留重要資訊：經文引用 (馬太福音 5:3-12)、章節 [第1章] 等
                 
                 setMessages(prev => [
                     ...prev,
