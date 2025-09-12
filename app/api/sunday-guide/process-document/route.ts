@@ -190,12 +190,23 @@ async function processDocumentAsync(params: {
           content: prompt
         });
 
+        // 針對不同內容類型的 token 分配設定
+        const tokenConfig = {
+          summary: 6000,      // 總結：適中長度
+          devotional: 8000,   // 靈修：最詳細，需要5天分量
+          bibleStudy: 6000    // 查經：包含遊戲、詩歌、見證等
+        };
+
         const run = await (openai.beta.threads.runs.create as any)(
           typeThread.id,
           {
             assistant_id: assistantId,
             // 在 run 級別綁定 vector store，避免修改 assistant 本體
-            tool_resources: { file_search: { vector_store_ids: [vectorStoreId] } }
+            tool_resources: { file_search: { vector_store_ids: [vectorStoreId] } },
+            // 使用對應類型的 token 配置
+            max_completion_tokens: tokenConfig[type as keyof typeof tokenConfig] || 3000,
+            max_prompt_tokens: 20000,
+            temperature: 0.1  // 極低隨機性，確保基於文檔內容
           } as any
         );
 
