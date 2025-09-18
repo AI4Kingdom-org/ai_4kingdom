@@ -33,8 +33,11 @@ export async function splitDocumentIfNeeded(
     });
     
     // 執行助手
-    const run = await openai.beta.threads.runs.create(thread.id, {
-      assistant_id: assistantId
+    const run = await (openai.beta.threads.runs.create as any)(thread.id, {
+      assistant_id: assistantId,
+      tool_resources: {
+        file_search: { vector_store_ids: [vectorStoreId] }
+      }
     });
     
     // 等待分析完成
@@ -91,8 +94,11 @@ export async function splitDocumentIfNeeded(
     });
     
     // 執行助手
-    const segmentRun = await openai.beta.threads.runs.create(thread.id, {
-      assistant_id: assistantId
+    const segmentRun = await (openai.beta.threads.runs.create as any)(thread.id, {
+      assistant_id: assistantId,
+      tool_resources: {
+        file_search: { vector_store_ids: [vectorStoreId] }
+      }
     });
     
     // 等待分析完成

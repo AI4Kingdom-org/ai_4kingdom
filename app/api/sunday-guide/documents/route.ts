@@ -290,7 +290,8 @@ export async function POST(request: Request) {
           assistantId,
           vectorStoreId: vectorStore.id,
           fileName: file.name,
-          userId: parsedUserId
+          userId: parsedUserId,
+          fileId: openaiFile.id
         })
       });
       const processJson = await processRes.json();
