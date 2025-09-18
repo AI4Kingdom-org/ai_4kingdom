@@ -13,6 +13,33 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
 });
 
+// 確保 run 僅檢索到單一檔案：若 vectorStoreId 內檔案數 > 1，且有提供 fileId，動態建立臨時向量庫只包含該檔案
+async function ensureSingleFileVectorStore(openaiClient: OpenAI, vectorStoreId: string, fileId?: string) {
+  let effectiveVectorStoreId = vectorStoreId;
+  let cleanup: (() => Promise<void>) | undefined;
+  try {
+    const list = await openaiClient.beta.vectorStores.files.list(vectorStoreId);
+    const files = list.data || [];
+    if (files.length <= 1) {
+      return { effectiveVectorStoreId, cleanup };
+    }
+    if (fileId) {
+      const temp = await openaiClient.beta.vectorStores.create({ name: `tmp_single_${Date.now()}` });
+      await openaiClient.beta.vectorStores.files.create(temp.id, { file_id: fileId });
+      effectiveVectorStoreId = temp.id;
+      cleanup = async () => {
+        try { await openaiClient.beta.vectorStores.del(temp.id); } catch {}
+      };
+      console.log('[INFO] 已建立臨時向量庫以避免交叉檢索', { from: vectorStoreId, to: effectiveVectorStoreId, fileId });
+    } else {
+      console.warn('[WARN] 多檔向量庫但缺少 fileId，無法建立臨時向量庫');
+    }
+  } catch (e) {
+    console.warn('[WARN] ensureSingleFileVectorStore 失敗，將沿用原向量庫', e);
+  }
+  return { effectiveVectorStoreId, cleanup };
+}
+
 // 進度更新：若表不存在則僅記一次警告並停用後續寫入
 let progressTableUnavailable = false;
 async function updateProgress(docClient: any, {
@@ -176,6 +203,14 @@ async function processDocumentAsync(params: {
       
       const failurePhrases = ['無法直接訪問', '无法直接访问', '我無法直接訪問', '請提供', '無法讀取'];
   const maxRuns = isAgape ? 5 : 3;
+
+      // 根據類型添加詳細度要求，模擬 ChatGPT 對話的豐富程度
+      const detailRequirements = {
+        summary: '請提供非常詳細完整的講道總結，包含所有重點、細節、例證和應用，至少 1500-2000 字。要像在與人深度對話一樣詳細自然。',
+        devotional: '請提供極其豐富詳細的7天靈修指南，每天都要包含深入的反思、具體的應用建議、個人見證例子、實際操練方法，每天至少 400-500 字，總計 3000+ 字。內容要像資深牧者的親切指導。',
+        bibleStudy: '請提供完整詳細的查經指南，包含多樣化的破冰遊戲、敬拜詩歌推薦、小組討論問題、見證分享引導、實際應用挑戰等豐富內容，至少 2000-2500 字。要像經驗豐富的小組長的完整預備。'
+      };
+
       for (let attempt = 1; attempt <= maxRuns; attempt++) {
         // 建立新執行緒
         const typeThread = await openai.beta.threads.create();
@@ -183,30 +218,37 @@ async function processDocumentAsync(params: {
 
         await openai.beta.threads.messages.create(typeThread.id, {
           role: 'user',
-          content: `請幫我分析文件 "${fileName}"。我需要基於此文件提供${type}內容。`
+          content: `請幫我分析文件 "${fileName}"。我需要基於此文件提供${type}內容。
+
+${detailRequirements[type as keyof typeof detailRequirements]}
+
+請確保內容豐富、具體、實用，就像你在直接與用戶深度對話一樣自然詳細。不要簡化或省略，要提供完整充實的內容。`
         });
         await openai.beta.threads.messages.create(typeThread.id, {
           role: 'user',
           content: prompt
         });
 
-        // 針對不同內容類型的 token 分配設定
+        // 針對不同內容類型的 token 分配設定 - 大幅增加以獲得豐富內容
         const tokenConfig = {
-          summary: 6000,      // 總結：適中長度
-          devotional: 8000,   // 靈修：最詳細，需要5天分量
-          bibleStudy: 6000    // 查經：包含遊戲、詩歌、見證等
+          summary: 50000,      // 總結：大幅增加詳細度
+          devotional: 60000,   // 靈修：最大化7天豐富分量
+          bibleStudy: 55000    // 查經：包含遊戲、詩歌、見證等完整內容
         };
+
+        // 保障：在 run 前確保只會讀到單一檔案
+        const { effectiveVectorStoreId, cleanup } = await ensureSingleFileVectorStore(openai, vectorStoreId, fileId || undefined);
 
         const run = await (openai.beta.threads.runs.create as any)(
           typeThread.id,
           {
             assistant_id: assistantId,
             // 在 run 級別綁定 vector store，避免修改 assistant 本體
-            tool_resources: { file_search: { vector_store_ids: [vectorStoreId] } },
-            // 使用對應類型的 token 配置
-            max_completion_tokens: tokenConfig[type as keyof typeof tokenConfig] || 3000,
-            max_prompt_tokens: 20000,
-            temperature: 0.1  // 極低隨機性，確保基於文檔內容
+            tool_resources: { file_search: { vector_store_ids: [effectiveVectorStoreId] } },
+            // 移除過度保守的限制，讓模型有更多輸出空間
+            max_completion_tokens: tokenConfig[type as keyof typeof tokenConfig] || 60000,
+            max_prompt_tokens: 80000, // 增加輸入容量
+            temperature: 0.9  // 大幅提高創造性，接近 ChatGPT 網頁版效果
           } as any
         );
 
@@ -241,6 +283,8 @@ async function processDocumentAsync(params: {
           await waitForVectorStoreReady(vectorStoreId, 15000, 3000); // 再等一次索引
           continue; // retry
         }
+        // 清理臨時向量庫（如有）
+        try { if (cleanup) await cleanup(); } catch {}
         return { type, content };
       }
       throw new Error(`處理 ${type} 內容最終失敗`);
@@ -355,7 +399,7 @@ async function processDocumentAsync(params: {
 
 export async function POST(request: Request) {
   try {
-    const { assistantId, vectorStoreId, fileName, userId } = await request.json();
+    const { assistantId, vectorStoreId, fileName, userId, fileId: fileIdFromReq } = await request.json();
     
     console.log('[DEBUG] 處理文件請求:', { assistantId, vectorStoreId, fileName });
     
@@ -369,9 +413,12 @@ export async function POST(request: Request) {
   // 移除對 Assistant 的檢索與綁定更新；改用 run 級 tool_resources 綁定（見上方 processContentType）
   console.log('[DEBUG] 將在 run 級別綁定向量庫，略過 Assistant 綁定往返');
 
-    // 獲取文件ID - 從數據庫獲取
-    console.log('[DEBUG] 查詢數據庫獲取fileId');
-    let fileId = null;
+    // 獲取文件ID：優先使用請求提供的 fileId，否則再從數據庫/向量庫推斷
+    let fileId: string | null = fileIdFromReq || null;
+    if (fileId) {
+      console.log('[DEBUG] 從請求取得 fileId:', fileId);
+    }
+    console.log('[DEBUG] 查詢數據庫獲取fileId（若請求未提供）');
     try {
       // 使用優化的查詢
       const result = await optimizedQuery({
@@ -383,7 +430,7 @@ export async function POST(request: Request) {
         }
       });
       
-      if (result.Items && result.Items.length > 0) {
+      if (!fileId && result.Items && result.Items.length > 0) {
         // 找到最新的記錄
         const latestItem = result.Items.sort((a, b) => 
           new Date(b.Timestamp || "").getTime() - new Date(a.Timestamp || "").getTime()
@@ -422,7 +469,7 @@ export async function POST(request: Request) {
           assistantId,
           vectorStoreId,
           fileName,
-          fileId,
+          fileId: fileId || undefined,
           userId
         });
         console.log('[DEBUG] 文件處理完成');
