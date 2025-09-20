@@ -119,6 +119,44 @@
   height: 100%;
 }
 
+/* Markdown 內容樣式 - 讓段落標題保持正常黑體和字體大小 */
+.markdownContent h1,
+.markdownContent h2,
+.markdownContent h3,
+.markdownContent h4,
+.markdownContent h5,
+.markdownContent h6 {
+  font-weight: bold !important;
+  font-size: 1em !important; /* 與正常文字大小一致 */
+  color: #000 !important;
+  margin: 0.5em 0 !important;
+  line-height: 1.4 !important;
+}
+
+/* 保持其他 markdown 元素的正常樣式 */
+.markdownContent p {
+  margin: 0.5em 0;
+  line-height: 1.6;
+}
+
+.markdownContent strong {
+  font-weight: bold;
+}
+
+.markdownContent ul,
+.markdownContent ol {
+  margin: 0.5em 0;
+  padding-left: 1.5em;
+  background: transparent !important;
+  border: none !important;
+}
+
+.markdownContent li {
+  margin: 0.2em 0;
+  background: transparent !important;
+  border: none !important;
+}
+
 .loading {
   display: flex;
   justify-content: center;
