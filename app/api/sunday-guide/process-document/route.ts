@@ -204,37 +204,51 @@ async function processDocumentAsync(params: {
       const failurePhrases = ['無法直接訪問', '无法直接访问', '我無法直接訪問', '請提供', '無法讀取'];
   const maxRuns = isAgape ? 5 : 3;
 
-      // 根據類型添加詳細度要求，模擬 ChatGPT 對話的豐富程度
-      const detailRequirements = {
-        summary: '請提供非常詳細完整的講道總結，包含所有重點、細節、例證和應用，至少 1500-2000 字。要像在與人深度對話一樣詳細自然。',
-        devotional: '請提供極其豐富詳細的7天靈修指南，每天都要包含深入的反思、具體的應用建議、個人見證例子、實際操練方法，每天至少 400-500 字，總計 3000+ 字。內容要像資深牧者的親切指導。',
-        bibleStudy: '請提供完整詳細的查經指南，包含多樣化的破冰遊戲、敬拜詩歌推薦、小組討論問題、見證分享引導、實際應用挑戰等豐富內容，至少 2000-2500 字。要像經驗豐富的小組長的完整預備。'
-      };
-
       for (let attempt = 1; attempt <= maxRuns; attempt++) {
         // 建立新執行緒
         const typeThread = await openai.beta.threads.create();
         console.log(`[DEBUG] 為 ${type} 建立執行緒 ID: ${typeThread.id} (嘗試 ${attempt}/${maxRuns})`);
 
-        await openai.beta.threads.messages.create(typeThread.id, {
-          role: 'user',
-          content: `請幫我分析文件 "${fileName}"（只使用該文件內容）。我需要基於此文件提供${type}內容。
-
-${detailRequirements[type as keyof typeof detailRequirements]}
-
-請確保內容豐富、具體、實用，就像你在直接與用戶深度對話一樣自然詳細。不要簡化或省略，要提供完整充實的內容。`
-        });
-
         // 若已有 summary，且本次為 devotional 或 bibleStudy，則將 summary 注入並強調經文優先規則與標籤
         if (type !== 'summary' && summaryText) {
           await openai.beta.threads.messages.create(typeThread.id, {
             role: 'user',
-            content: `Here is the sermon summary already generated:\n---\n${summaryText}\n---\n\nWhen selecting and quoting Bible verses for this ${type}, you MUST:\n1) FIRST prioritize verses already identified in the summary;\n2) SECOND use verses directly present in the sermon file;\n3) ONLY THEN, if fewer than required, add supplemental verses with a short justification.\n\nAlways paste the exact verse text (CUV for Chinese; NIV for English). Do NOT display any labels such as [From Summary], [In Sermon], or [Supplemental] in the final output. Avoid duplication unless the sermon itself repeats the verse.`
+            content: `Here is the sermon summary already generated:\n---\n${summaryText}\n---\n\nWhen selecting and quoting Bible verses for this ${type}, you MUST:\n1) FIRST prioritize verses already identified in the summary and label them [From Summary];\n2) SECOND use verses directly present in the sermon file and label them [In Sermon];\n3) ONLY THEN, if fewer than required, add supplemental verses labeled [Supplemental: reason] with a short justification.\n\nAlways paste the exact verse text (CUV for Chinese; NIV for English). Avoid duplication unless the sermon itself repeats the verse.`
           });
         }
+
+        // 主要 prompt - 確保格式要求清晰
         await openai.beta.threads.messages.create(typeThread.id, {
           role: 'user',
-          content: prompt
+          content: `請基於文件 "${fileName}" 的內容執行以下任務：
+
+${prompt}
+
+特別注意：
+${type === 'devotional' ? 
+  `- 必須提供完整的7天靈修指南（週一到週日）
+  - 每天必須包含：a) 該部分講道總結, b) 3節經文（含完整經文內容）, c) 禱告指導
+  - 每天內容至少400-500字，總計3000+字
+  - 內容要像資深牧者的親切指導，豐富詳細` :
+  
+  type === 'bibleStudy' ? 
+  `- 必須包含以下完整結構：
+    1. 背景（講道總結）
+    2. 三個重要點
+    3. 3-5節聖經經文（含完整經文內容）
+    4. 討論問題（3個）
+    5. 應用問題（1-2個）
+    6. 禱告時間建議
+    7. 破冰遊戲（推薦一個簡短遊戲）
+    8. 敬拜詩歌（3首推薦，來自讚美之泉、小羊詩歌、迦南詩選或泥土音樂）
+    9. 見證分享（100-200字）
+  - 總內容至少2000-2500字，要像經驗豐富的小組長的完整預備` :
+  
+  `- 提供詳細完整的內容，至少1500-2000字
+  - 包含所有重點、細節、例證和應用`
+}
+
+請確保內容結構清晰、格式完整，就像專業的教會資源一樣。`
         });
 
         // 針對不同內容類型的 token 分配設定 - 大幅增加以獲得豐富內容
@@ -255,10 +269,15 @@ ${detailRequirements[type as keyof typeof detailRequirements]}
             tool_resources: { file_search: { vector_store_ids: [effectiveVectorStoreId] } },
             // 控制隨機性與一致性，並強制使用檢索工具
             max_completion_tokens: tokenConfig[type as keyof typeof tokenConfig] || 60000,
-            temperature: 0.5,
+            temperature: 0.3, // 降低隨機性，增加結構一致性
             top_p: 0.9,
             tool_choice: 'required',
-            instructions: `STRICT MODE:\n- Only use the sermon file (and the provided summary for verse priority when present).\n- Select verses using the priority (summary first, then in-sermon, then minimal supplemental if needed).\n- Paste the full verse text (CUV/NIV) but DO NOT include any source labels like [From Summary], [In Sermon], or [Supplemental] in the output.\n- If uncertain, write "[MISSING]" rather than guessing.`
+            instructions: `STRICT MODE:
+- Only use the sermon file (and the provided summary for verse priority when present).
+- For every Bible verse: paste full text and append one of [From Summary] / [In Sermon] / [Supplemental: reason].
+- Follow the exact format structure requested in the prompt.
+- For ${type}, ensure ALL required sections are included with proper formatting.
+- If uncertain about content, write "[MISSING]" rather than guessing.`
           } as any
         );
 
@@ -312,15 +331,7 @@ ${detailRequirements[type as keyof typeof detailRequirements]}
     ]);
     for (const s of settled) {
       if (s.status === 'fulfilled') {
-          let out = s.value.content || '';
-          // 輕量後處理：移除模型可能留下的來源標籤字樣，不影響效能
-          if (s.value.type === 'devotional' || s.value.type === 'bibleStudy') {
-            out = out
-              .replace(/\s*\[(?:From Summary|In Sermon|Supplemental:[^\]]*)\]\s*/gi, ' ')
-              .replace(/\s{2,}/g, ' ') // 清理多餘空白
-              .trim();
-          }
-          results[s.value.type] = out;
+        results[s.value.type] = s.value.content;
       } else {
         console.warn('[WARN] 子任務失敗:', s.reason);
       }
