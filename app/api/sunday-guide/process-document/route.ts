@@ -197,8 +197,8 @@ async function processDocumentAsync(params: {
     
   const results: Record<string, string> = {};
 
-  // 單一內容類型處理函式（保留重試機制）
-  async function processContentType({ type, prompt }: { type: string, prompt: string }) {
+  // 單一內容類型處理函式（保留重試機制），支援注入 summary 文字以供後續內容優先引用經文
+  async function processContentType({ type, prompt, summaryText }: { type: string, prompt: string, summaryText?: string }) {
       console.log(`[DEBUG] 並行處理 ${type} 內容開始...`);
       
       const failurePhrases = ['無法直接訪問', '无法直接访问', '我無法直接訪問', '請提供', '無法讀取'];
@@ -218,12 +218,20 @@ async function processDocumentAsync(params: {
 
         await openai.beta.threads.messages.create(typeThread.id, {
           role: 'user',
-          content: `請幫我分析文件 "${fileName}"。我需要基於此文件提供${type}內容。
+          content: `請幫我分析文件 "${fileName}"（只使用該文件內容）。我需要基於此文件提供${type}內容。
 
 ${detailRequirements[type as keyof typeof detailRequirements]}
 
 請確保內容豐富、具體、實用，就像你在直接與用戶深度對話一樣自然詳細。不要簡化或省略，要提供完整充實的內容。`
         });
+
+        // 若已有 summary，且本次為 devotional 或 bibleStudy，則將 summary 注入並強調經文優先規則與標籤
+        if (type !== 'summary' && summaryText) {
+          await openai.beta.threads.messages.create(typeThread.id, {
+            role: 'user',
+            content: `Here is the sermon summary already generated:\n---\n${summaryText}\n---\n\nWhen selecting and quoting Bible verses for this ${type}, you MUST:\n1) FIRST prioritize verses already identified in the summary;\n2) SECOND use verses directly present in the sermon file;\n3) ONLY THEN, if fewer than required, add supplemental verses with a short justification.\n\nAlways paste the exact verse text (CUV for Chinese; NIV for English). Do NOT display any labels such as [From Summary], [In Sermon], or [Supplemental] in the final output. Avoid duplication unless the sermon itself repeats the verse.`
+          });
+        }
         await openai.beta.threads.messages.create(typeThread.id, {
           role: 'user',
           content: prompt
@@ -245,10 +253,12 @@ ${detailRequirements[type as keyof typeof detailRequirements]}
             assistant_id: assistantId,
             // 在 run 級別綁定 vector store，避免修改 assistant 本體
             tool_resources: { file_search: { vector_store_ids: [effectiveVectorStoreId] } },
-            // 移除過度保守的限制，讓模型有更多輸出空間
+            // 控制隨機性與一致性，並強制使用檢索工具
             max_completion_tokens: tokenConfig[type as keyof typeof tokenConfig] || 60000,
-            max_prompt_tokens: 80000, // 增加輸入容量
-            temperature: 0.9  // 大幅提高創造性，接近 ChatGPT 網頁版效果
+            temperature: 0.5,
+            top_p: 0.9,
+            tool_choice: 'required',
+            instructions: `STRICT MODE:\n- Only use the sermon file (and the provided summary for verse priority when present).\n- Select verses using the priority (summary first, then in-sermon, then minimal supplemental if needed).\n- Paste the full verse text (CUV/NIV) but DO NOT include any source labels like [From Summary], [In Sermon], or [Supplemental] in the output.\n- If uncertain, write "[MISSING]" rather than guessing.`
           } as any
         );
 
@@ -290,19 +300,32 @@ ${detailRequirements[type as keyof typeof detailRequirements]}
       throw new Error(`處理 ${type} 內容最終失敗`);
     }
     
-    // 改為並行處理三個內容類型
-    console.log(`[DEBUG] 開始並行處理 ${contentTypes.length} 種內容類型`);
-    const settled = await Promise.allSettled(
-      contentTypes.map(({ type, prompt }) => processContentType({ type, prompt }))
-    );
+    // 先產出 summary，再並行產出 devotional / bibleStudy（注入 summary 內容以強化經文一致性）
+    console.log('[DEBUG] 先產出 summary，再以其作為後續依據');
+    const summaryRes = await processContentType({ type: 'summary', prompt: (contentTypes[0].prompt) });
+    results['summary'] = summaryRes.content;
+
+    console.log('[DEBUG] 產出 devotional / bibleStudy（帶入 summary 內容以優先經文）');
+    const settled = await Promise.allSettled([
+      processContentType({ type: 'devotional', prompt: (contentTypes[1].prompt), summaryText: results.summary }),
+      processContentType({ type: 'bibleStudy', prompt: (contentTypes[2].prompt), summaryText: results.summary })
+    ]);
     for (const s of settled) {
       if (s.status === 'fulfilled') {
-        results[s.value.type] = s.value.content;
+          let out = s.value.content || '';
+          // 輕量後處理：移除模型可能留下的來源標籤字樣，不影響效能
+          if (s.value.type === 'devotional' || s.value.type === 'bibleStudy') {
+            out = out
+              .replace(/\s*\[(?:From Summary|In Sermon|Supplemental:[^\]]*)\]\s*/gi, ' ')
+              .replace(/\s{2,}/g, ' ') // 清理多餘空白
+              .trim();
+          }
+          results[s.value.type] = out;
       } else {
         console.warn('[WARN] 子任務失敗:', s.reason);
       }
     }
-    console.log(`[DEBUG] 並行處理完成`);
+    console.log(`[DEBUG] devotional / bibleStudy 並行處理完成`);
 
     // 獲取處理結束時間並計算總處理時間（毫秒）
     const processingEndTime = Date.now();
@@ -448,8 +471,15 @@ export async function POST(request: Request) {
       console.log(`[DEBUG] Vector Store 中的文件:`, 
         filesInVectorStore.data.map(f => ({ id: f.id, status: f.status })));
       
-      // 如果数据库中没有找到fileId，但Vector Store中有文件，使用第一个文件
-      if (!fileId && filesInVectorStore.data.length > 0) {
+      // 若多檔且未指定 fileId，拒絕處理，避免跨檔干擾
+      if (!fileId && filesInVectorStore.data.length > 1) {
+        return NextResponse.json(
+          { error: 'Multiple files found in vector store. Please specify fileId to avoid cross-file retrieval.' },
+          { status: 400 }
+        );
+      }
+      // 若僅一檔且未指定 fileId，自動採用該檔案
+      if (!fileId && filesInVectorStore.data.length === 1) {
         fileId = filesInVectorStore.data[0].id;
         console.log(`[DEBUG] 从 Vector Store 获取文件 ID: ${fileId}`);
       }
