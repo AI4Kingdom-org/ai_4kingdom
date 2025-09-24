@@ -1,6 +1,7 @@
 // 可以上傳文件的用戶 ID 列表
 export const UPLOAD_PERMITTED_USERS: string[] = [
   '1',
+  '24',
   // 在這裡添加更多有權限的用戶 ID
 ];
 
@@ -39,16 +40,22 @@ export const getPermissionGroupSize = (groupName: keyof typeof PERMISSION_GROUPS
   return PERMISSION_GROUPS[groupName].length;
 };
 
-// 動態單位（牧者助手）上傳權限：優先使用單位配置的 allowedUploaders（於 constants SUNDAY_GUIDE_UNITS）
-import { getSundayGuideUnitConfig } from './constants';
-
-export function canUploadToSundayGuideUnit(unitId: string | undefined, userId: string | undefined): boolean {
+// 添加缺少的函數：檢查用戶是否有權限上傳到特定 Sunday Guide 單位
+export const canUploadToSundayGuideUnit = (unitId: string, userId?: string): boolean => {
   if (!userId) return false;
-  const cfg = getSundayGuideUnitConfig(unitId);
-  if (cfg.allowedUploaders.length === 0) {
-    // 若該單位清單為空：default 單位走全域 canUserUpload；其他單位禁止上傳（安全預設）
-    if (!unitId || unitId === 'default') return canUserUpload(userId);
+  
+  // 從 constants.ts 導入單位配置
+  try {
+    const { getSundayGuideUnitConfig } = require('./constants');
+    const unitConfig = getSundayGuideUnitConfig(unitId);
+    
+    if (!unitConfig || !unitConfig.allowedUploaders) {
+      return false;
+    }
+    
+    return unitConfig.allowedUploaders.includes(userId);
+  } catch (error) {
+    console.error('檢查單位上傳權限時發生錯誤:', error);
     return false;
   }
-  return cfg.allowedUploaders.includes(userId);
-}
+};

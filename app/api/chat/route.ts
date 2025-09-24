@@ -20,6 +20,31 @@ const getDocClient = async (): Promise<DynamoDBDocumentClient> => {
   return await createDynamoDBClient();
 };
 
+// ---------------- 新增：活躍 run 檢查與記憶體鎖 (單一實例) ----------------
+async function findActiveRun(openai: OpenAI, threadId: string) {
+  try {
+    const runs = await openai.beta.threads.runs.list(threadId, { limit: 5 });
+    return runs.data.find(r => ['queued','in_progress','requires_action','cancelling'].includes(r.status));
+  } catch (e) {
+    console.warn('[WARN] findActiveRun 失敗，忽略並視為無活躍 run', e);
+    return undefined;
+  }
+}
+
+const threadLocks = new Map<string, number>(); // threadId -> expiry timestamp(ms)
+const LOCK_TTL_MS = 120000;
+function acquireLock(threadId: string): boolean {
+  const now = Date.now();
+  const exp = threadLocks.get(threadId) || 0;
+  if (exp > now) return false; // still locked
+  threadLocks.set(threadId, now + LOCK_TTL_MS);
+  return true;
+}
+function releaseLock(threadId: string) {
+  threadLocks.delete(threadId);
+}
+// -------------------------------------------------------------------------
+
 // CORS 配置
 const ALLOWED_ORIGINS = [
   'https://main.d3ts7h8kta7yzt.amplifyapp.com',
@@ -429,6 +454,31 @@ export async function POST(request: Request) {
       });
       activeThreadId = thread.id;
     }
+    // 在加入訊息前檢查是否已有活躍 run
+    if (activeThreadId) {
+      const activeRun = await findActiveRun(openai, activeThreadId);
+      if (activeRun) {
+        const originBusy = request.headers.get('origin');
+        const headersBusy = setCORSHeaders(originBusy);
+        return NextResponse.json({
+          error: 'ThreadBusy',
+          message: '上一輪回覆尚未完成，請稍候再發送。',
+          activeRunId: activeRun.id,
+          status: activeRun.status,
+          threadId: activeThreadId
+        }, { status: 409, headers: headersBusy });
+      }
+      // 嘗試鎖（避免同毫秒第二請求）
+      if (!acquireLock(activeThreadId)) {
+        const originBusy = request.headers.get('origin');
+        const headersBusy = setCORSHeaders(originBusy);
+        return NextResponse.json({
+          error: 'ThreadLocked',
+          message: '該對話正在處理中，請稍候。',
+          threadId: activeThreadId
+        }, { status: 409, headers: headersBusy });
+      }
+    }
 
     await openai.beta.threads.messages.create(activeThreadId, {
       role: 'user',
@@ -496,10 +546,13 @@ export async function POST(request: Request) {
             } catch (e) {
               console.warn('[WARN] 流關閉時發生錯誤:', e);
             }
+            // 無論成功或錯誤釋放鎖
+            try { releaseLock(activeThreadId); } catch {}
           }
         },
         cancel() {
           console.log('[DEBUG] 客戶端斷開連接，串流已取消');
+          try { releaseLock(activeThreadId); } catch {}
         }
       });
       
@@ -604,6 +657,12 @@ export async function POST(request: Request) {
     }, { headers });
 
   } catch (error) {
+    // 發生錯誤時嘗試釋放鎖（若有 threadId 可用）
+    try {
+      const body = await request.clone().text();
+      const maybe = JSON.parse(body);
+      if (maybe?.threadId) releaseLock(maybe.threadId);
+    } catch {}
     console.error('[ERROR] 聊天API错误:', {
       error,
       type: error instanceof Error ? error.name : typeof error,
