@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
 import { ASSISTANT_IDS, VECTOR_STORE_IDS } from '../config/constants';
 import { ChatType } from '../config/chatTypes';
 import { useAuth } from '../contexts/AuthContext';
@@ -32,6 +32,8 @@ interface ChatMessage {
   sender: string;
   text: string;
   references?: DocumentReference[];
+  id?: string;
+  isThinking?: boolean;
 }
 
 interface ChatContextType {
@@ -57,6 +59,103 @@ interface ChatContextType {
 }
 
 const ChatContext = createContext<ChatContextType | null>(null);
+
+// 串流控制配置
+const SHOW_THINKING_ONLY = true;   // 改為 true 等待完整回復後顯示
+const SMART_FILTERING = false;     // 關閉智能過濾，使用 thinking only 模式
+
+// 智能過濾配置參數 - 極速優化版
+const STREAM_CONFIG = {
+  MIN_BUFFER_LENGTH: 1,           // 最小緩衝長度減至 1
+  MIN_VALID_CHARS: 1,             // 最少連續有效字符減至 1  
+  SHOW_THINKING_DELAY: 0,         // 移除延遲，立即顯示 (原 25ms)
+  ENABLE_DEBUG_LOG: false         // 關閉調試日誌
+};
+
+// 智能過濾函數
+const smartFilter = {
+  // 過濾無效內容 - 加強版
+  isValidChunk: (text: string): boolean => {
+    // 基本類型檢查
+    if (!text || typeof text !== 'string') return false;
+    
+    // 明確的無效值檢查（不區分大小寫）
+    const normalizedText = text.toLowerCase().trim();
+    const invalidValues = ['undefined', 'null', 'nan', 'false', 'true'];
+    if (invalidValues.includes(normalizedText)) return false;
+    
+    // 檢查是否只有空白字符
+    if (/^[\s\n\r\t]*$/.test(text)) return false;
+    
+    // 檢查字串長度（太短可能是誤讀）
+    if (text.trim().length === 0) return false;
+    
+    return true;
+  },
+
+  // 檢查是否為贅字模式 - 加強版
+  isGarbagePattern: (text: string): boolean => {
+    if (!text) return true;
+    
+    const cleanText = text.trim().toLowerCase();
+    
+    // 空字串或太短
+    if (cleanText.length === 0 || cleanText.length === 1) return true;
+    
+    // 常見贅字模式
+    const garbagePatterns = [
+      /^[\{\[\(\)\]\}]*$/,                    // 只有括號
+      /^[,.\-_\s]*$/,                         // 只有標點和空白
+      /^(undefined|null|nan|false|true)$/i,   // 明確無效值
+      /^[\d\s]*$/,                            // 只有數字和空白
+      /^\s*[\[\{].*[\}\]]\s*$/,              // JSON 片段
+      /^[^a-zA-Z\u4e00-\u9fff]*$/,           // 沒有任何字母或中文
+      /^[\s\n\r\t]+$/,                       // 只有各種空白符
+      /^[^\w\u4e00-\u9fff]+$/,               // 沒有字母數字中文，只有符號
+      /^(\.{3,}|\-{3,}|_{3,})$/,             // 重複符號
+    ];
+    
+    return garbagePatterns.some(pattern => pattern.test(cleanText));
+  },
+
+  // 清理文本內容 - 新增函數
+  cleanText: (text: string): string => {
+    if (!text) return '';
+    
+    return text
+      // 移除引用標記
+      .replace(/【\d+†】/g, '')
+      .replace(/\*\*\d+\*\*/g, '')
+      .replace(/†\d*(?!\w)/g, '')
+      .replace(/‡\d*(?!\w)/g, '')
+      .replace(/§\d*(?!\w)/g, '')
+      // 移除 undefined 等無效值（即使夾在其他文字中）
+      .replace(/\bundefined\b/gi, '')
+      .replace(/\bnull\b/gi, '')
+      .replace(/\bNaN\b/gi, '')
+      // 清理多餘空白
+      .replace(/\s+/g, ' ')
+      .trim();
+  },
+
+  // 累積緩衝區判斷是否開始輸出 - 加強版
+  shouldStartShowing: (buffer: string): boolean => {
+    if (!buffer || buffer.length < STREAM_CONFIG.MIN_BUFFER_LENGTH) return false;
+    
+    // 清理後再檢查
+    const cleaned = smartFilter.cleanText(buffer);
+    if (cleaned.length < STREAM_CONFIG.MIN_BUFFER_LENGTH) return false;
+    
+    // 檢查是否包含有意義內容
+    const hasValidContent = new RegExp(`[a-zA-Z\\u4e00-\\u9fff]{${STREAM_CONFIG.MIN_VALID_CHARS},}`).test(cleaned);
+    const isNotGarbage = !smartFilter.isGarbagePattern(cleaned.slice(0, 30));
+    
+    // 確保不是以無效值開頭
+    const startsWithInvalid = /^(undefined|null|nan|false|true)/i.test(cleaned);
+    
+    return hasValidContent && isNotGarbage && !startsWithInvalid;
+  }
+};
 
 export function ChatProvider({ 
   children,
@@ -200,10 +299,10 @@ export function ChatProvider({
           });
           
           // 設置下一個字符的延遲（可調整速度）
-          typewriterTimer = setTimeout(typeNextChar, 20); // 20ms 每個字符，更快
+          typewriterTimer = setTimeout(typeNextChar, 5); // 5ms 每個字符，極快
         } else if (typewriterIndex < typewriterTarget.length) {
           // 如果目標文字變長了，繼續打字
-          typewriterTimer = setTimeout(typeNextChar, 20);
+          typewriterTimer = setTimeout(typeNextChar, 5);
         }
       };
       
@@ -235,16 +334,21 @@ export function ChatProvider({
               return newMessages;
             });
             
-            typewriterTimer = setTimeout(typeNextChar, 20);
+            typewriterTimer = setTimeout(typeNextChar, 5);
           }
         };
-        typewriterTimer = setTimeout(typeNextChar, 20);
+        typewriterTimer = setTimeout(typeNextChar, 5);
       }
     };
 
     try {
-        // 先添加使用者訊息
-        setMessages(prev => [...prev, { sender: 'user', text: message }]);
+        // 先添加使用者訊息 (暫存) 並記錄索引，若 409 將回滾
+        let insertedUserIndex: number | null = null;
+        setMessages(prev => {
+          const next = [...prev, { sender: 'user', text: message }];
+          insertedUserIndex = next.length - 1;
+          return next;
+        });
         
         // 創建一個暫時的機器人回應，用於流式更新
         let finalThreadId = currentThreadId;
@@ -285,7 +389,20 @@ export function ChatProvider({
             })
         });
 
-        if (!response.ok) {
+    if (!response.ok) {
+      if (response.status === 409) {
+        // Busy / Locked：不視為紅色錯誤，提示稍後再試
+        let info: any = {};
+        try { info = await response.json(); } catch {}
+        const readable = info.message || '上一輪回覆尚未完成，請稍候…';
+        // 回滾剛剛的 user 訊息（避免累積）
+        if (insertedUserIndex !== null) {
+          setMessages(prev => prev.filter((_, i) => i !== insertedUserIndex));
+        }
+        setError(readable); // 使用既有錯誤區塊顯示，但語義是資訊
+        setIsLoading(false);
+        return; // 結束本次 send
+      }
             let errorData: any = {};
             try {
                 const responseText = await response.text();
@@ -307,110 +424,178 @@ export function ChatProvider({
                 statusText: response.statusText,
                 error: errorData
             });
-            throw new Error(errorData.error || `发送失败 (${response.status})`);
+      throw new Error(errorData.error || `发送失败 (${response.status})`);
         }
 
         // 檢查是否為流式回應
         if (response.headers.get('Content-Type')?.includes('text/event-stream')) {
-            // 處理流式回應：先顯示「思考中」訊息
-            setMessages(prev => [...prev, { sender: 'bot', text: 'AI正在思考中，請稍候...', references: [] }]);
+            // 建立占位訊息
+            const assistantTempId = `assistant_${Date.now()}`;
+            
+            // 智能過濾狀態
+            let textBuffer = '';           // 累積緩衝
+            let hasStartedShowing = false; // 是否已開始顯示
+            let displayedText = '';        // 已顯示的文字
+            
+            if (SHOW_THINKING_ONLY) {
+              setMessages(prev => [...prev, { sender: 'bot', text: 'AI 正在思考中...', id: assistantTempId, isThinking: true }]);
+            } else if (SMART_FILTERING) {
+              setMessages(prev => [...prev, { sender: 'bot', text: 'AI 正在思考中...', id: assistantTempId, isThinking: true }]);
+            } else {
+              setMessages(prev => [...prev, { sender: 'bot', text: 'AI正在思考中，請稍候...', id: assistantTempId, references: [] }]);
+            }
 
             const reader = response.body?.getReader();
-            if (!reader) {
-                throw new Error('無法讀取響應流');
-            }
-            
+            if (!reader) throw new Error('無法讀取響應流');
             const decoder = new TextDecoder();
-            let isDone = false;
-            let accumulatedText = ''; // 累積所有接收到的文字
-            let isFirstChunk = true;
-            
-            // 讀取並處理流數據，即時開始打字機效果
-            while (!isDone) {
+            let buffer = '';
+
+            try {
+              while (true) {
                 const { value, done } = await reader.read();
-                if (done) {
-                    isDone = true;
-                    break;
-                }
+                if (done) break;
                 
-                const chunk = decoder.decode(value, { stream: true });
-                const lines = chunk.split('\n\n').filter(line => line.trim() !== '');
+                buffer += decoder.decode(value, { stream: true });
+                const chunks = buffer.split('\n\n');
+                buffer = chunks.pop() || '';
 
-                for (const line of lines) {
-                    if (line.startsWith('data: ')) {
-                        try {
-                            const eventData = JSON.parse(line.substring(6));
-                            const event = eventData.event;
-                            const data = eventData.data;
+                for (const chunk of chunks) {
+                  const lines = chunk.split('\n').filter(l => l.startsWith('data:'));
+                  for (const line of lines) {
+                    const jsonStr = line.replace(/^data:\s*/, '').trim();
+                    if (!jsonStr || jsonStr === '[DONE]') continue;
+                    
+                    let evt: any;
+                    try { evt = JSON.parse(jsonStr); } catch { continue; }
 
-                            // 處理完成和錯誤事件
-                            if (event === 'done' || event === 'thread.run.completed') {
-                                isDone = true;
-                                break;
+                    const eventType = evt.event;
+                    
+                    if (eventType === 'thread.message.delta') {
+                      const contents = evt.data?.delta?.content;
+                      if (Array.isArray(contents)) {
+                        for (const c of contents) {
+                          let deltaText = '';
+                          if (c.type === 'text' && c.text?.value) {
+                            deltaText = c.text.value;
+                          } else if (c.type === 'output_text_delta' && c.delta?.text) {
+                            deltaText = c.delta.text;
+                          } else if (c.type === 'output_text' && c.text?.value) {
+                            deltaText = c.text.value;
+                          }
+
+                          // 清洗文本 - 使用加強版清理
+                          if (deltaText) {
+                            deltaText = smartFilter.cleanText(deltaText);
+                          }
+
+                          if (SHOW_THINKING_ONLY) {
+                            // 思考模式：只累積不更新 UI
+                            if (smartFilter.isValidChunk(deltaText) && deltaText.trim()) {
+                              textBuffer += deltaText;
                             }
-                            
-                            // 處理錯誤事件
-                            if (event === 'error') {
-                                throw new Error(eventData.error || '流式處理錯誤');
-                            }
-
-                            if (event === 'thread.message.delta') {
-                                const delta = data.delta.content?.[0];
-                                if (delta?.type === 'text' && delta.text?.value) {
-                                    let textValue = delta.text.value;
-                                    
-                                    // 高品質模式：精準清洗，保留重要引用資訊
-                                    textValue = textValue
-                                        .replace(/【\d+†】/g, '')         // 特定格式：【1†】、【2†】
-                                        .replace(/\*\*\d+\*\*/g, '')      // **1**、**2** 等粗體數字
-                                        .replace(/†\d*(?!\w)/g, '')       // †1、†2 等符號（但保留單詞內的）
-                                        .replace(/‡\d*(?!\w)/g, '')       // ‡1、‡2 等符號
-                                        .replace(/§\d*(?!\w)/g, '');      // §1、§2 等符號
-                                    
-                                    // 保留重要資訊：
-                                    // - 保留一般括號 () [] 內的經文引用
-                                    // - 保留章節編號如 "第1章"、"1:1-5" 等
-                                    // - 保留書卷名稱和經文座標
-                                    // - 只移除明確的 AI 生成引用標記
-                                    
-                                    // 累積文字並更新打字機
-                                    accumulatedText += textValue;
-                                    
-                                    if (isFirstChunk && accumulatedText.length > 0) {
-                                        // 第一次收到內容時，開始打字機效果
-                                        startTypewriterEffect(accumulatedText);
-                                        isFirstChunk = false;
-                                    } else {
-                                        // 更新打字機目標
-                                        updateTypewriterTarget(accumulatedText);
+                          } else if (SMART_FILTERING) {
+                            // 智能過濾模式 - 雙重檢查
+                            if (smartFilter.isValidChunk(deltaText) && deltaText.trim() && !smartFilter.isGarbagePattern(deltaText)) {
+                              textBuffer += deltaText;
+                              
+                              if (STREAM_CONFIG.ENABLE_DEBUG_LOG) {
+                                console.log(`[FILTER] Valid chunk: "${deltaText}", Buffer: "${textBuffer.slice(-30)}", HasStarted: ${hasStartedShowing}`);
+                              }
+                              
+                              if (!hasStartedShowing) {
+                                // 檢查是否可以開始顯示
+                                if (smartFilter.shouldStartShowing(textBuffer)) {
+                                  hasStartedShowing = true;
+                                  displayedText = textBuffer;
+                                  setMessages(prev => prev.map(m => {
+                                    if (m.id === assistantTempId) {
+                                      return { ...m, text: textBuffer, isThinking: false };
                                     }
+                                    return m;
+                                  }));
                                 }
-                            } else if (event === 'thread.run.completed') {
-                                finalThreadId = data.thread_id;
+                              } else {
+                                // 已開始顯示，繼續累加
+                                displayedText = textBuffer;
+                                setMessages(prev => prev.map(m => {
+                                  if (m.id === assistantTempId) {
+                                    return { ...m, text: textBuffer };
+                                  }
+                                  return m;
+                                }));
+                              }
+                            } else if (STREAM_CONFIG.ENABLE_DEBUG_LOG && deltaText) {
+                              console.log(`[FILTER] Rejected chunk: "${deltaText}"`);
                             }
-                        } catch (e) {
-                            console.error('[ERROR] 解析流數據失敗:', e, line.substring(6));
+                          } else {
+                            // 原始即時模式 - 但仍要過濾明顯無效內容
+                            if (smartFilter.isValidChunk(deltaText) && deltaText.trim()) {
+                              setMessages(prev => prev.map(m => {
+                                if (m.id === assistantTempId) {
+                                  const currentText = m.text === 'AI正在思考中，請稍候...' ? '' : m.text || '';
+                                  return { ...m, text: currentText + deltaText };
+                                }
+                                return m;
+                              }));
+                            }
+                          }
                         }
+                      }
+                    } else if (eventType === 'thread.run.completed' || evt.event === 'done') {
+                      // 確保最終內容正確顯示
+                      if ((SHOW_THINKING_ONLY || SMART_FILTERING) && textBuffer) {
+                        if (!hasStartedShowing || SHOW_THINKING_ONLY) {
+                          // 如果到最後都沒開始顯示，或是思考模式，直接顯示全部內容
+                          const finalClean = textBuffer || '';
+                          setMessages(prev => prev.map(m => {
+                            if (m.id === assistantTempId) {
+                              return { ...m, text: finalClean || '(無內容)', isThinking: false };
+                            }
+                            return m;
+                          }));
+                        } else {
+                          // 智能過濾模式且已開始顯示，確保最終狀態正確
+                          setMessages(prev => prev.map(m => {
+                            if (m.id === assistantTempId) {
+                              return { ...m, isThinking: false };
+                            }
+                            return m;
+                          }));
+                        }
+                      }
+                      setIsLoading(false);
+                      return;
+                    } else if (
+                      eventType === 'thread.run.failed' || 
+                      eventType === 'thread.run.cancelled' || 
+                      eventType === 'thread.run.expired'
+                    ) {
+                      setMessages(prev => prev.map(m => {
+                        if (m.id === assistantTempId) {
+                          return { ...m, text: '（生成失敗，請重試）', isThinking: false };
+                        }
+                        return m;
+                      }));
+                      setIsLoading(false);
+                      return;
                     }
+                  }
                 }
+              }
+            } catch (streamError) {
+              console.error('[STREAM ERROR]', streamError);
+              setMessages(prev => prev.map(m => {
+                if (m.id === assistantTempId) {
+                  return { ...m, text: '（串流發生錯誤，請重試）', isThinking: false };
+                }
+                return m;
+              }));
+            } finally {
+              try { reader.releaseLock(); } catch {}
             }
             
-            // 確保最終文字完全顯示
-            if (accumulatedText && typewriterCurrent !== accumulatedText) {
-                // 等待一段時間讓打字機完成，然後強制顯示完整內容
-                setTimeout(() => {
-                    setMessages(prev => {
-                        const newMessages = [...prev];
-                        const lastMessage = newMessages[newMessages.length - 1];
-                        if (lastMessage && lastMessage.sender === 'bot') {
-                            lastMessage.text = accumulatedText;
-                        }
-                        return newMessages;
-                    });
-                }, Math.max(0, (accumulatedText.length - typewriterCurrent.length) * 20 + 100));
-            }
-            
-            return { success: true, threadId: finalThreadId };
+            setIsLoading(false);
+            return;
         } else {
             // 傳統的非流式回應處理
             let data: any = {};
