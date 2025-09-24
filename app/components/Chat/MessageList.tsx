@@ -83,7 +83,9 @@ export default function MessageList({ messages, isLoading }: MessageListProps) {
           {message.sender === 'bot' && (
             <div className={styles.avatar}>AI</div>
           )}
-          <div className={styles.messageContent}>{message.text}</div>
+          <div className={styles.messageContent} style={{ whiteSpace: 'pre-wrap' }}>
+            {message.text}
+          </div>
           {message.sender === 'user' && (
             <div className={styles.avatar}>U</div>
           )}
@@ -92,7 +94,9 @@ export default function MessageList({ messages, isLoading }: MessageListProps) {
       {streamingMessage && (
         <div className={`${styles.message} ${styles.botMessage}`}>
           <div className={styles.avatar}>AI</div>
-          <div className={styles.messageContent}>{streamingMessage}</div>
+          <div className={styles.messageContent} style={{ whiteSpace: 'pre-wrap' }}>
+            {streamingMessage}
+          </div>
         </div>
       )}
       <div ref={chatEndRef} />

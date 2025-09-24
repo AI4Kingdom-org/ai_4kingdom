@@ -118,7 +118,7 @@ const smartFilter = {
     return garbagePatterns.some(pattern => pattern.test(cleanText));
   },
 
-  // 清理文本內容 - 新增函數
+  // 清理文本內容 - 修復版本，保留格式
   cleanText: (text: string): string => {
     if (!text) return '';
     
@@ -133,8 +133,9 @@ const smartFilter = {
       .replace(/\bundefined\b/gi, '')
       .replace(/\bnull\b/gi, '')
       .replace(/\bNaN\b/gi, '')
-      // 清理多餘空白
-      .replace(/\s+/g, ' ')
+      // 保留換行符，只清理連續的空格（不影響換行）
+      .replace(/[^\S\n]+/g, ' ')  // 只替換非換行的空白字符
+      .replace(/( *\n *)/g, '\n') // 清理換行前後的空格但保留換行
       .trim();
   },
 
@@ -483,14 +484,14 @@ export function ChatProvider({
                             deltaText = c.text.value;
                           }
 
-                          // 清洗文本 - 使用加強版清理
-                          if (deltaText) {
+                          // 清洗文本 - 只在智能過濾模式下清理
+                          if (deltaText && SMART_FILTERING) {
                             deltaText = smartFilter.cleanText(deltaText);
                           }
 
                           if (SHOW_THINKING_ONLY) {
-                            // 思考模式：只累積不更新 UI
-                            if (smartFilter.isValidChunk(deltaText) && deltaText.trim()) {
+                            // 思考模式：直接累積所有內容，不過濾
+                            if (deltaText) {
                               textBuffer += deltaText;
                             }
                           } else if (SMART_FILTERING) {
@@ -545,11 +546,11 @@ export function ChatProvider({
                       // 確保最終內容正確顯示
                       if ((SHOW_THINKING_ONLY || SMART_FILTERING) && textBuffer) {
                         if (!hasStartedShowing || SHOW_THINKING_ONLY) {
-                          // 如果到最後都沒開始顯示，或是思考模式，直接顯示全部內容
-                          const finalClean = textBuffer || '';
+                          // 如果到最後都沒開始顯示，或是思考模式，直接顯示全部內容（不再清理）
+                          const finalText = textBuffer || '';
                           setMessages(prev => prev.map(m => {
                             if (m.id === assistantTempId) {
-                              return { ...m, text: finalClean || '(無內容)', isThinking: false };
+                              return { ...m, text: finalText || '(無內容)', isThinking: false };
                             }
                             return m;
                           }));

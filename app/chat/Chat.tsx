@@ -283,7 +283,9 @@ export default function Chat({ type, assistantId, vectorStoreId }: ChatProps) {
                     </div>
                   )}
                   <div className={styles.messageContent}>
-                    {message.text}
+                    <div style={{ whiteSpace: 'pre-wrap' }}>
+                      {message.text}
+                    </div>
                   </div>
                   {message.sender === 'user' && (
                     <div className={`${styles.avatar} ${styles.userAvatar}`}>
