@@ -112,7 +112,7 @@ function HomeschoolPromptContent() {
       </div>
 
       <div className={styles.formGroup}>
-        <label htmlFor="basicInfo">基本状况</label>
+        <label htmlFor="basicInfo">目前状况</label>
         <textarea
           id="basicInfo"
           value={promptData.basicInfo}
