@@ -167,6 +167,8 @@ export default function Chat({ type, assistantId, vectorStoreId, userId, threadI
       });
       
       await sendMessage(message);
+      // 新增：強制刷新對話列表
+      window.dispatchEvent(new CustomEvent('refreshConversations'));
       
       console.log('[DEBUG] 消息发送成功');
       
@@ -210,23 +212,49 @@ export default function Chat({ type, assistantId, vectorStoreId, userId, threadI
     return <div className={styles.loadingContainer}>认证中...</div>;
   }
 
+  // 處理點擊 thread 切換對話
+  const handleSelectThread = async (threadId: string) => {
+    try {
+      if (threadId === currentThreadId) return;
+      setError('');
+      setMessages([]);
+      setCurrentThreadId(threadId);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '切換對話失敗');
+    }
+  };
+
   return (
     <div className={styles.container}>
       {userId || user?.user_id ? (
-        <div className={styles.chatWindow}>
-          {!assistantId || typeof assistantId !== 'string' ? (
-            <div className={styles.error}>
-              <p>错误: 无效的助手ID</p>
-              <p>请尝试刷新页面或联系管理员</p>
-            </div>
-          ) : (
-            <>
-              <MessageList messages={messages} isLoading={isLoading} />
-              {error && <div className={styles.error}>{error}</div>}
-              <ChatInput onSend={handleSendMessage} isLoading={isLoading} />
-            </>
-          )}
-        </div>
+        <>
+          {/* 聊天歷史側邊欄 */}
+          <div className={styles.conversationListContainer}>
+            <ConversationList
+              userId={String(userId || user?.user_id)}
+              type={type}
+              currentThreadId={currentThreadId}
+              onSelectThread={handleSelectThread}
+              isCreating={isCreatingThread}
+              onCreateNewThread={handleCreateNewThread}
+            />
+          </div>
+          {/* 聊天主視窗 */}
+          <div className={styles.chatWindow}>
+            {!assistantId || typeof assistantId !== 'string' ? (
+              <div className={styles.error}>
+                <p>错误: 无效的助手ID</p>
+                <p>请尝试刷新页面或联系管理员</p>
+              </div>
+            ) : (
+              <>
+                <MessageList messages={messages} isLoading={isLoading} />
+                {error && <div className={styles.error}>{error}</div>}
+                <ChatInput onSend={handleSendMessage} isLoading={isLoading} />
+              </>
+            )}
+          </div>
+        </>
       ) : (
         <div className={styles.loginPrompt}>
           <button className={styles.loginButton} onClick={() => (window.location.href = '/login')}>
