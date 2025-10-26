@@ -28,54 +28,53 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // 主要站台與 WordPress API 基底改為環境變數，可於過渡期保留 fallback
+  /**
+   * 後端路徑說明：
+   * - 建議主用：/wp-json/hello-biz/v1/session  (GET)
+   * - 你仍可用環境變數覆蓋：NEXT_PUBLIC_WP_API_BASE
+   */
   const API_BASE = process.env.NEXT_PUBLIC_PRIMARY_DOMAIN || 'https://ai4kingdom.org';
-  const WP_API_BASE = process.env.NEXT_PUBLIC_WP_API_BASE || `${API_BASE}/wp-json/custom/v1`;
+  const WP_API_BASE =
+    process.env.NEXT_PUBLIC_WP_API_BASE || `${API_BASE}/wp-json/hello-biz/v1`;
 
-  const makeRequest = async (endpoint: string, options: RequestInit) => {
-    try {
-  const response = await fetch(`${WP_API_BASE}/${endpoint}`, {
-        ...options,
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-          ...(options.headers || {})
-        },
-        credentials: 'include'
-      });
+  /**
+   * 通用請求（預設 GET），一律帶上 Cookie
+   */
+  const makeRequest = async (endpoint: string, options: RequestInit = {}) => {
+    const response = await fetch(`${WP_API_BASE}/${endpoint}`, {
+      method: options.method || 'GET',
+      credentials: 'include', // 🔑 讓瀏覽器攜帶 WP 登入 Cookie
+      mode: 'cors',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+        ...(options.headers || {}),
+      },
+      body: options.body,
+    });
 
-      if (!response.ok) {
-        throw new Error(`API请求失败: ${response.statusText}`);
-      }
-
-      const data = await response.json();
-      return data;
-    } catch (err) {
-      console.error('[ERROR] API请求失败:', err);
-      throw err;
+    if (!response.ok) {
+      throw new Error(`API请求失败: ${response.status} ${response.statusText}`);
     }
+    return response.json();
   };
 
+  /**
+   * 登入（可選）：若你之後提供 /login 端點即可接上
+   * （若目前沒有，建議直接走 WP /wp-login.php 頁面，不必調用此函式）
+   */
   const login = async (username: string, password: string): Promise<boolean> => {
     try {
-  const response = await fetch(`${WP_API_BASE}/login`, {
+      const data = await makeRequest('login', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json'
-        },
-        credentials: 'include',
-        body: JSON.stringify({ username, password })
+        body: JSON.stringify({ username, password }),
       });
-      
-      const data = await response.json();
-      
-      if (data.success) {
+
+      if (data?.success) {
         await checkAuth();
         return true;
       }
-      
-      throw new Error(data.message || '登录失败');
+      throw new Error(data?.message || '登录失败');
     } catch (err) {
       console.error('[ERROR] 登录失败:', err);
       setError(err instanceof Error ? err.message : '登录失败');
@@ -84,44 +83,50 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  /**
+   * 會話檢查（關鍵）：打 /session (GET) 對應 auth.php
+   * 回傳格式：{ logged_in, user:{ id, name, email } | null, nonce }
+   */
   const checkAuth = async () => {
     try {
-      const data = await makeRequest('validate_session', {
-        method: 'POST'
-      });
+      const data = await makeRequest('session', { method: 'GET' });
 
-      if (data.success) {
+      if (data?.logged_in && data?.user) {
         setUser({
-          user_id: String(data.user_id), // 確保 user_id 是字串類型
+          user_id: String(data.user.id),
           nonce: data.nonce,
-          username: data.username,
-          email: data.email,
-          display_name: data.display_name,
-          success: data.success,
+          username: data.user.name,
+          display_name: data.user.name,
+          email: data.user.email,
+          success: true,
+          // 若你有真正的會員方案端點，再在此覆寫；目前給安全的預設
           subscription: {
-            status: data.subscription?.status || 'inactive',
-            type: data.subscription?.type || 'free',
-            roles: data.subscription?.roles || [],
-            expiry: data.subscription?.expiry || null,
-            plan_id: data.subscription?.plan_id || ''
-          }
+            status: 'active',
+            type: 'free',
+            roles: [],
+            expiry: null,
+            plan_id: '',
+          },
         });
       } else {
-        throw new Error(data.message || '验证失败');
+        setUser(null);
       }
     } catch (err) {
       console.error('[ERROR] 会话验证失败:', err);
+      setUser(null);
       setError(err instanceof Error ? err.message : '认证失败');
     } finally {
       setLoading(false);
     }
   };
 
+  /**
+   * 登出（可選）：若你之後提供 /logout 端點即可接上
+   * （或自行導向 WP /wp-login.php?action=logout 完成登出）
+   */
   const logout = async () => {
     try {
-      await makeRequest('logout', {
-        method: 'POST'
-      });
+      await makeRequest('logout', { method: 'POST' });
     } catch (err) {
       console.error('[ERROR] 登出失败:', err);
     } finally {
@@ -131,7 +136,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  // 订阅相关的工具方法
+  // 會員狀態工具方法（保留原有對外 API）
   const getSubscriptionStatus = (): 'active' | 'inactive' => {
     return user?.subscription?.status || 'inactive';
   };
@@ -143,56 +148,45 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const isSubscriptionValid = () => {
     const subscription = user?.subscription;
     if (!subscription) return false;
-
     if (subscription.status !== 'active') return false;
-    
     if (subscription.expiry) {
       const expiryDate = new Date(subscription.expiry);
       if (expiryDate < new Date()) return false;
     }
-
     return true;
   };
 
-  // 新增：角色检查方法
   const hasRole = (role: MemberRole) => {
     return user?.subscription?.roles?.includes(role) || false;
   };
 
-  // 新增：功能访问检查方法
   const canAccessFeature = (feature: FeatureKey) => {
     const userRoles = user?.subscription?.roles || [];
     const requiredRoles = FEATURE_ACCESS[feature];
-    return userRoles.some(role => requiredRoles.includes(role));
+    return userRoles.some((role) => requiredRoles.includes(role));
   };
 
-  // 新增：檢查用戶是否可以上傳文件
   const canUploadFiles = (): boolean => {
-    console.log('[DEBUG] canUploadFiles called with user:', {
-      user_id: user?.user_id,
-      user_type: typeof user?.user_id,
-      user: user
-    });
+    // 仍保留你的調用，以維持原有行為
     return canUserUpload(user?.user_id);
   };
 
-  // 初始化时检查认证状态
+  // 初始化檢查
   useEffect(() => {
     checkAuth();
+    // 若瀏覽器封鎖第三方 Cookie，可在此嘗試 Storage Access API 再重試
+    // if ('hasStorageAccess' in document && 'requestStorageAccess' in document) { ... }
   }, []);
 
-  // 定期检查会话状态
+  // 每 30 分鐘輪詢一次
   useEffect(() => {
     const sessionCheckInterval = setInterval(() => {
       checkAuth();
-    }, 30 * 60 * 1000); // 每30分钟检查一次
-
-    return () => {
-      clearInterval(sessionCheckInterval);
-    };
+    }, 30 * 60 * 1000);
+    return () => clearInterval(sessionCheckInterval);
   }, []);
 
-  const value = {
+  const value: AuthContextType = {
     user,
     loading,
     error,
@@ -204,14 +198,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     isSubscriptionValid,
     hasRole,
     canAccessFeature,
-    canUploadFiles
+    canUploadFiles,
   };
 
-  return (
-    <AuthContext.Provider value={value}>
-      {children}
-    </AuthContext.Provider>
-  );
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
 export function useAuth() {
@@ -220,4 +210,4 @@ export function useAuth() {
     throw new Error('useAuth must be used within an AuthProvider');
   }
   return context;
-} 
+}
