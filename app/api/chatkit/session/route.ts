@@ -77,5 +77,7 @@ export async function POST(req: NextRequest) {
 
 export async function GET() {
   const ok = !!process.env.OPENAI_API_KEY && !!getWorkflowId();
-  return NextResponse.json({ ok }, { status: ok ? 200 : 500 });
+  const res = NextResponse.json({ ok }, { status: ok ? 200 : 500 });
+  res.headers.set('Cache-Control', 'no-store, max-age=0');
+  return res;
 }
