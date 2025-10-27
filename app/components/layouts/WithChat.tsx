@@ -10,9 +10,10 @@ import { ChatType, CHAT_TYPE_CONFIGS } from '../../config/chatTypes';
 interface WithChatProps {
   children: ReactNode;
   chatType?: ChatType;
+  disableChatContext?: boolean; // allow skipping ChatProvider for ChatKit pages
 }
 
-function ChatWrapper({ children, chatType = 'general' }: { children: ReactNode, chatType?: ChatType }) {
+function ChatWrapper({ children, chatType = 'general', disableChatContext = false }: { children: ReactNode, chatType?: ChatType, disableChatContext?: boolean }) {
   const { user } = useAuth();
   const [isReady, setIsReady] = useState(false);
   
@@ -41,19 +42,21 @@ function ChatWrapper({ children, chatType = 'general' }: { children: ReactNode, 
     return null;
   }
 
+  if (disableChatContext) {
+    return <>{children}</>;
+  }
+
   return (
-    <ChatProvider 
-      initialConfig={config}
-    >
+    <ChatProvider initialConfig={config}>
       {children}
     </ChatProvider>
   );
 }
 
-export default function WithChat({ children, chatType = 'general' }: WithChatProps) {
+export default function WithChat({ children, chatType = 'general', disableChatContext = false }: WithChatProps) {
   return (
-    <AuthProvider>
-      <ChatWrapper chatType={chatType}>
+    <AuthProvider optional={disableChatContext}>
+      <ChatWrapper chatType={chatType} disableChatContext={disableChatContext}>
         {children}
       </ChatWrapper>
     </AuthProvider>

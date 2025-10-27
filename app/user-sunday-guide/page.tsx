@@ -1,16 +1,16 @@
-'use client';
+"use client";
+
+import Script from 'next/script';
 
 import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { useChat } from '../contexts/ChatContext';
 import { useCredit } from '../contexts/CreditContext';
-import Chat from '../components/Chat/Chat';
+import ChatkitEmbed from '../components/ChatkitEmbed';
 import WithChat from '../components/layouts/WithChat';
 import styles from './page.module.css';
 import { CHAT_TYPES } from '../config/chatTypes';
 import { ASSISTANT_IDS, VECTOR_STORE_IDS } from '../config/constants';
 import ReactMarkdown from 'react-markdown';
-import Script from 'next/script';
 
 // 添加全局類型定義，以解決TypeScript報錯
 declare global {
@@ -59,7 +59,6 @@ function SundayGuideContent() {
   // 新增：從 localStorage 讀取選中的檔案 ID
   const [selectedFileFromSundayGuide, setSelectedFileFromSundayGuide] = useState<{ fileId: string, fileName: string } | null>(null);
   const { user } = useAuth();
-  const { setConfig } = useChat();
   const { refreshUsage } = useCredit();
   const [selectedMode, setSelectedMode] = useState<GuideMode>(null);
   const [sermonContent, setSermonContent] = useState<string | null>(null);
@@ -117,13 +116,6 @@ function SundayGuideContent() {
 
   useEffect(() => {
     if (user?.user_id) {
-      setConfig({
-        type: CHAT_TYPES.SUNDAY_GUIDE,
-        assistantId: ASSISTANT_IDS.SUNDAY_GUIDE,
-        vectorStoreId: VECTOR_STORE_IDS.SUNDAY_GUIDE,
-        userId: user.user_id
-      });
-      
       // 獲取檔案資訊
       fetchLatestFileInfo();
       
@@ -141,7 +133,7 @@ function SundayGuideContent() {
         setUploadTime('');
       }
     }
-  }, [user, setConfig]);
+  }, [user]);
 
   // 監聽跨頁面文件選擇變化
   useEffect(() => {
@@ -370,6 +362,7 @@ function SundayGuideContent() {
 
   return (
     <div className={styles.container}>
+      <Script src="https://cdn.platform.openai.com/deployments/chatkit/chatkit.js" strategy="afterInteractive" />
       <h1 className={styles.title}>主日信息导航</h1>
       {/* 顯示檔案資訊 - 優先顯示來自 Sunday Guide 的選擇 */}
       {selectedFileFromSundayGuide ? (
@@ -443,12 +436,7 @@ function SundayGuideContent() {
           </div>
           <div className={styles.chatSection}>
             {user && (
-              <Chat 
-                type={CHAT_TYPES.SUNDAY_GUIDE}
-                assistantId={ASSISTANT_IDS.SUNDAY_GUIDE}
-                vectorStoreId={VECTOR_STORE_IDS.SUNDAY_GUIDE}
-                userId={user.user_id}
-              />
+              <ChatkitEmbed userId={user.user_id} />
             )}
           </div>
         </div>
@@ -473,7 +461,7 @@ export default function UserSundayGuide() {
   }
 
   return (
-    <WithChat chatType={CHAT_TYPES.SUNDAY_GUIDE}>
+    <WithChat chatType={CHAT_TYPES.SUNDAY_GUIDE} disableChatContext>
       <SundayGuideContent />
     </WithChat>
   );

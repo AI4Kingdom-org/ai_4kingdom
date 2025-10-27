@@ -23,10 +23,11 @@ interface User {
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
-export function AuthProvider({ children }: { children: React.ReactNode }) {
+export function AuthProvider({ children, optional = false }: { children: React.ReactNode; optional?: boolean }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const isOptional = optional || process.env.NEXT_PUBLIC_AUTH_OPTIONAL === 'true';
 
   /**
    * 後端路徑說明：
@@ -41,22 +42,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
    * 通用請求（預設 GET），一律帶上 Cookie
    */
   const makeRequest = async (endpoint: string, options: RequestInit = {}) => {
-    const response = await fetch(`${WP_API_BASE}/${endpoint}`, {
-      method: options.method || 'GET',
-      credentials: 'include', // 🔑 讓瀏覽器攜帶 WP 登入 Cookie
-      mode: 'cors',
-      headers: {
-        'Content-Type': 'application/json',
-        Accept: 'application/json',
-        ...(options.headers || {}),
-      },
-      body: options.body,
-    });
+    const REQUEST_TIMEOUT_MS = 8000; // 加入逾時避免長時間掛起
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+    try {
+      const response = await fetch(`${WP_API_BASE}/${endpoint}`, {
+        method: options.method || 'GET',
+        credentials: 'include', // 🔑 讓瀏覽器攜帶 WP 登入 Cookie
+        mode: 'cors',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+          ...(options.headers || {}),
+        },
+        body: options.body,
+        signal: controller.signal,
+      });
 
-    if (!response.ok) {
-      throw new Error(`API请求失败: ${response.status} ${response.statusText}`);
+      if (!response.ok) {
+        throw new Error(`API请求失败: ${response.status} ${response.statusText}`);
+      }
+      return response.json();
+    } finally {
+      clearTimeout(timeout);
     }
-    return response.json();
   };
 
   /**
@@ -112,9 +121,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUser(null);
       }
     } catch (err) {
-      console.error('[ERROR] 会话验证失败:', err);
-      setUser(null);
-      setError(err instanceof Error ? err.message : '认证失败');
+      // 在可選模式下，靜默降級為未登入，避免噴錯干擾開發/ChatKit 體驗
+      if (isOptional) {
+        console.warn('[WARN] 会话验证失败（已降級為可選）：', err);
+        setUser(null);
+        setError(null);
+      } else {
+        console.error('[ERROR] 会话验证失败:', err);
+        setUser(null);
+        setError(err instanceof Error ? err.message : '认证失败');
+      }
     } finally {
       setLoading(false);
     }
