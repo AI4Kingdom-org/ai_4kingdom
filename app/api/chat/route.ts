@@ -5,6 +5,11 @@ import { NextResponse } from 'next/server';
 import { updateMonthlyTokenUsage } from '../../utils/monthlyTokenUsage';
 import { createDynamoDBClient } from '../../utils/dynamodb';
 
+// Ensure dynamic behavior on Amplify/Next.js App Router
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+export const runtime = 'nodejs';
+
 // 统一环境变量配置
 const CONFIG = {
   region: process.env.NEXT_PUBLIC_AWS_REGION || process.env.NEXT_PUBLIC_REGION || "us-east-2",

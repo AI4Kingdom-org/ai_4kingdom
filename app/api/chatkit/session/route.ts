@@ -1,6 +1,11 @@
 // app/api/chatkit/session/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 
+// Ensure this route is always dynamic on Amplify/Next.js App Router
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+export const runtime = 'nodejs';
+
 // POST /api/chatkit/session
 // Issues a short-lived ChatKit client_secret for the frontend.
 export async function POST(req: NextRequest) {
@@ -97,5 +102,24 @@ export async function POST(req: NextRequest) {
   } catch (err: any) {
     console.error('[ChatKit session] error:', err);
     return NextResponse.json({ error: err?.message ?? 'Unknown error' }, { status: 500 });
+  }
+}
+
+// Lightweight GET probe to help verify env wiring without issuing a client_secret
+export async function GET(_req: NextRequest) {
+  try {
+    const workflowId = process.env.SUNDAY_GUIDE_WORKFLOW_ID || process.env.NEXT_PUBLIC_SUNDAY_GUIDE_WORKFLOW_ID;
+    if (!workflowId) {
+      return NextResponse.json(
+        { ok: false, error: 'Missing SUNDAY_GUIDE_WORKFLOW_ID (or NEXT_PUBLIC_SUNDAY_GUIDE_WORKFLOW_ID)' },
+        { status: 400 }
+      );
+    }
+    const res = NextResponse.json({ ok: true, workflowId });
+    res.headers.set('Cache-Control', 'no-store, max-age=0');
+    return res;
+  } catch (err: any) {
+    console.error('[ChatKit session][GET] error:', err);
+    return NextResponse.json({ ok: false, error: err?.message || 'Unknown error' }, { status: 500 });
   }
 }
