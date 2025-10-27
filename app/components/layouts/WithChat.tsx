@@ -16,6 +16,11 @@ interface WithChatProps {
 function ChatWrapper({ children, chatType = 'general', disableChatContext = false }: { children: ReactNode, chatType?: ChatType, disableChatContext?: boolean }) {
   const { user } = useAuth();
   const [isReady, setIsReady] = useState(false);
+
+  // 當 ChatKit 頁面禁用 ChatContext 時，直接渲染 children，避免等待使用者驗證
+  if (disableChatContext) {
+    return <>{children}</>;
+  }
   
   const config = useMemo(() => {
     if (!user) return null;
@@ -40,10 +45,6 @@ function ChatWrapper({ children, chatType = 'general', disableChatContext = fals
   // 等待用户加载完成
   if (!isReady || !config) {
     return null;
-  }
-
-  if (disableChatContext) {
-    return <>{children}</>;
   }
 
   return (

@@ -1,4 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
+// Ensure dynamic behavior on Amplify/Next
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+export const runtime = 'nodejs';
 import OpenAI from 'openai';
 import { updateMonthlyTokenUsage } from '@/app/utils/monthlyTokenUsage';
 import { saveTokenUsage } from '@/app/utils/tokenUsage';
@@ -12,9 +16,9 @@ export async function POST(req: NextRequest) {
 
     // Common fields we try to detect from various event shapes
     const type = payload?.type || payload?.event || payload?.name;
-  const threadId = payload?.thread_id || payload?.threadId || payload?.data?.thread_id || payload?.data?.threadId;
+    const threadId = payload?.thread_id || payload?.threadId || payload?.data?.thread_id || payload?.data?.threadId;
     const runId = payload?.run_id || payload?.runId || payload?.data?.id || payload?.data?.run_id;
-    const userId = payload?.user || payload?.user_id || payload?.userId || payload?.data?.user || payload?.data?.user_id;
+    let userId = payload?.user || payload?.user_id || payload?.userId || payload?.data?.user || payload?.data?.user_id;
 
     if (!process.env.OPENAI_API_KEY) {
       return NextResponse.json({ error: 'Missing OPENAI_API_KEY' }, { status: 500 });
@@ -22,14 +26,29 @@ export async function POST(req: NextRequest) {
 
     // Only handle completed run events; ignore pings
     const isCompleted = type?.includes('completed') || type === 'run.completed' || type === 'thread.run.completed';
-    if (!isCompleted || !threadId || !runId || !userId) {
+    if (!isCompleted || !threadId || !runId) {
       return NextResponse.json({ ok: true, ignored: true });
     }
 
     const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-  const finalRun = await openai.beta.threads.runs.retrieve(String(threadId), String(runId));
+    const finalRun = await openai.beta.threads.runs.retrieve(String(threadId), String(runId));
     const u: any = (finalRun as any)?.usage;
-  const ensuredThreadId = (finalRun as any)?.thread_id || threadId;
+    const ensuredThreadId = (finalRun as any)?.thread_id || threadId;
+
+    // Fallback: try to recover userId from run or thread metadata if not present in payload
+    if (!userId) {
+      try {
+        const metaUser = (finalRun as any)?.metadata?.userId || (finalRun as any)?.metadata?.user;
+        if (metaUser) userId = String(metaUser);
+      } catch {}
+    }
+    if (!userId && ensuredThreadId) {
+      try {
+        const thread = await openai.beta.threads.retrieve(String(ensuredThreadId));
+        const tMetaUser = (thread as any)?.metadata?.userId || (thread as any)?.metadata?.user;
+        if (tMetaUser) userId = String(tMetaUser);
+      } catch {}
+    }
 
     if (u && userId) {
       const tokenUsage = {
