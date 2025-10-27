@@ -529,6 +529,29 @@ export async function POST(request: Request) {
                   event.event === 'thread.run.failed' || 
                   event.event === 'thread.run.cancelled' || 
                   event.event === 'thread.run.expired') {
+                // 嘗試在 completed 時寫入使用量（stream 分支原本未記帳）
+                if (event.event === 'thread.run.completed' && userId) {
+                  try {
+                    const runId = (event as any)?.data?.id;
+                    if (runId) {
+                      const finalRun = await openai.beta.threads.runs.retrieve(activeThreadId, runId);
+                      const u: any = (finalRun as any)?.usage;
+                      if (u) {
+                        const tokenUsage = {
+                          prompt_tokens: u.prompt_tokens || 0,
+                          completion_tokens: u.completion_tokens || 0,
+                          total_tokens: u.total_tokens || 0,
+                          retrieval_tokens: 0
+                        };
+                        await updateMonthlyTokenUsage(userId, tokenUsage);
+                        // 可選：回送一筆 usage 給前端（不影響相容性）
+                        controller.enqueue(encoder.encode(`data: ${JSON.stringify({ event: 'usage.recorded', usage: tokenUsage })}\n\n`));
+                      }
+                    }
+                  } catch (usageErr) {
+                    console.error('[ERROR] stream 分支記錄 token 使用量失敗:', usageErr);
+                  }
+                }
                 // 發送流結束標誌
                 controller.enqueue(encoder.encode(`data: ${JSON.stringify({event: 'done'})}\n\n`));
                 break;
