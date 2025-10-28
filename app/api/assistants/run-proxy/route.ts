@@ -37,6 +37,112 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
 
+    // Lightweight accounting-only mode: recordUsage
+    if (body?.mode === 'recordUsage') {
+      const startedAt = Date.now();
+      const { userId, responseId, threadId, runId } = body as {
+        userId?: string;
+        responseId?: string;
+        threadId?: string;
+        runId?: string;
+      };
+
+      if (!process.env.OPENAI_API_KEY) {
+        return NextResponse.json({ error: 'Missing OPENAI_API_KEY' }, { status: 500 });
+      }
+
+      // Identify and retrieve usage from either Responses API or Runs API
+      let tokenUsage: { prompt_tokens: number; completion_tokens: number; total_tokens: number; retrieval_tokens: number } | null = null;
+      let effectiveUserId = userId;
+      let uniqueId: string | null = null;
+
+      // Helper to build headers for REST
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+      };
+      if (process.env.OPENAI_ORG_ID) headers['OpenAI-Organization'] = process.env.OPENAI_ORG_ID;
+      if (process.env.OPENAI_PROJECT) headers['OpenAI-Project'] = process.env.OPENAI_PROJECT;
+
+      if (responseId) {
+        uniqueId = String(responseId);
+        // Try up to 3 times in case usage lags
+        let resp: any = null;
+        for (let i = 0; i < 3; i++) {
+          try {
+            const res = await fetch(`https://api.openai.com/v1/responses/${encodeURIComponent(String(responseId))}`, {
+              method: 'GET',
+              headers,
+              cache: 'no-store',
+            });
+            if (res.ok) resp = await res.json();
+          } catch {}
+          if (resp?.usage) break;
+          await new Promise((r) => setTimeout(r, 600));
+        }
+        if (resp) {
+          effectiveUserId = effectiveUserId || resp?.metadata?.userId || resp?.metadata?.user || undefined;
+          const u: any = resp?.usage;
+          if (u) {
+            const prompt = u.input_tokens ?? u.prompt_tokens ?? 0;
+            const completion = u.output_tokens ?? u.completion_tokens ?? 0;
+            const total = u.total_tokens ?? prompt + completion;
+            tokenUsage = { prompt_tokens: prompt, completion_tokens: completion, total_tokens: total, retrieval_tokens: 0 };
+          }
+        }
+      } else if (threadId && runId) {
+        uniqueId = String(runId);
+        let finalRun: any = null;
+        for (let i = 0; i < 3; i++) {
+          finalRun = await openai.beta.threads.runs
+            .retrieve(String(threadId), String(runId))
+            .catch(() => null);
+          if (finalRun?.usage) break;
+          await new Promise((r) => setTimeout(r, 600));
+        }
+        if (finalRun) {
+          effectiveUserId = effectiveUserId || finalRun?.metadata?.userId || finalRun?.user || undefined;
+          if (!effectiveUserId && threadId) {
+            const thread = await openai.beta.threads.retrieve(String(threadId)).catch(() => null as any);
+            effectiveUserId = thread?.metadata?.userId || thread?.user || effectiveUserId;
+          }
+          const u: any = finalRun?.usage;
+          if (u) {
+            tokenUsage = {
+              prompt_tokens: u.prompt_tokens ?? 0,
+              completion_tokens: u.completion_tokens ?? 0,
+              total_tokens: u.total_tokens ?? (u.prompt_tokens ?? 0) + (u.completion_tokens ?? 0),
+              retrieval_tokens: u.retrieval_tokens ?? 0,
+            };
+          }
+        }
+      } else {
+        return NextResponse.json({ ok: true, skipped: 'no identifier', tookMs: Date.now() - startedAt });
+      }
+
+      if (!effectiveUserId) {
+        return NextResponse.json({ ok: true, skipped: 'no userId', tookMs: Date.now() - startedAt });
+      }
+      if (!tokenUsage || (!tokenUsage.total_tokens && !tokenUsage.prompt_tokens && !tokenUsage.completion_tokens)) {
+        return NextResponse.json({ ok: true, skipped: 'no usage', tookMs: Date.now() - startedAt });
+      }
+
+      let recorded = false;
+      try {
+        await updateMonthlyTokenUsage(String(effectiveUserId), tokenUsage);
+        try {
+          await saveTokenUsage(String(effectiveUserId), String(uniqueId || threadId || runId || 'unknown'), tokenUsage);
+        } catch (e) {
+          console.error('[run-proxy][recordUsage] saveTokenUsage failed:', e);
+        }
+        recorded = true;
+      } catch (e) {
+        console.error('[run-proxy][recordUsage] updateMonthlyTokenUsage failed:', e);
+      }
+
+      return NextResponse.json({ ok: true, recorded, tokenUsage, tookMs: Date.now() - startedAt });
+    }
+
     const {
       assistantId,
       threadId: inputThreadId,

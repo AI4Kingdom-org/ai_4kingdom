@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useCredit } from '@/app/contexts/CreditContext';
 import { ChatKit, useChatKit } from '@openai/chatkit-react';
+import { bindRecordUsage } from '@/app/lib/chatkit/recordUsage';
 
 type Props = {
   userId: string;
@@ -26,6 +27,7 @@ export default function ChatkitEmbed({ userId, unitId, className }: Props) {
   useEffect(() => {
     let aborted = false;
     let refreshTimer: any;
+    let unbind: (() => void) | undefined;
 
     (async () => {
       try {
@@ -55,6 +57,21 @@ export default function ChatkitEmbed({ userId, unitId, className }: Props) {
             }
             try { refreshUsage?.(); } catch {}
           }, 5000);
+
+          // 綁定 ChatKit 完成事件（若 ChatKit 會以 postMessage 通知）
+          try {
+            unbind = bindRecordUsage({
+              userId: latestIds.current.userId,
+              onRecorded: (info) => {
+                if (info?.recorded) {
+                  // 稍等一下後刷新餘額，讓 UI 跟上
+                  setTimeout(() => { try { refreshUsage?.(); } catch {} }, 800);
+                }
+              },
+            });
+          } catch (e) {
+            console.warn('[ChatKit] bindRecordUsage failed:', (e as any)?.message || e);
+          }
         }
       } catch (e: any) {
         console.error('[ChatKit] probe session exception:', e?.message || e);
@@ -71,6 +88,7 @@ export default function ChatkitEmbed({ userId, unitId, className }: Props) {
       aborted = true;
       if (refreshTimer) clearInterval(refreshTimer);
       window.removeEventListener('unhandledrejection', onUH);
+      try { unbind?.(); } catch {}
     };
     // 空依賴 -> 只跑一次
   }, []);
