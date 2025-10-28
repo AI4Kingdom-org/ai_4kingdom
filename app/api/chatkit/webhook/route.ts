@@ -49,11 +49,18 @@ export async function POST(req: NextRequest) {
     const payload = await req.json().catch(() => ({}));
     const type = payload?.type || payload?.event || payload?.name || payload?.data?.type || '';
 
-    // 嘗試抓所有可能的識別資訊
+    // 嘗試抓所有可能的識別資訊（包含常見的 data.response.id 結構）
+    const responseObj =
+      payload?.response ||
+      payload?.data?.response ||
+      payload?.data?.object?.response ||
+      null;
+
     let responseId =
       payload?.response_id ||
       payload?.responseId ||
       payload?.data?.response_id ||
+      responseObj?.id ||
       (type === 'response.completed' ? payload?.data?.id : null) ||
       null;
 
@@ -63,6 +70,7 @@ export async function POST(req: NextRequest) {
       payload?.data?.thread_id ||
       payload?.data?.threadId ||
       payload?.data?.object?.thread_id ||
+      responseObj?.thread_id ||
       null;
 
     let runId =
@@ -81,10 +89,19 @@ export async function POST(req: NextRequest) {
       payload?.data?.user_id ||
       payload?.metadata?.userId ||
       payload?.data?.metadata?.userId ||
+      responseObj?.metadata?.userId ||
       null;
 
     console.log('[ChatKit webhook][recv]', {
-      type, responseId, threadId, runId, hasUserInEvent: !!userId, t: new Date().toISOString(),
+      type,
+      hasResponseObj: !!responseObj,
+      responseId,
+      threadId,
+      runId,
+      hasUserInEvent: !!userId,
+      keys: Object.keys(payload || {}),
+      dataKeys: payload?.data ? Object.keys(payload.data) : [],
+      t: new Date().toISOString(),
     });
 
     // 僅處理「完成類」事件
@@ -138,7 +155,7 @@ export async function POST(req: NextRequest) {
         resp?.metadata?.user ||
         null;
 
-  const u: any = resp?.usage;
+      const u: any = resp?.usage;
       if (u) {
         const prompt = u.input_tokens ?? u.prompt_tokens ?? 0;
         const completion = u.output_tokens ?? u.completion_tokens ?? 0;
