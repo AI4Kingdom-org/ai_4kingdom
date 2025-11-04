@@ -4,21 +4,29 @@ export const runtime = 'nodejs';
 
 import { NextRequest, NextResponse } from 'next/server';
 
-const getWorkflowId = () =>
-  process.env.SUNDAY_GUIDE_WORKFLOW_ID ||
-  process.env.NEXT_PUBLIC_SUNDAY_GUIDE_WORKFLOW_ID ||
-  '';
+// 依照 module 切換 workflowId，預設回退到 SUNDAY_GUIDE
+const resolveWorkflowId = (module?: string) => {
+  const m = (module || '').toLowerCase();
+  if (m === 'life-mentor') {
+    return process.env.LIFE_MENTOR_WORKFLOW_ID || process.env.NEXT_PUBLIC_LIFE_MENTOR_WORKFLOW_ID || '';
+  }
+  return process.env.SUNDAY_GUIDE_WORKFLOW_ID || process.env.NEXT_PUBLIC_SUNDAY_GUIDE_WORKFLOW_ID || '';
+};
 
 export async function POST(req: NextRequest) {
   try {
-    const { userId } = await req.json().catch(() => ({ userId: undefined }));
-    const WF_ID = getWorkflowId();
+    const url = new URL(req.url);
+    const qModule = url.searchParams.get('module') || undefined;
+    const body = await req.json().catch(() => ({} as any));
+    const userId = body?.userId as string | undefined;
+    const module = (body?.module as string | undefined) ?? qModule;
+    const WF_ID = resolveWorkflowId(module);
 
     if (!process.env.OPENAI_API_KEY) {
       return NextResponse.json({ error: 'Missing OPENAI_API_KEY' }, { status: 500 });
     }
     if (!WF_ID) {
-      return NextResponse.json({ error: 'Missing SUNDAY_GUIDE_WORKFLOW_ID' }, { status: 500 });
+      return NextResponse.json({ error: 'Missing workflow id for module' }, { status: 500 });
     }
     if (!userId || typeof userId !== 'string' || !userId.trim()) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -32,9 +40,20 @@ export async function POST(req: NextRequest) {
     if (process.env.OPENAI_ORG_ID) headers['OpenAI-Organization'] = process.env.OPENAI_ORG_ID!;
     if (process.env.OPENAI_PROJECT) headers['OpenAI-Project'] = process.env.OPENAI_PROJECT!;
 
-    const baseBody: any = { workflow: { id: WF_ID }, user: userId };
-    const webhookUrl = process.env.CHATKIT_WEBHOOK_URL || process.env.NEXT_PUBLIC_CHATKIT_WEBHOOK_URL;
+  // ChatKit sessions API 不支援 metadata 參數；只帶 workflow 與 user
+  // webhook URL 透過 ?uid= 傳遞 userId 作為備援
+  const baseBody: any = { workflow: { id: WF_ID }, user: userId };
+    const webhookBase = process.env.CHATKIT_WEBHOOK_URL || process.env.NEXT_PUBLIC_CHATKIT_WEBHOOK_URL;
+    const webhookUrl = webhookBase && userId ? `${webhookBase}?uid=${encodeURIComponent(userId)}` : webhookBase;
     const tryWebhookBody = webhookUrl ? { ...baseBody, webhook: { url: webhookUrl } } : baseBody;
+
+    console.log('[ChatKit session][create][try]', {
+      module: module || 'default',
+      workflowId: WF_ID,
+      withWebhook: !!webhookUrl,
+      webhookUrl,
+      userId,
+    });
 
     let resp = await fetch('https://api.openai.com/v1/chatkit/sessions', {
       method: 'POST',
@@ -43,6 +62,7 @@ export async function POST(req: NextRequest) {
       cache: 'no-store',
     });
     if (!resp.ok && webhookUrl && resp.status >= 400 && resp.status < 500) {
+      console.warn('[ChatKit session][create][retry-no-webhook]', { status: resp.status });
       resp = await fetch('https://api.openai.com/v1/chatkit/sessions', {
         method: 'POST',
         headers,
@@ -66,7 +86,7 @@ export async function POST(req: NextRequest) {
       expiresIn = Math.max(1, Math.floor((expMs - now) / 1000));
     }
 
-    const res = NextResponse.json({ client_secret: json.client_secret, expires_in: expiresIn }, { status: 200 });
+    const res = NextResponse.json({ client_secret: json.client_secret, expires_in: expiresIn, webhookAttached: !!webhookUrl }, { status: 200 });
     res.headers.set('Cache-Control', 'no-store, max-age=0');
     return res;
   } catch (err: any) {
@@ -76,7 +96,12 @@ export async function POST(req: NextRequest) {
 }
 
 export async function GET() {
-  const ok = !!process.env.OPENAI_API_KEY && !!getWorkflowId();
+  const ok = !!process.env.OPENAI_API_KEY && !!(
+    process.env.SUNDAY_GUIDE_WORKFLOW_ID ||
+    process.env.NEXT_PUBLIC_SUNDAY_GUIDE_WORKFLOW_ID ||
+    process.env.LIFE_MENTOR_WORKFLOW_ID ||
+    process.env.NEXT_PUBLIC_LIFE_MENTOR_WORKFLOW_ID
+  );
   const res = NextResponse.json({ ok }, { status: ok ? 200 : 500 });
   res.headers.set('Cache-Control', 'no-store, max-age=0');
   return res;
