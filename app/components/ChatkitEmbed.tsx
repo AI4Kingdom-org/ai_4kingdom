@@ -8,17 +8,19 @@ import { bindRecordUsage } from '@/app/lib/chatkit/recordUsage';
 type Props = {
   userId: string;
   unitId?: string;
+  // 可選：切換不同 ChatKit workflow 的模組代碼（例如 'life-mentor'）
+  module?: string;
   className?: string;
 };
 
-export default function ChatkitEmbed({ userId, unitId, className }: Props) {
+export default function ChatkitEmbed({ userId, unitId, module, className }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [probe, setProbe] = useState<{ status: 'idle' | 'ok' | 'fail'; message?: string }>({ status: 'idle' });
   const { refreshUsage } = useCredit();
 
   // 保存最新的 ids，避免 effect 依賴變動導致重跑
-  const latestIds = useRef({ userId, unitId });
-  latestIds.current = { userId, unitId };
+  const latestIds = useRef({ userId, unitId, module });
+  latestIds.current = { userId, unitId, module };
 
   // 本地快取 client_secret 與到期時間（毫秒）
   const secretCache = useRef<{ value: string | null; exp: number }>({ value: null, exp: 0 });
