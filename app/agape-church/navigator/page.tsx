@@ -2,14 +2,14 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
-import { useChat } from '../../contexts/ChatContext';
 import { useCredit } from '../../contexts/CreditContext';
-import Chat from '../../components/Chat/Chat';
 import WithChat from '../../components/layouts/WithChat';
 import styles from '../../user-sunday-guide/page.module.css';
 import { CHAT_TYPES } from '../../config/chatTypes';
-import { ASSISTANT_IDS, VECTOR_STORE_IDS } from '../../config/constants';
+import { ASSISTANT_IDS } from '../../config/constants';
 import ReactMarkdown from 'react-markdown';
+import ChatkitEmbed from '../../components/ChatkitEmbed';
+import Script from 'next/script';
 
 // Reuse same type of modes
 type GuideMode = 'summary' | 'devotional' | 'bible' | null;
@@ -25,7 +25,6 @@ function AgapeNavigatorContent() {
   const [fileList, setFileList] = useState<AgapeRecord[]>([]);
   const [selectedFileUniqueId, setSelectedFileUniqueId] = useState<string | null>(null);
   const { user } = useAuth();
-  const { setConfig } = useChat();
   const { refreshUsage } = useCredit();
   const [selectedMode, setSelectedMode] = useState<GuideMode>(null);
   const [sermonContent, setSermonContent] = useState<string | null>(null);
@@ -37,19 +36,12 @@ function AgapeNavigatorContent() {
   const [pdfLoading, setPdfLoading] = useState(false);
   const [pdfError, setPdfError] = useState<string | null>(null);
 
-  // 初始化 chat config 為 AGAPE 專用 assistant/vector store
+  // 初始化：取得檔案列表
   useEffect(() => {
     if (user?.user_id) {
-      // Agape 單位改為專用 Assistant/Vector Store
-      setConfig({
-        type: CHAT_TYPES.SUNDAY_GUIDE,
-        assistantId: ASSISTANT_IDS.AGAPE_CHURCH,
-        vectorStoreId: VECTOR_STORE_IDS.AGAPE_CHURCH,
-        userId: user.user_id
-      });
       fetchAgapeFiles();
     }
-  }, [user, setConfig]);
+  }, [user]);
 
   const fetchAgapeFiles = async () => {
     try {
@@ -218,13 +210,10 @@ function AgapeNavigatorContent() {
         <div className={styles.contentWrapper}>
           <div className={`${styles.contentArea} ${styles.hasContent}`}>{renderContent()}</div>
           <div className={styles.chatSection}>
+            {/* ChatKit 前端 SDK 腳本（必要） */}
+            <Script src="https://cdn.platform.openai.com/deployments/chatkit/chatkit.js" strategy="afterInteractive" />
             {user && (
-              <Chat
-                type={CHAT_TYPES.SUNDAY_GUIDE}
-                assistantId={ASSISTANT_IDS.AGAPE_CHURCH}
-                vectorStoreId={VECTOR_STORE_IDS.AGAPE_CHURCH}
-                userId={user.user_id}
-              />
+              <ChatkitEmbed userId={user.user_id} module="agape-church-navigator" />
             )}
           </div>
         </div>

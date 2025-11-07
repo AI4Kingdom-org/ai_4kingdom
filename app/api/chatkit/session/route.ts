@@ -10,6 +10,15 @@ const resolveWorkflowId = (module?: string) => {
   if (m === 'life-mentor') {
     return process.env.LIFE_MENTOR_WORKFLOW_ID || process.env.NEXT_PUBLIC_LIFE_MENTOR_WORKFLOW_ID || '';
   }
+  if (m === 'child-mental' || m === 'children-mental') {
+    return process.env.CHILD_MENTAL_WORKFLOW_ID || process.env.NEXT_PUBLIC_CHILD_MENTAL_WORKFLOW_ID || '';
+  }
+  if (m === 'agape-church-navigator' || m === 'east-christ-home-navigator') {
+    return process.env.CHURCH_NAVIGATOR_WORKFLOW_ID || process.env.NEXT_PUBLIC_CHURCH_NAVIGATOR_WORKFLOW_ID || '';
+  }
+  if (m === 'jian-zhu-navigator') {
+    return process.env.JIAN_ZHU_NAVIGATOR_WORKFLOW_ID || process.env.NEXT_PUBLIC_JIAN_ZHU_NAVIGATOR_WORKFLOW_ID || '';
+  }
   return process.env.SUNDAY_GUIDE_WORKFLOW_ID || process.env.NEXT_PUBLIC_SUNDAY_GUIDE_WORKFLOW_ID || '';
 };
 
@@ -100,7 +109,13 @@ export async function GET() {
     process.env.SUNDAY_GUIDE_WORKFLOW_ID ||
     process.env.NEXT_PUBLIC_SUNDAY_GUIDE_WORKFLOW_ID ||
     process.env.LIFE_MENTOR_WORKFLOW_ID ||
-    process.env.NEXT_PUBLIC_LIFE_MENTOR_WORKFLOW_ID
+    process.env.NEXT_PUBLIC_LIFE_MENTOR_WORKFLOW_ID ||
+    process.env.CHILD_MENTAL_WORKFLOW_ID ||
+    process.env.NEXT_PUBLIC_CHILD_MENTAL_WORKFLOW_ID ||
+    process.env.CHURCH_NAVIGATOR_WORKFLOW_ID ||
+    process.env.NEXT_PUBLIC_CHURCH_NAVIGATOR_WORKFLOW_ID ||
+    process.env.JIAN_ZHU_NAVIGATOR_WORKFLOW_ID ||
+    process.env.NEXT_PUBLIC_JIAN_ZHU_NAVIGATOR_WORKFLOW_ID
   );
   const res = NextResponse.json({ ok }, { status: ok ? 200 : 500 });
   res.headers.set('Cache-Control', 'no-store, max-age=0');
