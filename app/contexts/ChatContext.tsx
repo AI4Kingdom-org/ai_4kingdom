@@ -4,6 +4,7 @@ import React, { createContext, useContext, useState, useCallback, useEffect, use
 import { ASSISTANT_IDS, VECTOR_STORE_IDS } from '../config/constants';
 import { ChatType } from '../config/chatTypes';
 import { useAuth } from '../contexts/AuthContext';
+import { getConcernLabel } from '../types/homeschool';
 
 // 自訂事件總線，用於跨組件通信
 export const ChatEvents = {
@@ -371,6 +372,26 @@ export function ChatProvider({
           }
         } catch {}
 
+        // 若為 homeschool，在建立回應前構建標頭摘要
+        let replyHeader = '';
+        try {
+          if (config?.type === 'homeschool' && config?.userId) {
+            const hsRes = await fetch(`/api/homeschool-prompt?userId=${config.userId}`);
+            if (hsRes.ok) {
+              const hs = await hsRes.json();
+              const parts: string[] = [];
+              if (typeof hs.age === 'number') parts.push(`年齡：${hs.age} 歲`);
+              if (hs.gender) parts.push(`性別：${hs.gender === 'male' ? '男孩' : '女孩'}`);
+              if (Array.isArray(hs.concerns) && hs.concerns.length > 0) {
+                const labels = hs.concerns.map((c: string) => getConcernLabel(c));
+                const extra = hs.concerns.includes('other') && hs.otherConcern ? `（${hs.otherConcern}）` : '';
+                parts.push(`主要關注：${labels.join('、')}${extra}`);
+              }
+              if (parts.length) replyHeader = `學生資料：${parts.join('；')}\n\n`;
+            }
+          }
+        } catch {}
+
         const response = await fetch('/api/chat', {
             method: 'POST',
             headers: {
@@ -439,11 +460,17 @@ export function ChatProvider({
             let displayedText = '';        // 已顯示的文字
             
             if (SHOW_THINKING_ONLY) {
-              setMessages(prev => [...prev, { sender: 'bot', text: 'AI 正在思考中...', id: assistantTempId, isThinking: true }]);
+              // 思考模式：先顯示學生資料摘要（如果有）
+              const initialText = replyHeader ? `${replyHeader}AI 正在思考中...` : 'AI 正在思考中...';
+              setMessages(prev => [...prev, { sender: 'bot', text: initialText, id: assistantTempId, isThinking: true }]);
             } else if (SMART_FILTERING) {
-              setMessages(prev => [...prev, { sender: 'bot', text: 'AI 正在思考中...', id: assistantTempId, isThinking: true }]);
+              // 智能過濾模式：先顯示學生資料摘要（如果有）
+              const initialText = replyHeader ? `${replyHeader}AI 正在思考中...` : 'AI 正在思考中...';
+              setMessages(prev => [...prev, { sender: 'bot', text: initialText, id: assistantTempId, isThinking: true }]);
             } else {
-              setMessages(prev => [...prev, { sender: 'bot', text: 'AI正在思考中，請稍候...', id: assistantTempId, references: [] }]);
+              // 在原始即時模式下，先放入學生資料摘要作為回覆開頭
+              const initialText = replyHeader || 'AI正在思考中，請稍候...';
+              setMessages(prev => [...prev, { sender: 'bot', text: initialText, id: assistantTempId, references: [] }]);
             }
 
             const reader = response.body?.getReader();
@@ -507,20 +534,20 @@ export function ChatProvider({
                                 // 檢查是否可以開始顯示
                                 if (smartFilter.shouldStartShowing(textBuffer)) {
                                   hasStartedShowing = true;
-                                  displayedText = textBuffer;
+                                  displayedText = replyHeader + textBuffer; // 加上學生資料
                                   setMessages(prev => prev.map(m => {
                                     if (m.id === assistantTempId) {
-                                      return { ...m, text: textBuffer, isThinking: false };
+                                      return { ...m, text: displayedText, isThinking: false };
                                     }
                                     return m;
                                   }));
                                 }
                               } else {
                                 // 已開始顯示，繼續累加
-                                displayedText = textBuffer;
+                                displayedText = replyHeader + textBuffer; // 加上學生資料
                                 setMessages(prev => prev.map(m => {
                                   if (m.id === assistantTempId) {
-                                    return { ...m, text: textBuffer };
+                                    return { ...m, text: displayedText };
                                   }
                                   return m;
                                 }));
@@ -533,7 +560,7 @@ export function ChatProvider({
                             if (smartFilter.isValidChunk(deltaText) && deltaText.trim()) {
                               setMessages(prev => prev.map(m => {
                                 if (m.id === assistantTempId) {
-                                  const currentText = m.text === 'AI正在思考中，請稍候...' ? '' : m.text || '';
+                                  const currentText = m.text === 'AI正在思考中，請稍候...' ? replyHeader : (m.text || replyHeader);
                                   return { ...m, text: currentText + deltaText };
                                 }
                                 return m;
@@ -546,8 +573,8 @@ export function ChatProvider({
                       // 確保最終內容正確顯示
                       if ((SHOW_THINKING_ONLY || SMART_FILTERING) && textBuffer) {
                         if (!hasStartedShowing || SHOW_THINKING_ONLY) {
-                          // 如果到最後都沒開始顯示，或是思考模式，直接顯示全部內容（不再清理）
-                          const finalText = textBuffer || '';
+                          // 如果到最後都沒開始顯示，或是思考模式，直接顯示全部內容（包含學生資料）
+                          const finalText = replyHeader + (textBuffer || '');
                           setMessages(prev => prev.map(m => {
                             if (m.id === assistantTempId) {
                               return { ...m, text: finalText || '(無內容)', isThinking: false };
@@ -670,6 +697,30 @@ export function ChatProvider({
   const loadChatHistory = useCallback(async (userId: string) => {
 
     try {
+        // 如果是 homeschool 類型，先獲取學生資料摘要
+        let studentSummary = '';
+        if (config?.type === 'homeschool') {
+            try {
+                const hsRes = await fetch(`/api/homeschool-prompt?userId=${userId}`);
+                if (hsRes.ok) {
+                    const hs = await hsRes.json();
+                    const parts: string[] = [];
+                    if (typeof hs.age === 'number') parts.push(`年齡：${hs.age} 歲`);
+                    if (hs.gender) parts.push(`性別：${hs.gender === 'male' ? '男孩' : '女孩'}`);
+                    if (Array.isArray(hs.concerns) && hs.concerns.length > 0) {
+                        const labels = hs.concerns.map((c: string) => getConcernLabel(c));
+                        const extra = hs.concerns.includes('other') && hs.otherConcern ? `（${hs.otherConcern}）` : '';
+                        parts.push(`主要關注：${labels.join('、')}${extra}`);
+                    }
+                    if (parts.length) {
+                        studentSummary = `📋 學生資料：${parts.join('；')}\n\n`;
+                    }
+                }
+            } catch (e) {
+                console.warn('[WARN] 獲取學生資料摘要失敗:', e);
+            }
+        }
+
         const response = await fetch(`/api/messages?threadId=${currentThreadId}&userId=${userId}`, {
             credentials: 'include'
         });
@@ -683,13 +734,35 @@ export function ChatProvider({
             throw new Error(errorData.error || '加载失败');
         }
 
-        const data = await response.json();        if (data.success && Array.isArray(data.messages)) {
-            const formattedMessages = data.messages.map((msg: any) => ({
-                sender: msg.role === 'user' ? 'user' : 'bot',
-                text: msg.content,
-                references: msg.references || []
-            }));
+        const data = await response.json();
+        
+        console.log('[DEBUG] 收到的訊息數量:', data.messages?.length);
+        console.log('[DEBUG] 所有訊息:', data.messages);
+        console.log('[DEBUG] 第一條訊息:', data.messages?.[0]);
+        console.log('[DEBUG] 第一條訊息 role:', data.messages?.[0]?.role);
+        console.log('[DEBUG] 第一條訊息 content:', data.messages?.[0]?.content);
+
+        if (data.success && Array.isArray(data.messages)) {
+            const formattedMessages = data.messages.map((msg: any, index: number) => {
+                const content = msg.content || '';
+                
+                // 為第一條 bot 訊息加上學生資料摘要（只有當訊息中還沒有時）
+                if (studentSummary && index === 0 && msg.role !== 'user' && !content.startsWith('📋 學生資料：')) {
+                    console.log('[DEBUG] 為第一條訊息加上學生資料摘要');
+                    return {
+                        sender: 'bot',
+                        text: studentSummary + content,
+                        references: msg.references || []
+                    };
+                }
+                return {
+                    sender: msg.role === 'user' ? 'user' : 'bot',
+                    text: content,
+                    references: msg.references || []
+                };
+            });
             
+            console.log('[DEBUG] 格式化後的訊息數量:', formattedMessages.length);
             setMessages(formattedMessages);
         }
     } catch (error) {

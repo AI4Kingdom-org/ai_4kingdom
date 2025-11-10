@@ -3,6 +3,7 @@ import { DynamoDBDocumentClient, PutCommand, QueryCommand, GetCommand } from "@a
 import OpenAI from 'openai';
 import { NextResponse } from 'next/server';
 import { updateMonthlyTokenUsage } from '../../utils/monthlyTokenUsage';
+import { getConcernLabel } from '../../types/homeschool';
 import { createDynamoDBClient } from '../../utils/dynamodb';
 
 // Ensure dynamic behavior on Amplify/Next.js App Router
@@ -73,6 +74,37 @@ function setCORSHeaders(origin: string | null) {
   }
 
   return headers;
+}
+
+// 構建 Homeschool 專用的 instructions，強制助手在回覆中引用孩子資料
+async function buildHomeschoolInstructions(userId?: string) {
+  if (!userId) return undefined;
+  try {
+    const doc = await getDocClient();
+    const get = new GetCommand({
+      TableName: 'HomeschoolPrompts',
+      Key: { UserId: String(userId) }
+    });
+    const res = await doc.send(get);
+    const data: any = res.Item || {};
+    if (!data || (!data.childName && !data.age && !data.gender && !data.concerns)) return undefined;
+
+    const parts: string[] = [];
+    if (typeof data.age === 'number') parts.push(`年齡：${data.age} 歲`);
+    if (data.gender) parts.push(`性別：${data.gender === 'male' ? '男孩' : '女孩'}`);
+    if (Array.isArray(data.concerns) && data.concerns.length > 0) {
+      const labels = data.concerns.map((c: string) => getConcernLabel(c));
+      const other = data.concerns.includes('other') && data.otherConcern ? `（${data.otherConcern}）` : '';
+      parts.push(`主要關注：${labels.join('、')}${other}`);
+    }
+
+    const summary = parts.join('；');
+    // 指令：要求每次回覆開頭列出資料摘要
+    return `你是家庭教育輔導助手。以下是此孩子的資料摘要，請務必根據此資料提供個人化建議，且每次回覆開頭先輸出一行「學生資料：${summary}」。若資料不完整，先友善提醒使用者到 /homeschool-prompt 完善資料。`;
+  } catch (e) {
+    console.warn('[WARN] 構建 Homeschool 指令失敗，將略過:', e);
+    return undefined;
+  }
 }
 
 // 修改现有的 getUserActiveThread 函数
@@ -498,6 +530,7 @@ export async function POST(request: Request) {
       const runStream = openai.beta.threads.runs.stream(activeThreadId, {
         assistant_id: config.assistantId,
         max_completion_tokens: 2500,     // 保留：增加回應長度
+        ...(config.type === 'homeschool' ? { instructions: await buildHomeschoolInstructions(userId) } : {}),
         // 暫時註解掉可能不相容的參數進行測試
         // max_prompt_tokens: 15000,        // 可能不相容：控制輸入上下文
         // temperature: 0.1,                // 可能不相容：降低隨機性
@@ -601,6 +634,7 @@ export async function POST(request: Request) {
     const run = await openai.beta.threads.runs.create(activeThreadId, {
       assistant_id: config.assistantId,
       max_completion_tokens: 2500,       // 保留：增加回應長度
+      ...(config.type === 'homeschool' ? { instructions: await buildHomeschoolInstructions(userId) } : {}),
       // 暫時註解掉可能不相容的參數進行測試
       // max_prompt_tokens: 15000,          // 可能不相容：控制輸入上下文
       // temperature: 0.1,                  // 可能不相容：降低隨機性

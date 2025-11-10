@@ -22,62 +22,12 @@ export async function POST(request: Request) {
 
     const docClient = DynamoDBDocumentClient.from(await createDynamoDBClient());
 
-    // 如果是 homeschool 类型，获取基本信息并发送初始消息
+    // 🔴 移除自動發送初始訊息的邏輯
+    // homeschool 類型的初始訊息改由 /api/homeschool-prompt POST 時統一處理
+    // 這樣可以確保包含完整的學生資料（年齡、性別、關注問題等）
     if (type.toLowerCase() === 'homeschool') {
-      console.log('[DEBUG] 处理 homeschool 类型对话');
-      
-      const getCommand = new GetCommand({
-        TableName: 'HomeschoolPrompts',
-        Key: {
-          UserId: String(userId)  // 确保 UserId 是字符串类型
-        }
-      });
-
-      const response = await docClient.send(getCommand);
-      console.log('[DEBUG] 获取到的基本信息:', response.Item);
-
-      if (response.Item) {
-        const { childName, basicInfo, recentChanges } = response.Item;
-        const initialMessage = `我的孩子是${childName}，基本状况是${basicInfo}，最新变化是${recentChanges}`;
-        
-        console.log('[DEBUG] 发送初始消息:', initialMessage);
-
-        // 发送初始消息
-        await openai.beta.threads.messages.create(
-          thread.id,
-          {
-            role: "user",
-            content: initialMessage
-          }
-        );
-
-        // 运行 assistant
-        const run = await openai.beta.threads.runs.create(
-          thread.id,
-          { 
-            assistant_id: ASSISTANT_IDS.HOMESCHOOL,
-            max_completion_tokens: 1000
-          }
-        );
-
-        console.log('[DEBUG] Assistant 开始运行:', run.id);
-
-        // 等待运行完成
-        let runStatus = await openai.beta.threads.runs.retrieve(
-          thread.id,
-          run.id
-        );
-
-        while (runStatus.status === 'queued' || runStatus.status === 'in_progress') {
-          await new Promise(resolve => setTimeout(resolve, 1000));
-          runStatus = await openai.beta.threads.runs.retrieve(
-            thread.id,
-            run.id
-          );
-        }
-
-        console.log('[DEBUG] Assistant 运行完成:', runStatus.status);
-      }
+      console.log('[DEBUG] 处理 homeschool 类型对话 - 跳過自動發送初始訊息');
+      console.log('[DEBUG] 初始訊息將由 /api/homeschool-prompt 在保存時統一處理');
     }
 
     // 保存 thread 信息到 DynamoDB

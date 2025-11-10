@@ -85,18 +85,27 @@ export default function Chat({ type, assistantId, vectorStoreId, userId, threadI
     }
   }, [authLoading, user, userId, type, assistantId, vectorStoreId, setConfig]);
 
+  // 🔴 如果 prop 傳入了 threadId，使用它而不是創建新的
+  useEffect(() => {
+    if (threadId && threadId !== currentThreadId) {
+      console.log('[DEBUG] 使用 prop 傳入的 threadId:', threadId);
+      setCurrentThreadId(threadId);
+    }
+  }, [threadId, currentThreadId, setCurrentThreadId]);
+
   useEffect(() => {
     if (currentThreadId && config?.userId) {
       loadChatHistory(config.userId as string);
     }
   }, [currentThreadId, loadChatHistory, config]);
 
-  // 自動創建新對話
+  // 自動創建新對話（只有在沒有 prop threadId 時才創建）
   useEffect(() => {
-    if (!currentThreadId && !isCreatingThread && user) {
+    if (!currentThreadId && !isCreatingThread && user && !threadId) {
+      console.log('[DEBUG] 沒有 threadId，自動創建新對話');
       handleCreateNewThread();
     }
-  }, [currentThreadId, isCreatingThread, user]);
+  }, [currentThreadId, isCreatingThread, user, threadId]);
 
   const handleCreateNewThread = async () => {
     if (isCreatingThread || !user) return;
