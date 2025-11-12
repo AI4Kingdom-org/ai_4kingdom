@@ -1,113 +1,57 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useAuth } from '../contexts/AuthContext';
-import Chat from "../components/Chat/Chat";
-import { CHAT_TYPES } from "@/app/config/chatTypes";
-import { ASSISTANT_IDS, VECTOR_STORE_IDS } from "../config/constants";
-import { ChatProvider, useChat } from '../contexts/ChatContext';
-import WithChat from '../components/layouts/WithChat';
-import styles from './Homeschool.module.css';
+import { useAuth, AuthProvider } from '../contexts/AuthContext';
+import ChatkitEmbed from '../components/ChatkitEmbed';
+import Script from 'next/script';
 
 function HomeschoolContent() {
-    const { user, loading: authLoading } = useAuth();
-    const { setConfig } = useChat();
-    const [threadId, setThreadId] = useState<string | null>(null);
-    const [isLoading, setIsLoading] = useState(true);
+  const { user, loading } = useAuth();
+  const [ready, setReady] = useState(false);
 
-    useEffect(() => {
-        async function fetchThreadId() {
-            if (!user?.user_id) return;
+  useEffect(() => {
+    if (!loading) setReady(true);
+  }, [loading]);
 
-            try {
-                const response = await fetch(`/api/homeschool-prompt?userId=${user.user_id}`);
-                console.log('[DEBUG] /api/homeschool-prompt response:', response);
-                if (response.ok) {
-                    const data = await response.json();
-                    console.log('[DEBUG] /api/homeschool-prompt data:', data);
-                    if (data.threadId) {
-                        setThreadId(data.threadId);
-                        setConfig({
-                            type: CHAT_TYPES.HOMESCHOOL,
-                            assistantId: ASSISTANT_IDS.HOMESCHOOL,
-                            vectorStoreId: VECTOR_STORE_IDS.HOMESCHOOL,
-                            threadId: data.threadId,
-                            userId: user?.user_id
-                        });
-                    }
-                }
-            } catch (error) {
-                console.error('获取 Thread ID 失败:', error);
-            } finally {
-                setIsLoading(false);
-            }
-        }
+  if (!ready) return <div style={{ padding: 16, textAlign: 'center' }}>載入中...</div>;
+  if (!user) return <div style={{ padding: 16, textAlign: 'center' }}>請先登入</div>;
 
-        if (user?.user_id) {
-            fetchThreadId();
-        }
-    }, [user?.user_id, setConfig]);
-
-    useEffect(() => {
-        const handleUpdate = () => {
-            window.location.reload(); // 直接整頁重載
-        };
-        // 新增 storage 事件監聽，支援跨分頁同步
-        const handleStorage = (e: StorageEvent) => {
-            if (e.key === 'homeschool_data_updated') {
-                handleUpdate();
-            }
-        };
-        window.addEventListener('homeschool_data_updated', handleUpdate);
-        window.addEventListener('storage', handleStorage);
-        return () => {
-            window.removeEventListener('homeschool_data_updated', handleUpdate);
-            window.removeEventListener('storage', handleStorage);
-        };
-    }, [user?.user_id, setConfig]);
-
-    if (authLoading || isLoading) {
-        return <div>加载中...</div>;
-    }
-
-    if (!user) {
-        return <div>请先登录后使用</div>;
-    }
-
-    return (
-        <div className={styles.container}>
-            <Chat 
-                key={threadId || 'empty'} // 讓 threadId 變動時 Chat 強制 remount
-                type={CHAT_TYPES.HOMESCHOOL}
-                assistantId={ASSISTANT_IDS.HOMESCHOOL}
-                vectorStoreId={VECTOR_STORE_IDS.HOMESCHOOL}
-                threadId={threadId}
-                userId={user.user_id}
-            />
+  return (
+    <div style={{ padding: 16, color: '#000' }}>
+      {/* ChatKit 前端 SDK 腳本（必要） */}
+      <Script src="https://cdn.platform.openai.com/deployments/chatkit/chatkit.js" strategy="afterInteractive" />
+      {/* 外層容器：與其他 ChatKit 頁面一致的置中與最大寬度 */}
+      <div style={{ maxWidth: 1200, margin: '0 auto' }}>
+        {/* 內層內容寬度：90% 並限制最大寬度 900px */}
+        <div style={{ width: '90%', maxWidth: 900, margin: '0 auto' }}>
+          {/* 標題區塊 */}
+          <div style={{ marginBottom: 24, textAlign: 'center' }}>
+           
+            <p style={{ fontSize: 14, color: '#666' }}>
+              請告訴我您孩子的情況，我會據以為您提供建議
+            </p>
+          </div>
+          {/* 聊天區塊寬度 100% 並固定高度 */}
+          <div style={{ 
+            width: '100%', 
+            height: 500, 
+            borderRadius: 12, 
+            overflow: 'hidden', 
+            boxShadow: '0 4px 10px rgba(0,0,0,0.1)',
+            backgroundColor: '#fff'
+          }}>
+            <ChatkitEmbed userId={user.user_id} module="homeschool" />
+          </div>
         </div>
-    );
+      </div>
+    </div>
+  );
 }
 
-export default function Homeschool() {
-    const { user, loading } = useAuth();
-    
-    console.log('[DEBUG] Homeschool页面初始化:', {
-        userId: user?.user_id,
-        assistantId: ASSISTANT_IDS.HOMESCHOOL,
-        vectorStoreId: VECTOR_STORE_IDS.HOMESCHOOL
-    });
-    
-    if (loading) {
-        return <div>Loading, please wait...</div>;
-    }
-    
-    if (!user) {
-        return <div>请先登录</div>;
-    }
-
-    return (
-        <WithChat chatType={CHAT_TYPES.HOMESCHOOL}>
-            <HomeschoolContent />
-        </WithChat>
-    );
+export default function HomeschoolPage() {
+  return (
+    <AuthProvider optional={true}>
+      <HomeschoolContent />
+    </AuthProvider>
+  );
 }

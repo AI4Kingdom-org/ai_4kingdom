@@ -13,6 +13,9 @@ const resolveWorkflowId = (module?: string) => {
   if (m === 'child-mental' || m === 'children-mental') {
     return process.env.CHILD_MENTAL_WORKFLOW_ID || process.env.NEXT_PUBLIC_CHILD_MENTAL_WORKFLOW_ID || '';
   }
+  if (m === 'homeschool') {
+    return process.env.HOMESCHOOL_WORKFLOW_ID || process.env.NEXT_PUBLIC_HOMESCHOOL_WORKFLOW_ID || '';
+  }
   if (m === 'agape-church-navigator' || m === 'east-christ-home-navigator') {
     return process.env.CHURCH_NAVIGATOR_WORKFLOW_ID || process.env.NEXT_PUBLIC_CHURCH_NAVIGATOR_WORKFLOW_ID || '';
   }
@@ -112,6 +115,8 @@ export async function GET() {
     process.env.NEXT_PUBLIC_LIFE_MENTOR_WORKFLOW_ID ||
     process.env.CHILD_MENTAL_WORKFLOW_ID ||
     process.env.NEXT_PUBLIC_CHILD_MENTAL_WORKFLOW_ID ||
+    process.env.HOMESCHOOL_WORKFLOW_ID ||
+    process.env.NEXT_PUBLIC_HOMESCHOOL_WORKFLOW_ID ||
     process.env.CHURCH_NAVIGATOR_WORKFLOW_ID ||
     process.env.NEXT_PUBLIC_CHURCH_NAVIGATOR_WORKFLOW_ID ||
     process.env.JIAN_ZHU_NAVIGATOR_WORKFLOW_ID ||

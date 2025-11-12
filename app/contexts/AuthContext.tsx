@@ -59,12 +59,19 @@ export function AuthProvider({ children, optional = false }: { children: React.R
         signal: controller.signal,
       });
 
+      clearTimeout(timeout); // 成功後立即清除 timeout
+      
       if (!response.ok) {
         throw new Error(`API请求失败: ${response.status} ${response.statusText}`);
       }
       return response.json();
-    } finally {
-      clearTimeout(timeout);
+    } catch (err) {
+      clearTimeout(timeout); // 錯誤時也要清除 timeout
+      // 如果是 abort 錯誤，提供更友善的訊息
+      if (err instanceof Error && err.name === 'AbortError') {
+        throw new Error('请求超时，请检查网络连接');
+      }
+      throw err;
     }
   };
 
