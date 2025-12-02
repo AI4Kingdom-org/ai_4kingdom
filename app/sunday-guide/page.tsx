@@ -250,6 +250,7 @@ export default function SundayGuide() {
                         const channel = new BroadcastChannel('file-selection');
                         channel.postMessage({
                           type: 'FILE_SELECTED',
+                          assistantId: ASSISTANT_IDS.SUNDAY_GUIDE,
                           fileId: file.fileId,
                           fileName: file.fileName,
                           timestamp: Date.now()

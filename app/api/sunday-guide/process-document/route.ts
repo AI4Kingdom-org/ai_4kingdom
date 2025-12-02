@@ -13,29 +13,85 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
 });
 
-// 確保 run 僅檢索到單一檔案：若 vectorStoreId 內檔案數 > 1，且有提供 fileId，動態建立臨時向量庫只包含該檔案
-async function ensureSingleFileVectorStore(openaiClient: OpenAI, vectorStoreId: string, fileId?: string) {
+// 新增：等待特定檔案在向量庫中就緒
+async function waitForFileReady(openaiClient: OpenAI, vectorStoreId: string, fileId: string, timeoutMs = 60000) {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    try {
+      // 檢查特定檔案的狀態
+      // 注意：vectorStores.files.retrieve 可能不支援，需用 list 過濾或直接 retrieve
+      // OpenAI Node SDK 支援 retrieve: client.beta.vectorStores.files.retrieve(vsId, fileId)
+      const file = await openaiClient.beta.vectorStores.files.retrieve(vectorStoreId, fileId);
+      if (file.status === 'completed') {
+        console.log(`[DEBUG] 檔案 ${fileId} 在向量庫 ${vectorStoreId} 中索引完成`);
+        return true;
+      } else if (file.status === 'failed') {
+        console.error(`[ERROR] 檔案 ${fileId} 在向量庫 ${vectorStoreId} 中索引失敗: ${file.last_error?.message}`);
+        return false;
+      }
+    } catch (e) {
+      // 忽略暫時性錯誤
+    }
+    await new Promise(r => setTimeout(r, 1000));
+  }
+  console.warn(`[WARN] 等待檔案 ${fileId} 索引超時`);
+  return false;
+}
+
+// 修改：準備向量庫（統一處理，包含等待索引）
+async function prepareEffectiveVectorStore(openaiClient: OpenAI, vectorStoreId: string, fileId?: string) {
   let effectiveVectorStoreId = vectorStoreId;
   let cleanup: (() => Promise<void>) | undefined;
+
   try {
+    // 1. 檢查原始向量庫
     const list = await openaiClient.beta.vectorStores.files.list(vectorStoreId);
     const files = list.data || [];
+    
+    // 如果原始庫只有一個檔案，且就是我們要的（或沒指定 fileId），直接用原始庫
+    // 但仍需確保該檔案已索引完成
     if (files.length <= 1) {
-      return { effectiveVectorStoreId, cleanup };
+      if (files.length === 1) {
+        const fId = files[0].id;
+        // 如果指定了 fileId 且不匹配，則需要臨時庫（這種情況少見，除非 vectorStoreId 錯了）
+        if (fileId && fId !== fileId) {
+           // mismatch, fall through to create temp
+        } else {
+           // Wait for this file to be ready
+           await waitForFileReady(openaiClient, vectorStoreId, fId);
+           return { effectiveVectorStoreId, cleanup };
+        }
+      } else {
+        // 0 files, nothing to wait for, but also nothing to search. 
+        return { effectiveVectorStoreId, cleanup };
+      }
     }
+
+    // 2. 需要建立臨時向量庫的情況 (多檔混雜 或 指定了特定 fileId 但原始庫不純)
     if (fileId) {
+      console.log(`[INFO] 建立臨時向量庫以隔離檔案 ${fileId}`);
       const temp = await openaiClient.beta.vectorStores.create({ name: `tmp_single_${Date.now()}` });
+      
+      // 加入檔案
       await openaiClient.beta.vectorStores.files.create(temp.id, { file_id: fileId });
+      
       effectiveVectorStoreId = temp.id;
       cleanup = async () => {
-        try { await openaiClient.beta.vectorStores.del(temp.id); } catch {}
+        try { 
+          console.log(`[DEBUG] 清理臨時向量庫 ${temp.id}`);
+          await openaiClient.beta.vectorStores.del(temp.id); 
+        } catch (e) {
+          console.warn('[WARN] 清理臨時向量庫失敗', e);
+        }
       };
-      console.log('[INFO] 已建立臨時向量庫以避免交叉檢索', { from: vectorStoreId, to: effectiveVectorStoreId, fileId });
+
+      // 關鍵修正：等待索引完成！
+      await waitForFileReady(openaiClient, effectiveVectorStoreId, fileId);
     } else {
-      console.warn('[WARN] 多檔向量庫但缺少 fileId，無法建立臨時向量庫');
+      console.warn('[WARN] 多檔向量庫但缺少 fileId，無法建立臨時向量庫，可能導致檢索干擾');
     }
   } catch (e) {
-    console.warn('[WARN] ensureSingleFileVectorStore 失敗，將沿用原向量庫', e);
+    console.warn('[WARN] prepareEffectiveVectorStore 失敗，將沿用原向量庫', e);
   }
   return { effectiveVectorStoreId, cleanup };
 }
@@ -95,36 +151,15 @@ async function processDocumentAsync(params: {
   const docClient = await createDynamoDBClient();
   let attemptMetaUpdated = false;
 
-  // 等待向量庫索引完成
-  async function waitForVectorStoreReady(vsId: string, timeoutMs = 120000, pollMs = 1000) {
-    const start = Date.now();
-    let attempt = 0;
-    while (Date.now() - start < timeoutMs) {
-      attempt++;
-      try {
-        const list = await openai.beta.vectorStores.files.list(vsId, { limit: 50 });
-        const statuses = list.data.map(f => ({ id: f.id, status: f.status }));
-        const allReady = list.data.length > 0 && list.data.every(f => f.status === 'completed');
-        console.log(`[DEBUG] 向量庫索引檢查 (${attempt})`, statuses);
-        if (allReady) return true;
-      } catch (err) {
-        console.warn('[WARN] 檢查向量庫索引狀態失敗', err);
-      }
-      await new Promise(r => setTimeout(r, pollMs));
-    }
-    console.warn('[WARN] 等待向量庫索引超時，將繼續處理（可能導致助手初次無法讀取內容）');
-    return false;
-  }
+  // 1. 統一準備向量庫資源
+  console.log(`[DEBUG] 開始準備向量庫資源...`);
+  const { effectiveVectorStoreId, cleanup } = await prepareEffectiveVectorStore(openai, vectorStoreId, fileId);
+  console.log(`[DEBUG] 向量庫資源準備完成，使用 ID: ${effectiveVectorStoreId}`);
   
   try {
     // 不再更新進度狀態，只記錄日誌
     console.log(`[DEBUG] 開始處理文件: ${fileName}`);
     
-  // 先等待向量庫完成索引（盡最大努力）
-  await waitForVectorStoreReady(vectorStoreId);
-
-  // 移除初始化暖機 run 與初始訊息，改由各內容類型任務自行建立 thread
-
     // 標記開始 processing（只嘗試一次）
     if (!attemptMetaUpdated) {
       try {
@@ -201,8 +236,8 @@ async function processDocumentAsync(params: {
   async function processContentType({ type, prompt, summaryText }: { type: string, prompt: string, summaryText?: string }) {
       console.log(`[DEBUG] 並行處理 ${type} 內容開始...`);
       
-      const failurePhrases = ['無法直接訪問', '无法直接访问', '我無法直接訪問', '請提供', '無法讀取'];
-  const maxRuns = isAgape ? 5 : 3;
+      const failurePhrases = ['無法直接訪問', '无法直接访问', '我無法直接訪問', '請提供', '無法讀取', '[MISSING]', '無法從您上傳的文件中檢索到'];
+      const maxRuns = isAgape ? 5 : 3;
 
       for (let attempt = 1; attempt <= maxRuns; attempt++) {
         // 建立新執行緒
@@ -258,9 +293,6 @@ ${type === 'devotional' ?
           bibleStudy: 55000    // 查經：包含遊戲、詩歌、見證等完整內容
         };
 
-        // 保障：在 run 前確保只會讀到單一檔案
-        const { effectiveVectorStoreId, cleanup } = await ensureSingleFileVectorStore(openai, vectorStoreId, fileId || undefined);
-
         const run = await (openai.beta.threads.runs.create as any)(
           typeThread.id,
           {
@@ -308,12 +340,19 @@ ${type === 'devotional' ?
 
         const invalid = failurePhrases.some(p => content.includes(p)) || content.trim().length < 50;
         console.log(`[DEBUG] ${type} 嘗試 ${attempt} 完成，長度=${content.length}，invalid=${invalid}`);
-        if (invalid && attempt < maxRuns) {
-          await waitForVectorStoreReady(vectorStoreId, 15000, 3000); // 再等一次索引
-          continue; // retry
+        
+        if (invalid) {
+          if (attempt < maxRuns) {
+            console.warn(`[WARN] ${type} 內容無效 (包含錯誤關鍵字或過短)，將重試...`);
+            // 這裡不需要再 waitForVectorStoreReady，因為我們在最外層已經確保它 ready 了
+            // 除非是偶發的檢索失敗，重試 run 即可
+            continue; // retry
+          } else {
+            // 最後一次嘗試仍然無效，拋出錯誤以便外層捕獲並標記為 failed
+            throw new Error(`處理 ${type} 內容失敗: 產生的內容無效或包含錯誤訊息`);
+          }
         }
-        // 清理臨時向量庫（如有）
-        try { if (cleanup) await cleanup(); } catch {}
+        
         return { type, content };
       }
       throw new Error(`處理 ${type} 內容最終失敗`);
@@ -428,6 +467,12 @@ ${type === 'devotional' ?
       await updateProgress(docClient, { vectorStoreId, fileName, stage: 'error', status: 'failed', progress: 100, error: (error instanceof Error ? error.message : '未知錯誤') });
     } catch (e) { console.warn('[WARN] 記錄失敗狀態時出錯', e); }
     return false;
+  } finally {
+    // 統一清理
+    if (cleanup) {
+      console.log('[DEBUG] 執行最終資源清理');
+      await cleanup();
+    }
   }
 }
 
