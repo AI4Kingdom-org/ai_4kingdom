@@ -10,33 +10,25 @@
 
 .title {
   text-align: center;
-  margin-bottom: 5px;
+  margin-bottom: 20px;
   color: #333;
 }
 
-.fileInfo {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  margin: 0 auto 20px;
-  color: #666;
-  font-size: 14px;
-  gap: 12px;
+.chatSection {
+  width: 100%; /* 確保 100% 寬度 */
+  max-width: 100%; /* 確保不會超出父容器寬度 */
+  height: 450px; /* 稍微增加高度以提供更好的聊天體驗 */
+  margin-bottom: 20px; /* 下方邊距，與按鈕區域分隔 */
+  margin-left: 0;
+  border-radius: 12px; /* 添加圓角 */
+  overflow: hidden; /* 確保內容不會溢出 */
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1); /* 增加陰影效果 */
+  transition: opacity 0.3s ease, transform 0.3s ease;
+  box-sizing: border-box;
 }
 
-.fileNameBox, .uploadTimeBox {
-  display: flex;
-  align-items: center;
-  padding: 4px 10px;
-  background-color: #f7f9fc;
-  border-radius: 4px;
-  border: 1px solid #e1e4e8;
-}
-
-.fileIcon, .timeIcon {
-  margin-right: 5px;
-  font-size: 14px;
-  color: #0070f3;
+.chatSection > div {
+  width: 100% !important; /* 確保直接子元素也是100%寬度 */
 }
 
 .buttonGroup {
@@ -45,6 +37,94 @@
   gap: 10px;
   margin-bottom: 20px;
   flex-wrap: wrap;
+}
+
+/* 文檔列表樣式 */
+.fileListSection {
+  width: 90%;
+  max-width: 900px;
+  margin: 0 auto 20px auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.fileListHeader {
+  display: flex;
+  align-items: center;
+  margin-bottom: 12px;
+  width: 100%;
+  justify-content: center;
+}
+
+.fileListTitle {
+  margin: 0;
+  font-size: 14px;
+  color: #333;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.fileListContainer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  width: 100%;
+  justify-content: center;
+  align-items: flex-start;
+}
+
+.fileItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px;
+  background: white;
+  border: 2px solid #e1e4e8;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  width: 100%;
+  max-width: 280px;
+}
+
+.fileItem:hover {
+  border-color: #0070f3;
+  background-color: #f7f9fc;
+  box-shadow: 0 2px 8px rgba(0, 112, 243, 0.1);
+}
+
+.fileItemSelected {
+  border-color: #0070f3;
+  background-color: #f0f6ff;
+  box-shadow: 0 2px 8px rgba(0, 112, 243, 0.2);
+}
+
+.fileItemContent {
+  flex: 1;
+  min-width: 0;
+}
+
+.fileName {
+  font-size: 13px;
+  font-weight: 500;
+  color: #333;
+  margin-bottom: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.uploadTime {
+  font-size: 11px;
+  color: #999;
+}
+
+.fileItemCheckmark {
+  font-size: 16px;
+  color: #0070f3;
+  margin-left: 8px;
+  flex-shrink: 0;
 }
 
 .modeButton {
@@ -68,11 +148,6 @@
   border-color: #0070f3;
 }
 
-.mainContent {
-  width: 90%;
-  margin: 0 auto; /* 水平置中 */
-}
-
 .contentArea {
   width: 100%; /* 修改為 100% 寬度 */
   height: auto; /* 修改高度為自動調整 */
@@ -84,31 +159,11 @@
   background: white;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
   display: none; /* Hidden by default */
-  margin-bottom: 20px; /* 添加底部邊距，與聊天區域分隔 */
+  margin-bottom: 20px; /* 添加底部邊距 */
 }
 
 .contentArea.hasContent {
   display: block; /* Show when has content */
-}
-
-.emptyState {
-  width: 100%;
-  height: 250px;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  color: #666;
-  font-size: 1.2rem;
-  text-align: center;
-  padding: 20px;
-  background: #f9f9f9;
-  border-radius: 8px;
-  margin-bottom: 20px;
-}
-
-.noContentMessage {
-  width: 100%;
-  height: 250px;
 }
 
 .contentBox {
@@ -182,12 +237,6 @@
   width: 100% !important; /* 確保直接子元素也是100%寬度 */
 }
 
-.chatSection.hidden {
-  opacity: 0;
-  transform: translateY(20px);
-  pointer-events: none;
-}
-
 /* 修改為垂直布局 */
 .contentWrapper {
   display: flex;
@@ -246,23 +295,9 @@
     width: 100%;
   }
 
-  .contentArea,
-  .chatSection {
+  .contentArea {
     width: 100%;
     margin: 10px 0;
-  }
-
-  .emptyState {
-    width: 100%;
-    height: 200px;
-  }
-
-  .chatSection {
-    min-height: 300px;
-  }
-
-  .emptyState {
-    font-size: 1rem;
   }
 
   /* 響應式下載按鈕 */

@@ -240,6 +240,23 @@ export default function AssistantManager({
     
     // 立即更新信用点数使用量
     await refreshUsage();
+    
+    // 新增：通知其他頁面（如 /user-sunday-guide）有新檔案上傳完成
+    try {
+      const assistantIdForModule = assistantId === ASSISTANT_IDS.SUNDAY_GUIDE ? 'sunday-guide' : 'other';
+      const channel = new BroadcastChannel('file-upload-complete');
+      channel.postMessage({
+        type: 'FILE_UPLOAD_COMPLETE',
+        fileName: uploadedFileName,
+        timestamp: Date.now(),
+        assistantId: assistantId,
+        module: assistantIdForModule
+      });
+      channel.close();
+      console.log('[DEBUG] 已通知其他頁面檔案上傳完成:', uploadedFileName, '模組:', assistantIdForModule);
+    } catch (error) {
+      console.error('[DEBUG] BroadcastChannel 通知失敗:', error);
+    }
   };
 
   const checkProcessingStatus = async () => {
@@ -527,7 +544,6 @@ export default function AssistantManager({
         </div>
       )}
       <div className={styles.uploadSection}>
-        <h3><span className={styles.fileTypes}>.pdf,.txt,.doc,.docx</span></h3>
         <div className={styles.uploadForm}>
           <input
             type="file"
@@ -538,8 +554,9 @@ export default function AssistantManager({
                 handleFileUpload(file);
               }
             }}
-            disabled={disabled} // 禁用上传按钮
+            disabled={disabled}
           />
+          <h3><span className={styles.fileTypes}>支持格式：.pdf, .txt, .doc, .docx</span></h3>
           
           {uploading && (
             <div className={styles.loadingCircle}>

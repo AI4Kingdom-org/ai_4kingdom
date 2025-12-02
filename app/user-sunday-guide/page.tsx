@@ -70,6 +70,8 @@ function SundayGuideContent() {
   // 添加檔案資訊相關狀態變數
   const [fileName, setFileName] = useState<string>('');
   const [uploadTime, setUploadTime] = useState<string>('');
+  // 新增：追蹤是否已按下任一按鈕
+  const [isButtonClicked, setIsButtonClicked] = useState(false);
 
   useEffect(() => {
     // 檢查是否在瀏覽器環境
@@ -162,9 +164,44 @@ function SundayGuideContent() {
       channel.close();
     };
   }, []);
+
+  // 新增：監聽文件上傳完成的廣播，自動重新加載檔案列表
+  useEffect(() => {
+    const uploadChannel = new BroadcastChannel('file-upload-complete');
+    
+    const handleFileUploadComplete = (event: MessageEvent) => {
+      console.log('[DEBUG] 收到文件上傳完成廣播:', event.data);
+      
+      if (event.data.type === 'FILE_UPLOAD_COMPLETE' && event.data.module === 'sunday-guide') {
+        console.log('[DEBUG] /sunday-guide 上傳完成，準備重新加載檔案列表');
+        console.log('[DEBUG] 上傳的檔案:', event.data.fileName);
+        
+        // 延遲一下再重新加載，確保後端資料已更新
+        setTimeout(() => {
+          if (user?.user_id) {
+            console.log('[DEBUG] 重新加載檔案列表');
+            fetchLatestFileInfo();
+            // 如果已按過按鈕，也重新加載檔案清單
+            if (isButtonClicked) {
+              fetchAllFileRecords(1).catch(err => console.error('[DEBUG] 重新加載檔案清單失敗:', err));
+            }
+          }
+        }, 500);
+      }
+    };
+
+    uploadChannel.addEventListener('message', handleFileUploadComplete);
+
+    // 清理函數
+    return () => {
+      uploadChannel.removeEventListener('message', handleFileUploadComplete);
+      uploadChannel.close();
+    };
+  }, [user, isButtonClicked]);
   
   const handleModeSelect = async (mode: GuideMode) => {
     setSelectedMode(mode);
+    setIsButtonClicked(true); // 設置按鈕已點擊
     setLoading(true);
     try {
       const userId = user?.user_id || '';
@@ -364,21 +401,14 @@ function SundayGuideContent() {
     <div className={styles.container}>
       <Script src="https://cdn.platform.openai.com/deployments/chatkit/chatkit.js" strategy="afterInteractive" />
       <h1 className={styles.title}>主日信息导航</h1>
-      {/* 顯示檔案資訊 - 優先顯示來自 Sunday Guide 的選擇 */}
-      {selectedFileFromSundayGuide ? (
-        <div style={{ fontSize: '13px', color: '#0070f3', marginBottom: 12, textAlign: 'center' }}>
-          <div style={{ fontSize: '12px', color: '#666', marginBottom: 4 }}>
-            來自 Sunday Guide 選擇: {selectedFileFromSundayGuide.fileName}
-          </div>
+      
+      {/* ChatKit UI 模塊 - 在按鈕點擊後才顯示 */}
+      {isButtonClicked && user && (
+        <div className={styles.chatSection}>
+          <ChatkitEmbed userId={user.user_id} />
         </div>
-      ) : (
-        fileName && fileName !== '尚未上傳文件' && fileName !== '獲取文件資訊失敗' && (
-          <div style={{ fontSize: '13px', color: '#0070f3', marginBottom: 12, textAlign: 'center' }}>
-            当前文件: {fileName}
-            {uploadTime && ` (上传时间: ${uploadTime})`}
-          </div>
-        )
       )}
+
       <div className={styles.buttonGroup}>
         <button 
           className={`${styles.modeButton} ${selectedMode === 'summary' ? styles.active : ''}`}
@@ -402,24 +432,49 @@ function SundayGuideContent() {
           查经指引
         </button>
       </div>
-      {/* 新增：按鈕下方小字體提醒 - 根據選擇狀態顯示不同提示 */}
-      {selectedFileFromSundayGuide ? (
-        <div style={{ fontSize: '12px', color: '#0070f3', marginTop: 8, marginBottom: 8 }}>
-          * 当前显示为从 Sunday Guide 选择的文件内容。
-        </div>
-      ) : (
-        fileName && fileName !== '尚未上傳文件' && fileName !== '獲取文件資訊失敗' && (
-          <div style={{ fontSize: '12px', color: '#0070f3', marginTop: 8, marginBottom: 8 }}>
-            * 当前显示为您最近上传的文件内容。
+
+      {/* 按鈕下方顯示文檔列表 - 在按鈕點擊後才顯示 */}
+      {isButtonClicked && fileList && fileList.length > 0 && (
+        <div className={styles.fileListSection}>
+          <div className={styles.fileListHeader}>
+            <h3 className={styles.fileListTitle}>AI解析来源讲章：</h3>
           </div>
-        )
-      )}
-      {/* 顯示當前用戶 ID */}
-      {user?.user_id && (
-        <div style={{ fontSize: '11px', color: '#666', marginTop: 4, marginBottom: 8, fontFamily: 'monospace' }}>
-          当前用户: {user.user_id}
+          <div className={styles.fileListContainer}>
+            {fileList.map((file, index) => {
+              const isSelected = (file.fileUniqueId === selectedFileUniqueId) || 
+                                (selectedFileFromSundayGuide && selectedFileFromSundayGuide.fileId === file.fileUniqueId);
+              return (
+                <div 
+                  key={file.fileUniqueId}
+                  className={`${styles.fileItem} ${isSelected ? styles.fileItemSelected : ''}`}
+                  onClick={() => {
+                    setSelectedFileUniqueId(file.fileUniqueId);
+                    setFileName(file.fileName);
+                    const uploadDate = new Date(file.uploadTime);
+                    setUploadTime(uploadDate.toLocaleDateString('en-US', { timeZone: 'America/Los_Angeles' }));
+                    setSelectedFileFromSundayGuide(null);
+                    setSelectedMode(null);
+                    setSermonContent(null);
+                  }}
+                >
+                  <div className={styles.fileItemContent}>
+                    <div className={styles.fileName}>{file.fileName}</div>
+                    <div className={styles.uploadTime}>
+                      {new Date(file.uploadTime).toLocaleDateString('zh-TW', { 
+                        year: 'numeric', 
+                        month: '2-digit', 
+                        day: '2-digit' 
+                      })}
+                    </div>
+                  </div>
+                  {isSelected && <div className={styles.fileItemCheckmark}>✓</div>}
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
+
       {/* 當用戶沒有可訪問的文件時顯示提示 */}
       {(!fileName || fileName === '尚未上傳文件' || fileName === '獲取文件資訊失敗') && (
         <div style={{ fontSize: '14px', color: '#ff6b6b', marginTop: 8, marginBottom: 16, textAlign: 'center', padding: '12px', backgroundColor: '#fff5f5', borderRadius: '8px', border: '1px solid #ffebee' }}>
@@ -429,22 +484,15 @@ function SundayGuideContent() {
           }
         </div>
       )}
+
+      {/* 內容顯示區域 - 隱藏直到有內容選擇 */}
       {sermonContent ? (
         <div className={styles.contentWrapper}>
           <div className={`${styles.contentArea} ${styles.hasContent}`}>
             {renderContent()}
           </div>
-          <div className={styles.chatSection}>
-            {user && (
-              <ChatkitEmbed userId={user.user_id} />
-            )}
-          </div>
         </div>
-      ) : (
-        <div className={styles.emptyState}>
-          <p>请选择要查看的内容类型</p>
-        </div>
-      )}
+      ) : null}
     </div>
   );
 }
