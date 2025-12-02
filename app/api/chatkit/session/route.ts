@@ -34,13 +34,22 @@ export async function POST(req: NextRequest) {
     const module = (body?.module as string | undefined) ?? qModule;
     const WF_ID = resolveWorkflowId(module);
 
+    // 詳細的環境變數檢查日誌
     if (!process.env.OPENAI_API_KEY) {
+      console.error('[ChatKit session] Error: Missing OPENAI_API_KEY');
       return NextResponse.json({ error: 'Missing OPENAI_API_KEY' }, { status: 500 });
     }
     if (!WF_ID) {
-      return NextResponse.json({ error: 'Missing workflow id for module' }, { status: 500 });
+      console.error('[ChatKit session] Error: Missing workflow id for module:', module);
+      console.error('[ChatKit session] Available configs:', {
+        SUNDAY_GUIDE: !!process.env.SUNDAY_GUIDE_WORKFLOW_ID || !!process.env.NEXT_PUBLIC_SUNDAY_GUIDE_WORKFLOW_ID,
+        LIFE_MENTOR: !!process.env.LIFE_MENTOR_WORKFLOW_ID || !!process.env.NEXT_PUBLIC_LIFE_MENTOR_WORKFLOW_ID,
+        CHILD_MENTAL: !!process.env.CHILD_MENTAL_WORKFLOW_ID || !!process.env.NEXT_PUBLIC_CHILD_MENTAL_WORKFLOW_ID,
+      });
+      return NextResponse.json({ error: `Missing workflow id for module: ${module || 'default'}` }, { status: 500 });
     }
     if (!userId || typeof userId !== 'string' || !userId.trim()) {
+      console.error('[ChatKit session] Error: Invalid or missing userId');
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -63,7 +72,6 @@ export async function POST(req: NextRequest) {
       module: module || 'default',
       workflowId: WF_ID,
       withWebhook: !!webhookUrl,
-      webhookUrl,
       userId,
     });
 
@@ -73,6 +81,7 @@ export async function POST(req: NextRequest) {
       body: JSON.stringify(tryWebhookBody),
       cache: 'no-store',
     });
+    
     if (!resp.ok && webhookUrl && resp.status >= 400 && resp.status < 500) {
       console.warn('[ChatKit session][create][retry-no-webhook]', { status: resp.status });
       resp = await fetch('https://api.openai.com/v1/chatkit/sessions', {
@@ -82,13 +91,22 @@ export async function POST(req: NextRequest) {
         cache: 'no-store',
       });
     }
+    
     if (!resp.ok) {
       const text = await resp.text().catch(() => '');
-      return NextResponse.json({ error: `OpenAI ChatKit session failed: ${resp.status} ${text}` }, { status: 500 });
+      console.error('[ChatKit session] OpenAI API error:', { 
+        status: resp.status, 
+        statusText: resp.statusText,
+        responseText: text.substring(0, 200)
+      });
+      return NextResponse.json({ error: `OpenAI ChatKit session failed: ${resp.status} ${text.substring(0, 100)}` }, { status: 500 });
     }
 
     const json = await resp.json() as { client_secret?: string; expires_in?: number; expires_at?: number };
-    if (!json?.client_secret) return NextResponse.json({ error: 'Missing client_secret in ChatKit response' }, { status: 500 });
+    if (!json?.client_secret) {
+      console.error('[ChatKit session] Missing client_secret in response');
+      return NextResponse.json({ error: 'Missing client_secret in ChatKit response' }, { status: 500 });
+    }
 
     let expiresIn = 90;
     if (Number.isFinite(json.expires_in)) expiresIn = json.expires_in!;
@@ -102,7 +120,7 @@ export async function POST(req: NextRequest) {
     res.headers.set('Cache-Control', 'no-store, max-age=0');
     return res;
   } catch (err: any) {
-    console.error('[ChatKit session] error:', err);
+    console.error('[ChatKit session] Caught error:', err?.message ?? err);
     return NextResponse.json({ error: err?.message ?? 'Unknown error' }, { status: 500 });
   }
 }

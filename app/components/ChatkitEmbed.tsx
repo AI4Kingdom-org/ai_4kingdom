@@ -157,16 +157,15 @@ export default function ChatkitEmbed({ userId, unitId, module, className }: Prop
         }}
       >
         ChatKit 初始化失敗：{error}
-        <div style={{ marginTop: 8, color: '#444' }}>
-          檢查事項：
-          <ul style={{ margin: '6px 0 0 16px' }}>
-            <li>伺服器端有設定 <code>OPENAI_API_KEY</code>（不可曝露到前端）。</li>
-            <li>Agent 已 Published，Allowed Domains 含目前來源（含協定與埠）。</li>
-            <li>Network → <code>/api/chatkit/session</code> 的回應與錯誤訊息。</li>
+        <div style={{ marginTop: 8, color: '#666', fontSize: 12 }}>
+          <p style={{ margin: '6px 0' }}>可能原因：</p>
+          <ul style={{ margin: '6px 0 0 16px', paddingLeft: 0 }}>
+            <li>伺服器端未設定 OPENAI_API_KEY 或相關 workflow ID</li>
+            <li>Agent 未發佈或 Allowed Domains 配置不正確</li>
+            <li>網絡連接問題或 OpenAI API 暫時無法使用</li>
           </ul>
-          <div style={{ marginTop: 6, fontFamily: 'monospace' }}>
-            probe: {probe.status}
-            {probe.message ? ` - ${probe.message}` : ''}
+          <div style={{ marginTop: 8, fontFamily: 'monospace', fontSize: 11 }}>
+            詳情：{probe.message || 'N/A'}
           </div>
         </div>
       </div>
@@ -177,7 +176,7 @@ export default function ChatkitEmbed({ userId, unitId, module, className }: Prop
     <div style={{ width: '100%', height: '100%', minHeight: 360 }}>
       {probe.status !== 'ok' && (
         <div style={{ fontSize: 12, color: '#666', marginBottom: 8 }}>
-          初始化中… {probe.status === 'fail' ? `(probe: ${probe.message})` : ''}
+          ChatKit 初始化中… {probe.status === 'fail' ? `(失敗: ${probe.message})` : ''}
         </div>
       )}
 

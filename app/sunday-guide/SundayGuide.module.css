@@ -1,192 +1,56 @@
+/* Page shell */
 .container {
-  padding: 2rem;
+  padding: 1rem 1rem 1.25rem;
   max-width: 1200px;
   margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  min-height: 100vh;
+  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 50%, #e2e8f0 100%);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
 }
 
-.title {
-  font-size: 2rem;
-  color: #333;
-  margin-bottom: 2rem;
-  text-align: center;
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 0.3fr) minmax(0, 0.7fr);
+  gap: 0.75rem;
+  align-items: flex-start;
 }
 
+/* Upload / processing card - 简化为一行 */
 .section {
-  margin-bottom: 3rem;
-  background: white;
-  padding: 2rem;
-  border-radius: 8px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+  padding: 0.85rem 1.25rem;
+  border-radius: 14px;
+  border: 1px solid rgba(99, 102, 241, 0.15);
+  box-shadow: 0 4px 20px rgba(15, 23, 42, 0.06);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
 }
 
 .sectionTitle {
-  font-size: 1.5rem;
-  color: #444;
-  margin-bottom: 1.5rem;
-  padding-bottom: 0.5rem;
-  border-bottom: 2px solid #eee;
-}
-
-.chatContainer {
-  width: 100%;
-  height: auto;
-  margin-top: 2rem;
-  padding: 1.5rem;
-  background: white;
-  border-radius: 8px;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-}
-
-.previewContainer {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 2rem;
-  margin-top: 1.5rem;
-}
-
-/* 進度條樣式 */
-.progressContainer {
-  margin: 1rem 0;
-  padding: 0.5rem 1rem;
-  background-color: #f5f5f5;
-  border-radius: 8px;
-}
-
-.progressLabel {
-  margin-bottom: 0.5rem;
-  font-size: 0.9rem;
-  color: #555;
-  font-weight: 500;
-}
-
-.progressBar {
-  width: 100%;
-  height: 12px;
-  background-color: #e0e0e0;
-  border-radius: 6px;
-  overflow: hidden;
-}
-
-.progressBarFill {
-  height: 100%;
-  background-color: #4CAF50; /* 綠色 */
-  border-radius: 6px;
-  transition: width 0.3s ease;
-}
-
-/* 上傳時間樣式 */
-.uploadTimeContainer {
-  margin-top: 1rem;
-  padding: 0.5rem;
-  background-color: #f8fff8;
-  border-radius: 6px;
-  border-left: 3px solid #4CAF50;
-  font-size: 0.9rem;
-  color: #444;
-}
-
-.uploadTimeContainer p {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #1e293b;
   margin: 0;
-}
-
-.processingNote {
-  margin-top: 4px !important;
-  font-style: italic;
-  font-size: 0.8rem;
-  color: #666;
-}
-
-.loading {
-  text-align: center;
-  padding: 2rem;
-  color: #666;
-  grid-column: 1 / -1;
-  background: #f8f9fa;
-  border-radius: 6px;
-  border: 1px solid #e9ecef;
-}
-
-.emptyState {
-  text-align: center;
-  padding: 2rem;
-  color: #666;
-  grid-column: 1 / -1;
-  background: #f8f9fa;
-  border-radius: 6px;
-  border: 1px solid #e9ecef;
-}
-
-.previewSection {
-  padding: 1.5rem;
-  border-radius: 6px;
-  border: 1px solid #e9ecef;
-}
-
-/* 為四個預覽區塊添加不同的背景色 */
-.previewSection:nth-child(1) {
-  background: #f0f7ff; /* 淺藍色 */
-  border-left: 3px solid #4c8bf5;
-}
-
-.previewSection:nth-child(2) {
-  background: #fff7f0; /* 淺杏色 */
-  border-left: 3px solid #ff9a5a;
-}
-
-.previewSection:nth-child(3) {
-  background: #f0fff7; /* 淺薄荷綠 */
-  border-left: 3px solid #4caf83;
-}
-
-.previewSection:nth-child(4) {
-  background: #faf0ff; /* 淺紫色 */
-  border-left: 3px solid #9c5af5;
-}
-
-.previewSection h3 {
-  color: #333;
-  margin-bottom: 1rem;
-  font-size: 1.2rem;
-}
-
-.previewContent {
-  white-space: pre-wrap;
-  line-height: 1.6;
-  color: #495057;
-  max-height: 300px;
-  overflow-y: auto;
-  padding: 1rem;
-  background: white;
-  border-radius: 4px;
-  border: 1px solid #dee2e6;
-}
-
-/* 預覽控制按鈕樣式 */
-.previewControls {
-  margin: 1rem 0;
   display: flex;
-  justify-content: center;
+  align-items: center;
+  gap: 0.35rem;
+  flex-shrink: 0;
 }
 
-.previewButton {
-  padding: 0.6rem 1.2rem;
-  background-color: #0070f3;
-  color: white;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 0.9rem;
-  transition: background-color 0.3s ease;
-}
-
-.previewButton:hover {
-  background-color: #0051b3;
+.sectionTitle::before {
+  content: '📄';
+  font-size: 1rem;
 }
 
 /* 任務列表樣式 */
 .taskList {
-  margin: 1rem 0;
-  padding: 1rem;
+  margin: 0.5rem 0;
+  padding: 0.75rem;
   background-color: #f9f9f9;
   border-radius: 8px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
@@ -266,43 +130,14 @@
   100% { transform: rotate(360deg); }
 }
 
-/* 最新上传文档记录样式 */
-.latestFileRecord {
-  margin-top: 1.5rem;
-  padding: 0.9rem;  /* 稍微減小內邊距 */
-  background-color: #f7f9ff;
-  border-radius: 6px;
-  border-left: 3px solid #3f51b5;
-  font-size: 0.9rem; /* 整體字體縮小 */
-}
-
-.latestFileRecord h3 {
-  margin-top: 0;
-  margin-bottom: 0.8rem;
-  font-size: 1rem; /* 縮小標題字體 */
-  color: #444;
-  font-weight: 500;
-}
-
-.fileRecordContent {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-  font-size: 0.9rem; /* 縮小內容字體 */
-}
-
-.fileNameBox, .uploadDateBox {
-  display: flex;
-  align-items: center;
-  padding: 6px 12px;
-  background-color: #fff;
-  border-radius: 4px;
-  border: 1px solid #e1e4e8;
-}
-
-.fileIcon, .timeIcon {
-  margin-right: 8px;
-  font-size: 13px; /* 縮小圖示字體 */
+/* 额度警告样式 (保留兼容) */
+.creditWarning {
+  padding: 0.5rem 0.75rem;
+  border-radius: 8px;
+  background: #fef2f2;
+  color: #dc2626;
+  font-size: 0.8rem;
+  width: 100%;
 }
 
 /* 響應式設計 */
@@ -342,105 +177,118 @@
   flex-direction: column;
 }
 
+/* 右側：已上传文件清单卡片 */
 .recentFilesAside {
-  flex: 0 0 260px;
-  min-width: 180px;
-  background: #f5f5f5;
-  border-radius: 8px;
-  padding: 1rem 1rem;
+  background: #ffffff;
+  border-radius: 16px;
+  padding: 1rem 1rem 1.1rem;
+  border: 1px solid rgba(99, 102, 241, 0.12);
+  box-shadow: 0 8px 30px rgba(15, 23, 42, 0.06);
   display: flex;
   flex-direction: column;
-  justify-content: flex-start;
-  height: 100%;
+  gap: 0.6rem;
 }
 
 .recentFilesTitle {
-  font-size: 1rem;
-  color: #050505;
-  margin-bottom: 1rem;
-  padding-bottom: 0.3rem;
-  border-bottom: 0px solid #eee;
-  background: #f5f5f5;
+  font-size: 0.9rem;
   font-weight: 600;
+  color: #1e40af;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  letter-spacing: 0.02em;
 }
 
+.recentFilesTitle::before {
+  content: '📚';
+  font-size: 0.95rem;
+}
 
 .recentFilesListScrollable {
   list-style: none;
-  padding: 0;
+  padding: 0.25rem 0;
   margin: 0;
-  max-height: 220px; /* 5筆，每筆約44px */
+  max-height: 260px;
   overflow-y: auto;
-  border: 1px solid #eee;
-  background: #fafafa;
-  border-radius: 4px;
-  box-sizing: border-box;
+  background: #ffffff;
+  border-radius: 10px;
 }
 
 .recentFileItem {
-  min-height: 44px;
+  min-height: 42px;
   display: flex;
   align-items: center;
-  padding: 4px 8px;
-  margin-bottom: 0;
+  padding: 0.45rem 0.6rem;
+  margin: 0.15rem 0;
   font-size: 0.8rem;
-  background: #f5f5f5;
-  border: none;
+  background: #ffffff;
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+
+.recentFileItem:hover {
+  background: #f3f4f6;
+  border-color: #e5e7eb;
 }
 
 .fileIndex {
-  color: #010df7;
-  font-size: 0.8rem;
-  margin-right: 0.3rem;
+  color: #1e40af;
+  font-size: 0.78rem;
+  margin-right: 0.35rem;
 }
 
 .fileName {
-  font-size: 0.8rem;
+  font-size: 0.82rem;
   font-weight: 500;
-  color: #333;
+  color: #1e40af;
   flex: 1 1 auto;
-  min-width: 0; /* 允許在 flex 內收縮，啟用省略號 */
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .uploadDate {
-  font-size: 0.8rem;
-  color: #666;
-  margin-left: 0.5rem;
-  flex-shrink: 0; /* 日期不被擠壓 */
+  font-size: 0.75rem;
+  color: #3b82f6;
+  margin-left: 0.45rem;
+  flex-shrink: 0;
 }
 
 .noRecentFiles {
   font-size: 0.8rem;
-  color: #999;
+  color: #9ca3af;
   text-align: center;
-  padding: 0.5rem 0;
-  background: none;
-  border-radius: 0;
+  padding: 0.6rem 0.25rem;
+}
+
+@media (max-width: 1024px) {
+  .layout {
+    grid-template-columns: minmax(0, 1.8fr) minmax(240px, 1fr);
+  }
 }
 
 @media (max-width: 900px) {
-  .mainContentWrapper {
-    flex-direction: column;
+  .container {
+    padding: 1.25rem 1rem 2rem;
   }
-  .recentFilesAside {
-    width: 100%;
-    min-width: unset;
-    margin-top: 2rem;
-    height: auto;
+
+  .layout {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 
 .processingAlert {
-  margin-top: 1rem;
-  padding: 0.8rem;
-  background-color: #e5f6fd;
-  border-radius: 6px;
-  border-left: 3px solid #0ea5e9;
-  font-size: 0.9rem;
-  color: #0c4a6e;
+  margin-top: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  background: linear-gradient(135deg, #dbeafe 0%, #e0e7ff 100%);
+  border-radius: 8px;
+  border: 1px solid rgba(59, 130, 246, 0.2);
+  font-size: 0.8rem;
+  color: #1e40af;
+  width: 100%;
 }
 
 .processingAlert p {
@@ -450,38 +298,43 @@
 }
 
 .processingAlert p:before {
-  content: "🕒";
-  margin-right: 8px;
+  content: "⏳";
+  margin-right: 6px;
 }
 
-/* 分頁控制樣式 */
+/* 分页控制样式 */
 .pagination {
   display: flex;
   justify-content: center;
   align-items: center;
-  margin-top: 1rem;
-  padding: 1rem 0;
-  gap: 1rem;
-  border-top: 1px solid #e5e5e5;
+  margin-top: 0.75rem;
+  padding: 0.6rem 0 0.2rem;
+  gap: 0.75rem;
+  border-top: 1px solid rgba(148, 163, 184, 0.2);
 }
 
 .paginationButton {
-  background: #007bff;
+  background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
   color: white;
   border: none;
-  padding: 0.5rem 1rem;
-  border-radius: 4px;
+  padding: 0.4rem 0.85rem;
+  border-radius: 8px;
   cursor: pointer;
-  font-size: 0.9rem;
-  transition: background-color 0.3s;
+  font-size: 0.8rem;
+  font-weight: 500;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.25);
 }
 
 .paginationButton:hover:not(:disabled) {
-  background: #0056b3;
+  background: linear-gradient(135deg, #4f46e5 0%, #4338ca 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.35);
 }
 
 .paginationButton:disabled {
-  background: #ccc;
+  background: #cbd5e1;
+  box-shadow: none;
   cursor: not-allowed;
 }
 
@@ -491,10 +344,65 @@
   font-weight: 500;
 }
 
-/* 上傳者信息樣式 */
+/* 上传者信息样式 */
 .uploaderInfo {
   font-size: 0.7rem;
-  color: #999;
+  color: #94a3b8;
   margin-left: 0.5rem;
   font-style: italic;
+}
+
+/* 内联额度警告 */
+.creditWarningInline {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.25rem 0.6rem;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  background: #fee2e2;
+  color: #dc2626;
+  flex-shrink: 0;
+}
+
+/* 上传完成时间徽章 */
+.uploadTimeBadge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.25rem 0.6rem;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  background: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%);
+  color: #059669;
+  flex-shrink: 0;
+}
+
+/* 选中文件样式 */
+.recentFileItem.selected {
+  background: #f3f4f6;
+  border-color: #1e40af;
+  box-shadow: 0 2px 8px rgba(30, 64, 175, 0.15);
+}
+
+/* 删除按钮 */
+.deleteButton {
+  margin-left: 6px;
+  padding: 0.2rem 0.4rem;
+  background: none;
+  border: none;
+  color: #ef4444;
+  cursor: pointer;
+  font-size: 0.85rem;
+  border-radius: 4px;
+  transition: all 0.15s ease;
+}
+
+.deleteButton:hover {
+  background: #fee2e2;
+}
+
+.deleteButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }

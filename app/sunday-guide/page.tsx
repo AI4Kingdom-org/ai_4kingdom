@@ -193,147 +193,129 @@ export default function SundayGuide() {
   };
 
   return (
-  <WithChat chatType="sunday-guide">
+    <WithChat chatType="sunday-guide">
       <div className={styles.container}>
-        <UserIdDisplay />
-        {/* 只有有權限的用戶才能看到文件上傳區塊 */}
-        {hasUploadPermission && (
-          <section className={styles.section}>
-            <h2 className={styles.sectionTitle}>文件上传与处理</h2>
-            {isUploadDisabled && (
-              <div className={styles.creditWarning}>
-                <p>您的 Token 额度不足！请升级会员以获取更多 Credits。</p>
+        <div>
+          <UserIdDisplay />
+        </div>
+
+        <div className={styles.layout}>
+          {/* 左側：上傳 / 狀態區塊 */}
+          {hasUploadPermission && (
+            <section className={styles.section}>
+              <div className={styles.sectionTitle}>
+                <span>上传讲章</span>
               </div>
-            )}
-            {!isUploadDisabled && remainingCredits < 20 && (
-              <div className={styles.creditWarning} style={{ backgroundColor: '#fff8e0', color: '#b7791f', borderLeft: '4px solid #ecc94b' }}>
-                <p>您的 Credits 余额较低 (剩余 {remainingCredits} Credits)，请注意使用。</p>
-              </div>
-            )}
-            <AssistantManager 
-              onFileProcessed={handleFileProcessed} 
-              setIsProcessing={setIsProcessing} 
-              setUploadProgress={setUploadProgress}
-              setUploadTime={setUploadTime}
-              disabled={isUploadDisabled} // 已移除本月上傳上限
-            />
-            
-            {/* 添加處理時間提示說明 */}
-            {isProcessing && (
-              <div className={styles.processingAlert}>
-                <p>文件处理需要一些时间（约 3-5 分钟），请勿关闭此页面。处理完成后将自动显示结果。</p>
-              </div>
-            )}
-            {uploadTime && (
-              <div className={styles.uploadTimeContainer}>
-                <p>处理完成时间: {uploadTime}</p>
-                <p className={styles.processingNote}>* 文件处理需要较长时间，请耐心等待完整处理</p>
-              </div>
-            )}
-          </section>
-        )}
-        {/* 所有用戶都能看到的上傳文檔列表 */}
-        <aside className={styles.recentFilesAside}>
-          <h4 className={styles.recentFilesTitle}>已上传可浏览文档</h4>
-          {recentFiles.length === 0 ? (
-            <div className={styles.noRecentFiles}>尚无可浏览文档</div>
-          ) : (
-            <>
-              <ul className={styles.recentFilesListScrollable}>
-                {recentFiles.map((file, idx) => (
-                  <li 
-                    key={file.fileId || idx} 
-                    className={styles.recentFileItem} 
-                    style={{ 
-                      cursor: 'pointer',
-                      backgroundColor: selectedFileId === file.fileId ? '#e3f2fd' : '#fff',
-                      color: selectedFileId === file.fileId ? '#333' : '#333',
-                      border: selectedFileId === file.fileId ? '2px solid #0070f3' : '2px solid #ddd',
-                      borderRadius: '4px',
-                      padding: '4px'
-                    }}
-                    onClick={() => {
-                      setSelectedFileId(file.fileId);
-                      localStorage.setItem('selectedFileId', file.fileId);
-                      localStorage.setItem('selectedFileName', file.fileName);
-                      const channel = new BroadcastChannel('file-selection');
-                      channel.postMessage({
-                        type: 'FILE_SELECTED',
-                        fileId: file.fileId,
-                        fileName: file.fileName,
-                        timestamp: Date.now()
-                      });
-                      channel.close();
-                      console.log('[DEBUG] 已選中檔案並廣播事件:', { fileId: file.fileId, fileName: file.fileName });
-                    }}
-                    title="點擊選擇此檔案"
-                  >
-                    <span className={styles.fileIndex}>{((currentPage - 1) * filesPerPage) + idx + 1}. </span>
-                    <span className={styles.fileName}>{file.fileName}</span>
-                    <span className={styles.uploadDate}>{file.uploadDate}</span>
-                    {file.uploaderId && (
-                      <span className={styles.uploaderInfo}>上传者: {file.uploaderId}</span>
-                    )}
-                    {/* 添加刪除按鈕：只有上傳者本人可以看到 */}
-                    {file.uploaderId && user?.user_id && file.uploaderId.toString() === user.user_id.toString() && (
-                      <button
-                        onClick={(e) => { 
-                          e.stopPropagation(); // 阻止觸發父元素的點擊事件
-                          handleDelete(file.fileId, file.uploaderId); 
-                        }}
-                        disabled={deletingId === file.fileId}
-                        style={{
-                          marginLeft: 8,
-                          background: 'none',
-                          border: 'none',
-                          color: 'crimson',
-                          cursor: 'pointer',
-                          fontSize: '14px'
-                        }}
-                        title="刪除此文件"
-                      >
-                        {deletingId === file.fileId ? '刪除中...' : '🗑'}
-                      </button>
-                    )}
-                  </li>
-                ))}
-              </ul>
+              {isUploadDisabled && (
+                <span className={styles.creditWarningInline}>额度不足</span>
+              )}
+              {!isUploadDisabled && remainingCredits < 20 && (
+                <span className={styles.creditWarningInline} style={{ background: '#fef3c7', color: '#92400e' }}>余额较低 ({remainingCredits})</span>
+              )}
+              <AssistantManager 
+                onFileProcessed={handleFileProcessed} 
+                setIsProcessing={setIsProcessing} 
+                setUploadProgress={setUploadProgress}
+                setUploadTime={setUploadTime}
+                disabled={isUploadDisabled}
+              />
               
-              {/* 分頁控制 */}
-              {totalPages > 1 && (
-                <div className={styles.pagination}>
-                  <button 
-                    onClick={() => {
-                      const newPage = currentPage - 1;
-                      setCurrentPage(newPage);
-                      fetchAllFileRecords(newPage);
-                    }}
-                    disabled={currentPage === 1}
-                    className={styles.paginationButton}
-                  >
-                    上一页
-                  </button>
-                  
-                  <span className={styles.paginationInfo}>
-                    第 {currentPage} 页，共 {totalPages} 页
-                  </span>
-                  
-                  <button 
-                    onClick={() => {
-                      const newPage = currentPage + 1;
-                      setCurrentPage(newPage);
-                      fetchAllFileRecords(newPage);
-                    }}
-                    disabled={currentPage === totalPages}
-                    className={styles.paginationButton}
-                  >
-                    下一页
-                  </button>
+              {isProcessing && (
+                <div className={styles.processingAlert}>
+                  <p>处理中，约需 3-5 分钟，请勿关闭页面...</p>
                 </div>
               )}
-            </>
+              {uploadTime && (
+                <span className={styles.uploadTimeBadge}>✓ 完成于 {uploadTime}</span>
+              )}
+            </section>
           )}
-        </aside>
+
+          {/* 右側：所有用戶皆可瀏覽的文檔清單 */}
+          <aside className={styles.recentFilesAside}>
+            <h4 className={styles.recentFilesTitle}>可浏览文档</h4>
+            {recentFiles.length === 0 ? (
+              <div className={styles.noRecentFiles}>暂无文档</div>
+            ) : (
+              <>
+                <ul className={styles.recentFilesListScrollable}>
+                  {recentFiles.map((file, idx) => (
+                    <li 
+                      key={file.fileId || idx} 
+                      className={`${styles.recentFileItem} ${selectedFileId === file.fileId ? styles.selected : ''}`}
+                      onClick={() => {
+                        setSelectedFileId(file.fileId);
+                        localStorage.setItem('selectedFileId', file.fileId);
+                        localStorage.setItem('selectedFileName', file.fileName);
+                        const channel = new BroadcastChannel('file-selection');
+                        channel.postMessage({
+                          type: 'FILE_SELECTED',
+                          fileId: file.fileId,
+                          fileName: file.fileName,
+                          timestamp: Date.now()
+                        });
+                        channel.close();
+                      }}
+                      title="点击选择此文档"
+                    >
+                      <span className={styles.fileIndex}>{((currentPage - 1) * filesPerPage) + idx + 1}. </span>
+                      <span className={styles.fileName}>{file.fileName}</span>
+                      <span className={styles.uploadDate}>{file.uploadDate}</span>
+
+                      {/* 删除按钮：仅上传者可见 */}
+                      {file.uploaderId && user?.user_id && file.uploaderId.toString() === user.user_id.toString() && (
+                        <button
+                          onClick={(e) => { 
+                            e.stopPropagation();
+                            handleDelete(file.fileId, file.uploaderId); 
+                          }}
+                          disabled={deletingId === file.fileId}
+                          className={styles.deleteButton}
+                          title="删除此文档"
+                        >
+                          {deletingId === file.fileId ? '...' : '🗑'}
+                        </button>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+                
+                {/* 分頁控制 */}
+                {totalPages > 1 && (
+                  <div className={styles.pagination}>
+                    <button 
+                      onClick={() => {
+                        const newPage = currentPage - 1;
+                        setCurrentPage(newPage);
+                        fetchAllFileRecords(newPage);
+                      }}
+                      disabled={currentPage === 1}
+                      className={styles.paginationButton}
+                    >
+                      上一页
+                    </button>
+                    
+                    <span className={styles.paginationInfo}>
+                      第 {currentPage} 页，共 {totalPages} 页
+                    </span>
+                    
+                    <button 
+                      onClick={() => {
+                        const newPage = currentPage + 1;
+                        setCurrentPage(newPage);
+                        fetchAllFileRecords(newPage);
+                      }}
+                      disabled={currentPage === totalPages}
+                      className={styles.paginationButton}
+                    >
+                      下一页
+                    </button>
+                  </div>
+                )}
+              </>
+            )}
+          </aside>
+        </div>
       </div>
     </WithChat>
   );
