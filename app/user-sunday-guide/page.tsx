@@ -145,7 +145,15 @@ function SundayGuideContent() {
     const handleFileSelection = (event: MessageEvent) => {
       console.log('[DEBUG] 收到文件選擇廣播:', event.data);
       
-      if (event.data.type === 'FILE_SELECTED' && event.data.fileId && event.data.fileName) {
+      // 僅處理來自 Sunday Guide 模組的事件
+      if (
+        event.data &&
+        event.data.type === 'FILE_SELECTED' &&
+        event.data.fileId &&
+        event.data.fileName &&
+        // 若有 assistantId，需為 SUNDAY_GUIDE；若舊版本未帶 assistantId，亦允許
+        (!event.data.assistantId || event.data.assistantId === ASSISTANT_IDS.SUNDAY_GUIDE)
+      ) {
         console.log('[DEBUG] 其他頁面選中了檔案，準備重新載入頁面');
         console.log('[DEBUG] 選中檔案:', { fileId: event.data.fileId, fileName: event.data.fileName });
         
@@ -181,10 +189,6 @@ function SundayGuideContent() {
           if (user?.user_id) {
             console.log('[DEBUG] 重新加載檔案列表');
             fetchLatestFileInfo();
-            // 如果已按過按鈕，也重新加載檔案清單
-            if (isButtonClicked) {
-              fetchAllFileRecords(1).catch(err => console.error('[DEBUG] 重新加載檔案清單失敗:', err));
-            }
           }
         }, 500);
       }
@@ -222,8 +226,19 @@ function SundayGuideContent() {
         
         const response = await fetch(apiUrl);
         
+        // 處理 202 Processing 狀態
+        if (response.status === 202) {
+          const data = await response.json();
+          alert(data.error || '內容正在生成中，請稍候...');
+          return;
+        }
+
         if (!response.ok) {
           const errorData = await response.json().catch(() => ({ error: '未知錯誤' }));
+          // 如果是後端返回的具體錯誤訊息，直接顯示
+          if (errorData.error) {
+            throw new Error(errorData.error);
+          }
           throw new Error(`獲取內容失敗: ${response.status} - ${errorData.error || response.statusText}`);
         }
         
@@ -247,8 +262,19 @@ function SundayGuideContent() {
         
         const response = await fetch(apiUrl);
         
+        // 處理 202 Processing 狀態
+        if (response.status === 202) {
+          const data = await response.json();
+          alert(data.error || '內容正在生成中，請稍候...');
+          return;
+        }
+
         if (!response.ok) {
           const errorData = await response.json().catch(() => ({ error: '未知錯誤' }));
+          // 如果是後端返回的具體錯誤訊息，直接顯示
+          if (errorData.error) {
+            throw new Error(errorData.error);
+          }
           throw new Error(`獲取內容失敗: ${response.status} - ${errorData.error || response.statusText}`);
         }
         
@@ -401,6 +427,10 @@ function SundayGuideContent() {
     <div className={styles.container}>
       <Script src="https://cdn.platform.openai.com/deployments/chatkit/chatkit.js" strategy="afterInteractive" />
       <h1 className={styles.title}>主日信息导航</h1>
+      {/* 極簡來源狀態提示 */}
+      <div style={{ fontSize: '14px', color: '#4b5563', marginTop: 4, marginBottom: 8, textAlign: 'center' }}>
+        当前使用最新上传的讲章作为解析来源
+      </div>
       
       {/* ChatKit UI 模塊 - 在按鈕點擊後才顯示 */}
       {isButtonClicked && user && (
@@ -432,48 +462,6 @@ function SundayGuideContent() {
           查经指引
         </button>
       </div>
-
-      {/* 按鈕下方顯示文檔列表 - 在按鈕點擊後才顯示 */}
-      {isButtonClicked && fileList && fileList.length > 0 && (
-        <div className={styles.fileListSection}>
-          <div className={styles.fileListHeader}>
-            <h3 className={styles.fileListTitle}>AI解析来源讲章：</h3>
-          </div>
-          <div className={styles.fileListContainer}>
-            {fileList.map((file, index) => {
-              const isSelected = (file.fileUniqueId === selectedFileUniqueId) || 
-                                (selectedFileFromSundayGuide && selectedFileFromSundayGuide.fileId === file.fileUniqueId);
-              return (
-                <div 
-                  key={file.fileUniqueId}
-                  className={`${styles.fileItem} ${isSelected ? styles.fileItemSelected : ''}`}
-                  onClick={() => {
-                    setSelectedFileUniqueId(file.fileUniqueId);
-                    setFileName(file.fileName);
-                    const uploadDate = new Date(file.uploadTime);
-                    setUploadTime(uploadDate.toLocaleDateString('en-US', { timeZone: 'America/Los_Angeles' }));
-                    setSelectedFileFromSundayGuide(null);
-                    setSelectedMode(null);
-                    setSermonContent(null);
-                  }}
-                >
-                  <div className={styles.fileItemContent}>
-                    <div className={styles.fileName}>{file.fileName}</div>
-                    <div className={styles.uploadTime}>
-                      {new Date(file.uploadTime).toLocaleDateString('zh-TW', { 
-                        year: 'numeric', 
-                        month: '2-digit', 
-                        day: '2-digit' 
-                      })}
-                    </div>
-                  </div>
-                  {isSelected && <div className={styles.fileItemCheckmark}>✓</div>}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
 
       {/* 當用戶沒有可訪問的文件時顯示提示 */}
       {(!fileName || fileName === '尚未上傳文件' || fileName === '獲取文件資訊失敗') && (

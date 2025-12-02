@@ -133,6 +133,22 @@ export async function GET(
     }
 
     if (!content) {
+      // 檢查生成狀態，提供更友好的錯誤訊息
+      if (latestItem.generationStatus === 'processing' || latestItem.generationStatus === 'uploading') {
+         return NextResponse.json({ 
+             error: '內容正在生成中，請稍候...', 
+             status: 'processing' 
+         }, { status: 202 }); // 202 Accepted
+      }
+      
+      if (latestItem.generationStatus === 'failed') {
+          return NextResponse.json({ 
+              error: `內容生成失敗: ${latestItem.lastError || '未知錯誤'}`, 
+              status: 'failed',
+              details: latestItem.lastError
+          }, { status: 422 }); // 422 Unprocessable Entity
+      }
+
       return NextResponse.json({ error: '未找到請求的內容類型' }, { status: 404 });
     }
     
