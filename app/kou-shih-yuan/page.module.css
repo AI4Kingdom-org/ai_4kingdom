@@ -1,0 +1,101 @@
+.container {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  padding: 20px;
+  max-width: 1200px;
+  margin: 0 auto;
+  align-items: center; /* 置中對齊 */
+}
+
+.title {
+  text-align: center;
+  margin-bottom: 20px;
+  color: #333;
+}
+
+.chatSection {
+  width: 100%; /* 確保 100% 寬度 */
+  max-width: 100%; /* 確保不會超出父容器寬度 */
+  height: 450px; /* 稍微增加高度以提供更好的聊天體驗 */
+  margin-bottom: 20px; /* 下方邊距，與按鈕區域分隔 */
+  margin-left: 0;
+  border-radius: 12px; /* 添加圓角 */
+  overflow: hidden; /* 確保內容不會溢出 */
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1); /* 增加陰影效果 */
+  transition: opacity 0.3s ease, transform 0.3s ease;
+  box-sizing: border-box;
+}
+
+.chatSection > div {
+  width: 100% !important; /* 確保直接子元素也是100%寬度 */
+}
+
+.buttonGroup {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+
+/* 文檔列表樣式 */
+.fileListSection {
+  width: 90%;
+  max-width: 900px;
+  margin: 0 auto 20px auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.fileListHeader {
+  display: flex;
+  align-items: center;
+  margin-bottom: 12px;
+  width: 100%;
+  justify-content: center;
+}
+
+.fileListTitle {
+  margin: 0;
+  font-size: 14px;
+  color: #333;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.fileListContainer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  width: 100%;
+  justify-content: center;
+  align-items: flex-start;
+}
+
+.fileItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px;
+  background: white;
+  border: 2px solid #e1e4e8;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  width: 100%;
+  max-width: 280px;
+}
+
+.fileItem:hover {
+  border-color: #0070f3;
+  background-color: #f7f9fc;
+  box-shadow: 0 2px 8px rgba(0, 112, 243, 0.1);
+}
+
+.fileItemSelected {
+  border-color: #0070f3;
+  background-color: #f0f6ff;
+  box-shadow: 0 2px 8px rgba(0, 112, 243, 0.2);
+}
