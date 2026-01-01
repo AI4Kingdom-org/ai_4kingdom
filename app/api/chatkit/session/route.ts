@@ -22,6 +22,9 @@ const resolveWorkflowId = (module?: string) => {
   if (m === 'jian-zhu-navigator') {
     return process.env.JIAN_ZHU_NAVIGATOR_WORKFLOW_ID || process.env.NEXT_PUBLIC_JIAN_ZHU_NAVIGATOR_WORKFLOW_ID || '';
   }
+  if (m === 'kou-shih-yuan') {
+    return process.env.KOU_SHIH_YUAN_WORKFLOW_ID || process.env.NEXT_PUBLIC_KOU_SHIH_YUAN_WORKFLOW_ID || '';
+  }
   return process.env.SUNDAY_GUIDE_WORKFLOW_ID || process.env.NEXT_PUBLIC_SUNDAY_GUIDE_WORKFLOW_ID || '';
 };
 
