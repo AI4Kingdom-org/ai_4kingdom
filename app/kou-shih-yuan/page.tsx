@@ -35,7 +35,8 @@ function KouShihYuanContent() {
           <div
             style={{
               width: '100%',
-              height: 450,
+              height: '80vh',
+              minHeight: '600px',
               borderRadius: 12,
               overflow: 'hidden',
               boxShadow: '0 4px 10px rgba(0,0,0,0.1)',
