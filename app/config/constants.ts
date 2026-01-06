@@ -30,6 +30,7 @@ export const VECTOR_STORE_IDS = {
 export const WORKFLOW_IDS = {
   HOME_CONSOLE: 'wf_6914565161bc81909541fe548f8d80c901e1b02dc1869abf',
   HOMESCHOOL: 'wf_6914565161bc81909541fe548f8d80c901e1b02dc1869abf', // 家庭教育助手使用相同的 workflow
+  ROUTING_AGENT: 'wf_695c653b332c8190b12866011de796820ffc729ee522227b',
 } as const;
 
 // 牧者助手單位配置：default 為共用；其餘為獨立單位。
