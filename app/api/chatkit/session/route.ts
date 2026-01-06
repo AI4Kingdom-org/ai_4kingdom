@@ -3,6 +3,7 @@ export const revalidate = 0;
 export const runtime = 'nodejs';
 
 import { NextRequest, NextResponse } from 'next/server';
+import { WORKFLOW_IDS } from '@/app/config/constants';
 
 // 依照 module 切換 workflowId，預設回退到 SUNDAY_GUIDE
 const resolveWorkflowId = (module?: string) => {
@@ -15,6 +16,9 @@ const resolveWorkflowId = (module?: string) => {
   }
   if (m === 'homeschool') {
     return process.env.HOMESCHOOL_WORKFLOW_ID || process.env.NEXT_PUBLIC_HOMESCHOOL_WORKFLOW_ID || '';
+  }
+  if (m === 'routing_agent' || m === 'routing-agent' || m === 'routingagent') {
+    return process.env.ROUTING_AGENT_WORKFLOW_ID || process.env.NEXT_PUBLIC_ROUTING_AGENT_WORKFLOW_ID || WORKFLOW_IDS.ROUTING_AGENT;
   }
   if (m === 'agape-church-navigator' || m === 'east-christ-home-navigator') {
     return process.env.CHURCH_NAVIGATOR_WORKFLOW_ID || process.env.NEXT_PUBLIC_CHURCH_NAVIGATOR_WORKFLOW_ID || '';
@@ -138,6 +142,9 @@ export async function GET() {
     process.env.NEXT_PUBLIC_CHILD_MENTAL_WORKFLOW_ID ||
     process.env.HOMESCHOOL_WORKFLOW_ID ||
     process.env.NEXT_PUBLIC_HOMESCHOOL_WORKFLOW_ID ||
+    process.env.ROUTING_AGENT_WORKFLOW_ID ||
+    process.env.NEXT_PUBLIC_ROUTING_AGENT_WORKFLOW_ID ||
+    WORKFLOW_IDS.ROUTING_AGENT ||
     process.env.CHURCH_NAVIGATOR_WORKFLOW_ID ||
     process.env.NEXT_PUBLIC_CHURCH_NAVIGATOR_WORKFLOW_ID ||
     process.env.JIAN_ZHU_NAVIGATOR_WORKFLOW_ID ||
