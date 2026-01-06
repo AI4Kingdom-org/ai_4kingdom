@@ -43,6 +43,11 @@ export default function RoutingAgentPage() {
 
   return (
     <WithChat disableChatContext>
+      <style jsx global>{`
+        html, body {
+          background: transparent !important;
+        }
+      `}</style>
       <div style={{ padding: 16, color: "#000" }}>
         <Script
           src="https://cdn.platform.openai.com/deployments/chatkit/chatkit.js"
@@ -58,7 +63,7 @@ export default function RoutingAgentPage() {
                 borderRadius: 12,
                 overflow: "hidden",
                 boxShadow: "0 4px 10px rgba(0,0,0,0.1)",
-                backgroundColor: "#fff",
+                backgroundColor: "transparent",
               }}
             >
               <ChatkitEmbed userId={userId} module="routing_agent" />
