@@ -32,6 +32,14 @@ export default function RoutingAgentPage() {
     }
   }, [loading, user]);
 
+  useEffect(() => {
+    // ChatKit 的 UI 可能透過 portal 掛在 body 下方，使用 body class 來做「只限此頁」的 CSS scope。
+    document.body.classList.add("routing-agent-page");
+    return () => {
+      document.body.classList.remove("routing-agent-page");
+    };
+  }, []);
+
   const userId = useMemo(() => {
     return user?.user_id || guestUserId;
   }, [user?.user_id, guestUserId]);
@@ -46,6 +54,23 @@ export default function RoutingAgentPage() {
       <style jsx global>{`
         html, body {
           background: transparent !important;
+        }
+
+        /* routing_agent only:
+           ChatKit UI is rendered inside a cross-origin iframe (cdn.platform.openai.com),
+           so we cannot reliably select its internal DOM. We hide the history button by
+           covering the top-right corner of the iframe container.
+        */
+        body.routing-agent-page .routing-agent-chatkit-history-cover {
+          position: absolute;
+          top: 6px;
+          right: 6px;
+          width: 48px;
+          height: 48px;
+          border-radius: 10px;
+          background: #fff;
+          z-index: 50;
+          pointer-events: auto;
         }
       `}</style>
       <div style={{ padding: 16, color: "#000" }}>
@@ -64,9 +89,13 @@ export default function RoutingAgentPage() {
                 overflow: "hidden",
                 boxShadow: "0 4px 10px rgba(0,0,0,0.1)",
                 backgroundColor: "transparent",
+                position: "relative",
               }}
             >
-              <ChatkitEmbed userId={userId} module="routing_agent" />
+              <div className="routing-agent-chatkit-history-cover" aria-hidden="true" />
+              <div id="routing-agent-chatkit" style={{ width: '100%', height: '100%' }}>
+                <ChatkitEmbed userId={userId} module="routing_agent" />
+              </div>
             </div>
           </div>
         </div>
