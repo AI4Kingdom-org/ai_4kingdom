@@ -1,7 +1,7 @@
 "use client";
 
 import Script from 'next/script';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import ChatkitEmbed from '../components/ChatkitEmbed';
 import WithChat from '../components/layouts/WithChat';
@@ -11,6 +11,20 @@ function KouShihYuanContent() {
   const { user } = useAuth();
   const [chatkitScriptReady, setChatkitScriptReady] = useState(false);
   const [chatkitScriptError, setChatkitScriptError] = useState<string | null>(null);
+  const [guestId, setGuestId] = useState<string>('');
+
+  useEffect(() => {
+    // Generate or retrieve guest ID for non-logged-in users
+    const key = 'kou_shih_yuan_guest_id';
+    let id = localStorage.getItem(key);
+    if (!id) {
+      id = `guest_${Math.random().toString(36).slice(2, 11)}`;
+      localStorage.setItem(key, id);
+    }
+    setGuestId(id);
+  }, []);
+
+  const effectiveUserId = user?.user_id || guestId;
 
   return (
     <div style={{ padding: 16, color: '#000' }}>
@@ -43,16 +57,16 @@ function KouShihYuanContent() {
               backgroundColor: '#fff',
             }}
           >
-            {user?.user_id ? (
+            {effectiveUserId ? (
               chatkitScriptError ? (
                 <div style={{ textAlign: 'center', padding: '20px' }}>{chatkitScriptError}</div>
               ) : chatkitScriptReady ? (
-                <ChatkitEmbed userId={user.user_id} unitId="kou-shih-yuan" module="kou-shih-yuan" />
+                <ChatkitEmbed userId={effectiveUserId} unitId="kou-shih-yuan" module="kou-shih-yuan" />
               ) : (
                 <div style={{ textAlign: 'center', padding: '20px' }}>ChatKit 載入中…</div>
               )
             ) : (
-              <div style={{ textAlign: 'center', padding: '20px' }}>請先登入以使用助手</div>
+              <div style={{ textAlign: 'center', padding: '20px' }}>初始化中…</div>
             )}
           </div>
         </div>
