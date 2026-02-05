@@ -9,6 +9,56 @@ interface TokenUsage {
   retrieval_tokens: number;
 }
 
+// Record a usage event once by a deterministic eventId.
+// This enables idempotency across multiple reporters (webhook + client fallback).
+export async function trySaveTokenUsageOnce(
+  userId: string | undefined,
+  eventId: string,
+  usage: TokenUsage,
+): Promise<{ saved: boolean; effectiveUserId: string; key: { UserId: string; Timestamp: string } }>
+{
+  const effectiveUserId = String(userId || `ANON_${new Date().getTime()}`);
+  const dedupeKey = `EVENT#${String(eventId)}`;
+  const key = { UserId: effectiveUserId, Timestamp: dedupeKey };
+
+  try {
+    const docClient = await createDynamoDBClient();
+
+    const item = {
+      ...key,
+      ThreadId: String(eventId),
+      PromptTokens: usage.prompt_tokens,
+      CompletionTokens: usage.completion_tokens,
+      TotalTokens: usage.total_tokens,
+      RetrievalTokens: usage.retrieval_tokens,
+      Type: 'token_usage_event',
+      RecordedAt: new Date().toISOString(),
+    };
+
+    await docClient.send(
+      new PutCommand({
+        TableName: 'TokenUsage',
+        Item: item,
+        ConditionExpression: 'attribute_not_exists(UserId) AND attribute_not_exists(Timestamp)',
+      }),
+    );
+
+    return { saved: true, effectiveUserId, key };
+  } catch (error: any) {
+    // ConditionalCheckFailedException => already recorded
+    if (error?.name === 'ConditionalCheckFailedException') {
+      return { saved: false, effectiveUserId, key };
+    }
+    console.error('[ERROR] trySaveTokenUsageOnce failed:', {
+      error: error?.message || String(error),
+      userId: effectiveUserId,
+      eventId,
+    });
+    // Fail-closed: don't claim saved; caller may decide to proceed or not.
+    return { saved: false, effectiveUserId, key };
+  }
+}
+
 export async function saveTokenUsage(userId: string | undefined, threadId: string, usage: TokenUsage) {
   try {
     // 如果没有 userId，生成一个匿名ID

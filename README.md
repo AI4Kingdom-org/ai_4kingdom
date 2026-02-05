@@ -190,7 +190,7 @@
            'nonce' => wp_create_nonce('wp_rest')
        ], $additional_params);
        
-       $base_url = 'https://main.d3ts7h8kta7yzt.amplifyapp.com/new-chat';  // 替换为你的新聊天页面路径
+      $base_url = 'https://main.d1b5nk0vz3t0hz.amplifyapp.com/new-chat';  // 替换为你的新聊天页面路径
        $iframe_url = $base_url . '/?' . http_build_query($query_params);
        
        return get_iframe_html('new-chat-module', $iframe_url);  // 替换为你的模块名称
