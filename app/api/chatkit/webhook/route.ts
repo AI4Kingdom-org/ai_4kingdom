@@ -46,6 +46,14 @@ export async function POST(req: NextRequest) {
     if (!process.env.OPENAI_API_KEY) return json({ error: 'Missing OPENAI_API_KEY' }, 500);
     const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
+    // Webhook URL may carry a fallback uid (added by /api/chatkit/session)
+    const url = new URL(req.url);
+    const uidFromQuery =
+      url.searchParams.get('uid') ||
+      url.searchParams.get('userId') ||
+      url.searchParams.get('user_id') ||
+      null;
+
     const payload = await req.json().catch(() => ({}));
     const type = payload?.type || payload?.event || payload?.name || payload?.data?.type || '';
 
@@ -90,6 +98,7 @@ export async function POST(req: NextRequest) {
       payload?.metadata?.userId ||
       payload?.data?.metadata?.userId ||
       responseObj?.metadata?.userId ||
+      uidFromQuery ||
       null;
 
     console.log('[ChatKit webhook][recv]', {
@@ -99,6 +108,7 @@ export async function POST(req: NextRequest) {
       threadId,
       runId,
       hasUserInEvent: !!userId,
+      uidFromQuery,
       keys: Object.keys(payload || {}),
       dataKeys: payload?.data ? Object.keys(payload.data) : [],
       t: new Date().toISOString(),

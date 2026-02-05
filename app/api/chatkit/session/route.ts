@@ -71,8 +71,20 @@ export async function POST(req: NextRequest) {
   // ChatKit sessions API 不支援 metadata 參數；只帶 workflow 與 user
   // webhook URL 透過 ?uid= 傳遞 userId 作為備援
   const baseBody: any = { workflow: { id: WF_ID }, user: userId };
-    const webhookBase = process.env.CHATKIT_WEBHOOK_URL || process.env.NEXT_PUBLIC_CHATKIT_WEBHOOK_URL;
-    const webhookUrl = webhookBase && userId ? `${webhookBase}?uid=${encodeURIComponent(userId)}` : webhookBase;
+      const webhookBase = process.env.CHATKIT_WEBHOOK_URL || process.env.NEXT_PUBLIC_CHATKIT_WEBHOOK_URL;
+      const webhookUrl = (() => {
+        if (!webhookBase) return undefined;
+        if (!userId) return webhookBase;
+        try {
+          const u = new URL(webhookBase);
+          u.searchParams.set('uid', String(userId));
+          return u.toString();
+        } catch {
+          // If webhookBase isn't a valid absolute URL, fall back to string concatenation.
+          const joiner = webhookBase.includes('?') ? '&' : '?';
+          return `${webhookBase}${joiner}uid=${encodeURIComponent(String(userId))}`;
+        }
+      })();
     const tryWebhookBody = webhookUrl ? { ...baseBody, webhook: { url: webhookUrl } } : baseBody;
 
     console.log('[ChatKit session][create][try]', {
