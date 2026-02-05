@@ -392,6 +392,20 @@ export function ChatProvider({
           }
         } catch {}
 
+        // 確保 userId 存在並記錄請求資訊
+        const requestUserId = config?.userId;
+        console.log('[DEBUG] 準備發送聊天請求到 API:', {
+          hasUserId: !!requestUserId,
+          userId: requestUserId || 'NO_USER_ID',
+          threadId: currentThreadId || 'NO_THREAD',
+          assistantId: config?.assistantId,
+          timestamp: new Date().toISOString()
+        });
+        
+        if (!requestUserId) {
+          console.error('[ERROR] ❌ userId 缺失！無法記錄 token 使用量');
+        }
+        
         const response = await fetch('/api/chat', {
             method: 'POST',
             headers: {
@@ -400,7 +414,7 @@ export function ChatProvider({
             body: JSON.stringify({
                 message,
                 threadId: currentThreadId,
-                userId: config?.userId,
+                userId: requestUserId,
                 config: {
                     type: config?.type,
                     assistantId: config?.assistantId,

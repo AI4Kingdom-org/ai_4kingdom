@@ -557,8 +557,23 @@ export async function POST(request: Request) {
       const stream = new ReadableStream({
         async start(controller) {
           const encoder = new TextEncoder();
+          let runIdForUsage: string | null = null;
+          
+          console.log('[DEBUG] 開始流式處理，準備記錄 token 使用量:', {
+            userId: userId || 'NO_USER_ID',
+            threadId: activeThreadId,
+            assistantId: config.assistantId,
+            timestamp: new Date().toISOString()
+          });
+          
           try {
             for await (const event of runStream) {
+              // 捕獲 run ID 以便後續查詢
+              if (event.event === 'thread.run.created' && (event as any)?.data?.id) {
+                runIdForUsage = (event as any).data.id;
+                console.log('[DEBUG] 捕獲到 runId:', runIdForUsage);
+              }
+              
               // 發送所有事件，不只是包含 data 的事件
               controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
               
@@ -567,27 +582,61 @@ export async function POST(request: Request) {
                   event.event === 'thread.run.failed' || 
                   event.event === 'thread.run.cancelled' || 
                   event.event === 'thread.run.expired') {
+                
+                console.log('[DEBUG] 收到運行完成事件:', {
+                  event: event.event,
+                  hasUserId: !!userId,
+                  userId: userId || 'NO_USER_ID',
+                  timestamp: new Date().toISOString()
+                });
+                
                 // 嘗試在 completed 時寫入使用量（stream 分支原本未記帳）
-                if (event.event === 'thread.run.completed' && userId) {
-                  try {
-                    const runId = (event as any)?.data?.id;
-                    if (runId) {
-                      const finalRun = await openai.beta.threads.runs.retrieve(activeThreadId, runId);
-                      const u: any = (finalRun as any)?.usage;
-                      if (u) {
-                        const tokenUsage = {
-                          prompt_tokens: u.prompt_tokens || 0,
-                          completion_tokens: u.completion_tokens || 0,
-                          total_tokens: u.total_tokens || 0,
-                          retrieval_tokens: 0
-                        };
-                        await updateMonthlyTokenUsage(userId, tokenUsage);
-                        // 可選：回送一筆 usage 給前端（不影響相容性）
-                        controller.enqueue(encoder.encode(`data: ${JSON.stringify({ event: 'usage.recorded', usage: tokenUsage })}\n\n`));
+                if (event.event === 'thread.run.completed') {
+                  if (!userId) {
+                    console.warn('[WARN] stream 完成但缺少 userId，無法記錄 token 使用量');
+                  } else {
+                    try {
+                      const runId = (event as any)?.data?.id || runIdForUsage;
+                      console.log('[DEBUG] 嘗試記錄 token 使用量:', { runId, userId, threadId: activeThreadId });
+                      
+                      if (runId) {
+                        const finalRun = await openai.beta.threads.runs.retrieve(activeThreadId, runId);
+                        console.log('[DEBUG] 獲取到 run 資料:', {
+                          runId,
+                          status: finalRun.status,
+                          hasUsage: !!(finalRun as any)?.usage,
+                          usage: (finalRun as any)?.usage
+                        });
+                        
+                        const u: any = (finalRun as any)?.usage;
+                        if (u && (u.total_tokens > 0 || u.prompt_tokens > 0 || u.completion_tokens > 0)) {
+                          const tokenUsage = {
+                            prompt_tokens: u.prompt_tokens || 0,
+                            completion_tokens: u.completion_tokens || 0,
+                            total_tokens: u.total_tokens || 0,
+                            retrieval_tokens: u.retrieval_tokens || 0
+                          };
+                          
+                          console.log('[DEBUG] 開始記錄 token 使用量到 DynamoDB:', { userId, tokenUsage });
+                          await updateMonthlyTokenUsage(userId, tokenUsage);
+                          console.log('[SUCCESS] ✅ 已成功記錄用戶 token 使用量:', { userId, tokenUsage });
+                          
+                          // 回送一筆 usage 給前端
+                          controller.enqueue(encoder.encode(`data: ${JSON.stringify({ event: 'usage.recorded', usage: tokenUsage })}\n\n`));
+                        } else {
+                          console.warn('[WARN] run 完成但沒有 usage 資料:', { runId, userId, usage: u });
+                        }
+                      } else {
+                        console.error('[ERROR] 無法取得 runId，無法記錄 token 使用量');
                       }
+                    } catch (usageErr: any) {
+                      console.error('[ERROR] stream 分支記錄 token 使用量失敗:', {
+                        error: usageErr?.message || String(usageErr),
+                        stack: usageErr?.stack,
+                        userId,
+                        threadId: activeThreadId
+                      });
                     }
-                  } catch (usageErr) {
-                    console.error('[ERROR] stream 分支記錄 token 使用量失敗:', usageErr);
                   }
                 }
                 // 發送流結束標誌
@@ -684,23 +733,42 @@ export async function POST(request: Request) {
       .join('\n');
     
     // 添加 token 使用量记录
-    if (userId && runStatus.usage) {
+    console.log('[DEBUG] 非流式模式 - 檢查 token 使用量:', {
+      hasUserId: !!userId,
+      userId: userId || 'NO_USER_ID',
+      hasUsage: !!runStatus.usage,
+      usage: runStatus.usage,
+      runId: run.id,
+      threadId: activeThreadId
+    });
+    
+    if (!userId) {
+      console.warn('[WARN] 非流式模式完成但缺少 userId，無法記錄 token 使用量');
+    } else if (!runStatus.usage) {
+      console.warn('[WARN] 非流式模式完成但缺少 usage 資料，無法記錄 token 使用量');
+    } else if (userId && runStatus.usage) {
       try {
         // 从 runStatus 中提取 token 使用量
         const tokenUsage = {
           prompt_tokens: runStatus.usage.prompt_tokens || 0,
           completion_tokens: runStatus.usage.completion_tokens || 0,
           total_tokens: runStatus.usage.total_tokens || 0,
-          retrieval_tokens: 0 // OpenAI API 可能不提供检索 token，设为 0
+          retrieval_tokens: (runStatus.usage as any).retrieval_tokens || 0
         };
         
+        console.log('[DEBUG] 開始記錄 token 使用量到 DynamoDB (非流式):', { userId, tokenUsage });
         // 更新用户的月度 token 使用统计
         await updateMonthlyTokenUsage(userId, tokenUsage);
         
-        console.log(`[DEBUG] 已記錄用戶 ${userId} 的聊天 token 使用量:`, tokenUsage);
-      } catch (usageError) {
+        console.log(`[SUCCESS] ✅ 已成功記錄用戶 ${userId} 的聊天 token 使用量 (非流式):`, tokenUsage);
+      } catch (usageError: any) {
         // 记录错误但不中断请求
-        console.error('[ERROR] 記錄 token 使用量失敗:', usageError);
+        console.error('[ERROR] 記錄 token 使用量失敗:', {
+          error: usageError?.message || String(usageError),
+          stack: usageError?.stack,
+          userId,
+          threadId: activeThreadId
+        });
       }
     }
     

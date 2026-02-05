@@ -23,17 +23,22 @@ interface MonthlyUsageRecord {
 
 export async function updateMonthlyTokenUsage(userId: string, usage: TokenUsage) {
   try {
+    if (!userId) {
+      throw new Error('userId is required for token usage tracking');
+    }
+    
     const now = new Date();
     const yearMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
     
-    const docClient = await createDynamoDBClient();
-    
-    console.log('[DEBUG] 更新月度使用统计:', {
+    console.log('[DEBUG] 📊 開始更新月度 token 使用統計:', {
       userId,
       yearMonth,
-      usage
+      usage,
+      timestamp: now.toISOString()
     });
-
+    
+    const docClient = await createDynamoDBClient();
+    
     const command = new UpdateCommand({
       TableName: 'MonthlyTokenUsage',
       Key: {
@@ -59,9 +64,23 @@ export async function updateMonthlyTokenUsage(userId: string, usage: TokenUsage)
     });
 
     const result = await docClient.send(command);
-    console.log('[DEBUG] 更新成功:', result.Attributes);
+    console.log('[SUCCESS] ✅ Token 使用量更新成功:', {
+      userId,
+      yearMonth,
+      newTotals: result.Attributes
+    });
+    
+    return result.Attributes;
 
-  } catch (error) {
-    console.error('[ERROR] 更新月度token使用失败:', error);
+  } catch (error: any) {
+    console.error('[ERROR] ❌ 更新月度 token 使用失敗:', {
+      userId,
+      error: error?.message || String(error),
+      errorName: error?.name,
+      errorCode: error?.code,
+      stack: error?.stack
+    });
+    // 重新抛出错误，让调用者知道失败了
+    throw error;
   }
 }
