@@ -5,7 +5,7 @@ export const revalidate = 0;
 export const runtime = 'nodejs';
 import OpenAI from 'openai';
 import { updateMonthlyTokenUsage } from '@/app/utils/monthlyTokenUsage';
-import { saveTokenUsage } from '@/app/utils/tokenUsage';
+import { saveTokenUsage, trySaveTokenUsageOnce } from '@/app/utils/tokenUsage';
 
 function json(data: any, status = 200) {
   return NextResponse.json(data, {
@@ -218,11 +218,22 @@ export async function POST(req: NextRequest) {
     // 入帳（月度彙總 + 明細；以 responseId/runId 去重）
     let recorded = false;
     try {
-      await updateMonthlyTokenUsage(String(userId), tokenUsage);
       const uniqueId = String(responseId || runId || threadId || 'unknown');
+
+      // 先做去重寫入：若同一 uniqueId 已記過，直接略過月度加總避免重複扣點
+      const dedupe = await trySaveTokenUsageOnce(String(userId), uniqueId, tokenUsage);
+      if (!dedupe.saved) {
+        console.log('[ChatKit webhook][dedupe] already recorded', { userId, uniqueId });
+        return json({ ok: true, recorded: false, duplicate: true, type, userId, responseId, threadId, runId, tokenUsage, tookMs: Date.now() - startedAt });
+      }
+
+      await updateMonthlyTokenUsage(String(userId), tokenUsage);
+
+      // 仍保留原本的明細寫入（時間序列），失敗不影響主流程
       try { await saveTokenUsage(String(userId), uniqueId, tokenUsage); } catch (e: any) {
         console.error('[ChatKit webhook][detail.save][err]', e?.message);
       }
+
       recorded = true;
     } catch (e: any) {
       console.error('[ChatKit webhook][monthly.save][err]', e?.message);

@@ -53,7 +53,7 @@ function releaseLock(threadId: string) {
 
 // CORS 配置
 const ALLOWED_ORIGINS = [
-  'https://main.d3ts7h8kta7yzt.amplifyapp.com',
+  'https://main.d1b5nk0vz3t0hz.amplifyapp.com',
   process.env.NEXT_PUBLIC_PRIMARY_DOMAIN || 'https://ai4kingdom.org',
   process.env.NEXT_PUBLIC_FALLBACK_DOMAIN || 'https://ai4kingdom.com',
   'http://localhost:3000'

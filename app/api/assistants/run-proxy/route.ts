@@ -4,7 +4,7 @@ export const revalidate = 0;
 export const runtime = 'nodejs';
 import OpenAI from 'openai';
 import { updateMonthlyTokenUsage } from '@/app/utils/monthlyTokenUsage';
-import { saveTokenUsage } from '@/app/utils/tokenUsage';
+import { saveTokenUsage, trySaveTokenUsageOnce } from '@/app/utils/tokenUsage';
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
@@ -129,9 +129,19 @@ export async function POST(req: NextRequest) {
 
       let recorded = false;
       try {
+        const eventId = String(uniqueId || threadId || runId || 'unknown');
+
+        // 去重：若同一 responseId/runId 已記過，避免重複加總
+        const dedupe = await trySaveTokenUsageOnce(String(effectiveUserId), eventId, tokenUsage);
+        if (!dedupe.saved) {
+          return NextResponse.json({ ok: true, recorded: false, duplicate: true, tokenUsage, tookMs: Date.now() - startedAt });
+        }
+
         await updateMonthlyTokenUsage(String(effectiveUserId), tokenUsage);
+
+        // 額外寫入時間序列明細（不影響主流程）
         try {
-          await saveTokenUsage(String(effectiveUserId), String(uniqueId || threadId || runId || 'unknown'), tokenUsage);
+          await saveTokenUsage(String(effectiveUserId), eventId, tokenUsage);
         } catch (e) {
           console.error('[run-proxy][recordUsage] saveTokenUsage failed:', e);
         }
