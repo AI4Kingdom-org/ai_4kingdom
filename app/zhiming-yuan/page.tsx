@@ -1,30 +1,21 @@
 "use client";
 
 import Script from 'next/script';
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import ChatkitEmbed from '../components/ChatkitEmbed';
 import WithChat from '../components/layouts/WithChat';
 import styles from './page.module.css';
 
 function ZhimingYuanContent() {
-  const { user } = useAuth();
+  const { user, loading } = useAuth();
   const [chatkitScriptReady, setChatkitScriptReady] = useState(false);
   const [chatkitScriptError, setChatkitScriptError] = useState<string | null>(null);
-  const [guestId, setGuestId] = useState<string>('');
 
-  useEffect(() => {
-    // Generate or retrieve guest ID for non-logged-in users
-    const key = 'zhiming_yuan_guest_id';
-    let id = localStorage.getItem(key);
-    if (!id) {
-      id = `guest_${Math.random().toString(36).slice(2, 11)}`;
-      localStorage.setItem(key, id);
-    }
-    setGuestId(id);
-  }, []);
+  if (loading) return <div className={styles.statusMessage}>載入中...</div>;
+  if (!user) return <div className={styles.statusMessage}>請先登入</div>;
 
-  const effectiveUserId = user?.user_id || guestId;
+  const effectiveUserId = user.user_id;
 
   return (
     <div className={styles.pageWrapper}>
