@@ -29,6 +29,9 @@ const resolveWorkflowId = (module?: string) => {
   if (m === 'kou-shih-yuan') {
     return process.env.KOU_SHIH_YUAN_WORKFLOW_ID || process.env.NEXT_PUBLIC_KOU_SHIH_YUAN_WORKFLOW_ID || '';
   }
+  if (m === 'zhiming-yuan') {
+    return process.env.ZHIMING_YUAN_WORKFLOW_ID || process.env.NEXT_PUBLIC_ZHIMING_YUAN_WORKFLOW_ID || 'wf_699c72cd23f081909ac11ba878f2db1500a91bcd91c6866d';
+  }
   return process.env.SUNDAY_GUIDE_WORKFLOW_ID || process.env.NEXT_PUBLIC_SUNDAY_GUIDE_WORKFLOW_ID || '';
 };
 
