@@ -417,6 +417,8 @@ export async function POST(request: Request) {
   // 設定 YOUTUBE_WORKER_URL 環境變數後，所有 YouTube 轉錄請求將代理到 Fly.io 微服務
   // 未設定時走本地 yt-dlp 管道（Windows 開發）
   const WORKER_URL = process.env.YOUTUBE_WORKER_URL;
+  console.log('[youtube-audio] ENV check — YOUTUBE_WORKER_URL:', WORKER_URL ? `"${WORKER_URL}"` : '(not set)',
+    '| YOUTUBE_WORKER_SECRET:', process.env.YOUTUBE_WORKER_SECRET ? '(set)' : '(not set)');
   if (WORKER_URL) {
     try {
       const body = await request.json();
