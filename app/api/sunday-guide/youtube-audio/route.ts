@@ -26,18 +26,22 @@ let ytDlpPath: string | null = null;
 
 /**
  * yt-dlp 通用參數：
- * - --js-runtimes nodejs：使用 Lambda 上已安裝的 Node.js 作為 JS runtime
- * - --extractor-args：使用 ios / mweb 客戶端 (跳過 YouTube datacenter IP 機器人偵測)
- * - --user-agent：模擬真實瀏覽器
- * - --no-check-certificates：避免 Lambda 上證書問題
+ * - Linux：使用 --js-runtimes node 搭配 ios/mweb 客戶端（Lambda 環境優化）
+ * - Windows（本地開發）：使用簡化參數，避免 cmd.exe 引號解析問題
  */
-const YT_DLP_COMMON_ARGS = [
-  '--js-runtimes', 'node',
-  '--extractor-args', '"youtube:player_client=tv_embedded,ios,mweb"',
-  '--user-agent', '"Mozilla/5.0 (iPhone; CPU iPhone OS 17_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.6 Mobile/15E148 Safari/604.1"',
-  '--no-check-certificates',
-  '--no-warnings',
-].join(' ');
+const isWindows = os.platform() === 'win32';
+const YT_DLP_COMMON_ARGS = isWindows
+  ? [
+      '--no-check-certificates',
+      '--no-warnings',
+    ].join(' ')
+  : [
+      '--js-runtimes', 'node',
+      '--extractor-args', '"youtube:player_client=tv_embedded,ios,mweb"',
+      '--user-agent', '"Mozilla/5.0 (iPhone; CPU iPhone OS 17_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.6 Mobile/15E148 Safari/604.1"',
+      '--no-check-certificates',
+      '--no-warnings',
+    ].join(' ');
 
 /**
  * 確保 yt-dlp 二進制可用。
@@ -61,7 +65,6 @@ async function ensureYtDlp(): Promise<string> {
 
   // Lambda 環境只有 /tmp 可寫，改用 os.tmpdir()
   const binDir = join(os.tmpdir(), 'yt-dlp-bin');
-  const isWindows = os.platform() === 'win32';
   const binaryName = isWindows ? 'yt-dlp.exe' : 'yt-dlp_linux';
   const binaryPath = join(binDir, binaryName);
 
@@ -410,6 +413,38 @@ function extractVideoId(url: string): string | null {
  * Response: { transcript: string, source: 'whisper', videoId: string, charCount: number }
  */
 export async function POST(request: Request) {
+  // ── Fly.io 微服務代理模式（Amplify 生產環境）──────────────────
+  // 設定 YOUTUBE_WORKER_URL 環境變數後，所有 YouTube 轉錄請求將代理到 Fly.io 微服務
+  // 未設定時走本地 yt-dlp 管道（Windows 開發）
+  const WORKER_URL = process.env.YOUTUBE_WORKER_URL;
+  if (WORKER_URL) {
+    try {
+      const body = await request.json();
+      console.log('[youtube-audio] Proxying to Fly.io worker:', WORKER_URL);
+
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      const workerSecret = process.env.YOUTUBE_WORKER_SECRET;
+      if (workerSecret) headers['x-worker-secret'] = workerSecret;
+
+      const workerRes = await fetch(`${WORKER_URL}/api/youtube-audio`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(900_000), // 15 分鐘超時
+      });
+
+      const data = await workerRes.json();
+      return NextResponse.json(data, { status: workerRes.status });
+    } catch (proxyErr: any) {
+      console.error('[youtube-audio] Fly.io proxy failed:', proxyErr);
+      return NextResponse.json(
+        { error: 'WORKER_PROXY_FAILED', message: `Fly.io 微服務連線失敗: ${proxyErr?.message || '未知錯誤'}` },
+        { status: 502 }
+      );
+    }
+  }
+
+  // ── 本地模式（直接使用 yt-dlp）──────────────────────────────
   const tmpDir = join(os.tmpdir(), `yt-audio-${Date.now()}`);
   const chunkDir = join(tmpDir, 'chunks');
 
