@@ -231,7 +231,11 @@ async function resolveViaPiped(videoId: string): Promise<ProxyAudioResult> {
         headers: PROXY_HEADERS,
       });
       if (!res.ok) { console.warn(`[youtube-audio] Piped ${instance} → ${res.status}`); continue; }
-      const data = await res.json();
+      const text = await res.text();
+      if (!text || text.length < 2) { console.warn(`[youtube-audio] Piped ${instance} → empty body`); continue; }
+      let data: any;
+      try { data = JSON.parse(text); } catch { console.warn(`[youtube-audio] Piped ${instance} → invalid JSON`); continue; }
+      if (data.error) { console.warn(`[youtube-audio] Piped ${instance} → API error: ${data.error}`); continue; }
       const duration: number = data.duration || 0;
       const streams: any[] = (data.audioStreams || []).filter((s: any) => s.url);
       if (streams.length === 0) continue;
@@ -263,7 +267,11 @@ async function resolveViaInvidious(videoId: string): Promise<ProxyAudioResult> {
         headers: PROXY_HEADERS,
       });
       if (!res.ok) { console.warn(`[youtube-audio] Invidious ${instance} → ${res.status}`); continue; }
-      const data = await res.json();
+      const text = await res.text();
+      if (!text || text.length < 2) { console.warn(`[youtube-audio] Invidious ${instance} → empty body`); continue; }
+      let data: any;
+      try { data = JSON.parse(text); } catch { console.warn(`[youtube-audio] Invidious ${instance} → invalid JSON`); continue; }
+      if (data.error) { console.warn(`[youtube-audio] Invidious ${instance} → API error: ${data.error}`); continue; }
       const duration: number = data.lengthSeconds || 0;
       const formats: any[] = data.adaptiveFormats || [];
       const audioFormats = formats.filter((f) => f.type?.startsWith('audio/') && f.url);
