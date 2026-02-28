@@ -185,6 +185,50 @@ async function transcribeFile(filePath: string, ext: string): Promise<string> {
   return typeof result === 'string' ? result : (result as any).text || String(result);
 }
 
+/** Invidious 公開實例清單（依序嘗試）*/
+const INVIDIOUS_INSTANCES = [
+  'https://inv.nadeko.net',
+  'https://invidious.nerdvpn.de',
+  'https://invidious.privacydev.net',
+  'https://y.com.sb',
+  'https://invidious.lunar.icu',
+];
+
+/**
+ * 透過 Invidious API 取得 YouTube 影片的音頻串流 URL（指向 Google CDN）。
+ * Google CDN (googlevideo.com) 不受 datacenter IP 封鎖，可直接 fetch 下載。
+ */
+async function getAudioUrlViaInvidious(videoId: string): Promise<{ url: string; ext: string }> {
+  for (const instance of INVIDIOUS_INSTANCES) {
+    try {
+      const res = await fetch(`${instance}/api/v1/videos/${videoId}`, {
+        signal: AbortSignal.timeout(10_000),
+        headers: { 'User-Agent': 'Mozilla/5.0 (compatible; sermon-transcriber/1.0)' },
+      });
+      if (!res.ok) {
+        console.warn(`[youtube-audio] Invidious ${instance} returned ${res.status}`);
+        continue;
+      }
+      const data = await res.json();
+      const formats: any[] = data.adaptiveFormats || [];
+      // 取音頻專用格式，優先 128kbps 以下的 opus/webm
+      const audioFormats = formats.filter(
+        (f) => f.type?.startsWith('audio/') && f.url
+      );
+      if (audioFormats.length === 0) continue;
+      // 以 bitrate 接近 128kbps 為排序依據（品質夠用且檔案不過大）
+      audioFormats.sort((a, b) => Math.abs((a.bitrate ?? 0) - 128_000) - Math.abs((b.bitrate ?? 0) - 128_000));
+      const fmt = audioFormats[0];
+      const ext = (fmt.type as string).includes('webm') ? 'webm' : 'm4a';
+      console.log(`[youtube-audio] Invidious ${instance} → ${ext} @ ${Math.round((fmt.bitrate ?? 0) / 1000)}kbps`);
+      return { url: fmt.url as string, ext };
+    } catch (err) {
+      console.warn(`[youtube-audio] Invidious ${instance} failed:`, (err as Error).message?.slice(0, 100));
+    }
+  }
+  throw new Error('所有 Invidious 實例均無法回應，請稍後再試或改用手動上傳音頻。');
+}
+
 /**
  * 從 URL 提取 videoId
  */
@@ -262,19 +306,40 @@ export async function POST(request: Request) {
     await mkdir(tmpDir, { recursive: true });
     await mkdir(chunkDir, { recursive: true });
 
-    // 格式選擇策略：優先 ≤48kbps webm/opus（1小時 ≈ 20.6MB，安全）
-    // 逐步放寬到最佳音質（大檔案需分片）
-    const formatSelector =
-      'bestaudio[abr<=48][ext=webm]/bestaudio[abr<=48]/bestaudio[abr<=64][ext=m4a]/bestaudio[ext=webm]/bestaudio[ext=m4a]/bestaudio';
-    const outputTemplate = join(tmpDir, '%(id)s.%(ext)s');
-    const ytDlpCmd = `"${ytDlp}" ${YT_DLP_COMMON_ARGS} -f "${formatSelector}" --no-playlist --no-post-overwrites -o "${outputTemplate}" "https://www.youtube.com/watch?v=${videoId}"`;
+    // ── 音頻下載策略 ────────────────────────────────────────────────────────────
+    // 策略 1（優先）：Invidious API → Google CDN 直接下載（不受 datacenter IP 封鎖影響）
+    // 策略 2（備案）：yt-dlp 直接從 YouTube 下載（若 Invidious 全敗時使用）
+    let invidiousSucceeded = false;
+    try {
+      console.log('[youtube-audio] Trying Invidious API download...');
+      const { url: streamUrl, ext: streamExt } = await getAudioUrlViaInvidious(videoId);
+      const invAudioPath = join(tmpDir, `${videoId}.${streamExt}`);
+      const audioRes = await fetch(streamUrl, { signal: AbortSignal.timeout(300_000) });
+      if (!audioRes.ok) throw new Error(`Google CDN fetch failed: ${audioRes.status}`);
+      const buf = await audioRes.arrayBuffer();
+      await writeFile(invAudioPath, Buffer.from(buf));
+      console.log(`[youtube-audio] Invidious CDN download: ${(buf.byteLength / 1024 / 1024).toFixed(1)} MB`);
+      invidiousSucceeded = true;
+    } catch (invErr) {
+      console.warn(
+        '[youtube-audio] Invidious download failed, falling back to yt-dlp:',
+        (invErr as Error).message?.slice(0, 200)
+      );
+    }
 
-    console.log('[youtube-audio] Running yt-dlp...');
-    const { stderr } = await execAsync(ytDlpCmd, {
-      timeout: 600_000, // 10 分鐘（2 小時影片下載需要足夠時間）
-      maxBuffer: 50 * 1024 * 1024,
-    });
-    if (stderr) console.log('[youtube-audio] yt-dlp stderr:', stderr.slice(0, 300));
+    if (!invidiousSucceeded) {
+      // 格式選擇策略：優先 ≤48kbps webm/opus（1小時 ≈ 20.6MB，安全）
+      const formatSelector =
+        'bestaudio[abr<=48][ext=webm]/bestaudio[abr<=48]/bestaudio[abr<=64][ext=m4a]/bestaudio[ext=webm]/bestaudio[ext=m4a]/bestaudio';
+      const outputTemplate = join(tmpDir, '%(id)s.%(ext)s');
+      const ytDlpCmd = `"${ytDlp}" ${YT_DLP_COMMON_ARGS} -f "${formatSelector}" --no-playlist --no-post-overwrites -o "${outputTemplate}" "https://www.youtube.com/watch?v=${videoId}"`;
+      console.log('[youtube-audio] Running yt-dlp...');
+      const { stderr } = await execAsync(ytDlpCmd, {
+        timeout: 600_000,
+        maxBuffer: 50 * 1024 * 1024,
+      });
+      if (stderr) console.log('[youtube-audio] yt-dlp stderr:', stderr.slice(0, 300));
+    }
 
     // 找出下載的主音頻檔案
     const allFiles = await readdir(tmpDir);
