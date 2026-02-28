@@ -186,60 +186,119 @@ async function transcribeFile(filePath: string, ext: string): Promise<string> {
 }
 
 // ── YouTube 代理策略 ─────────────────────────────────────────────
-// 使用兩套不同代碼庫的 YouTube 代理前端取得 Google CDN 直連 URL：
-//   Piped  (Java)    — GET /streams/{videoId}       → audioStreams[]
+// 使用多套 YouTube 代理前端取得音頻下載 URL：
+//   Piped  (Java)      — GET /streams/{videoId}       → audioStreams[]
 //   Invidious (Crystal) — GET /api/v1/videos/{videoId} → adaptiveFormats[]
-// Google CDN (*.googlevideo.com) 不受 AWS datacenter IP 封鎖。
-
-/** Piped 公開實例（Java 實作，與 Invidious 互補） */
-const PIPED_INSTANCES = [
-  'https://pipedapi.kavin.rocks',
-  'https://pipedapi.adminforge.de',
-  'https://pipedapi.in.projectsegfau.lt',
-  'https://watchapi.whatever.social',
-  'https://pipedapi.moomoo.me',
-];
-
-/** Invidious 公開實例（Crystal 實作） */
-const INVIDIOUS_INSTANCES = [
-  'https://inv.nadeko.net',
-  'https://invidious.nerdvpn.de',
-  'https://invidious.privacydev.net',
-  'https://y.com.sb',
-  'https://invidious.lunar.icu',
-];
+//   Cobalt              — POST /                       → proxied download URL
+// 實例清單透過公開 API「動態發現」，避免硬編碼實例過時失效。
 
 /** 代理 API 回傳的音頻串流資訊 */
 interface ProxyAudioResult {
-  url: string;       // Google CDN 直連 URL
-  ext: string;       // 檔案副檔名 (webm / m4a)
-  duration: number;  // 影片時長（秒）
+  url: string;       // 音頻下載 URL（CDN 直連或代理隧道）
+  ext: string;       // 檔案副檔名 (webm / m4a / mp3)
+  duration: number;  // 影片時長（秒），0 = 未知
   source: string;    // 來源描述
 }
 
-const PROXY_HEADERS = { 'User-Agent': 'Mozilla/5.0 (compatible; sermon-transcriber/1.0)' };
+const PROXY_HEADERS = { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36' };
+
+// ── 動態實例發現（含記憶體快取）────────────────────────────────
+let _pipedCache: string[] | null = null;
+let _invidiousCache: string[] | null = null;
+let _cacheTs = 0;
+const CACHE_TTL = 30 * 60_000; // 30 分鐘
+
+/** 硬編碼備用（當動態發現 API 本身也掛時） */
+const PIPED_FALLBACK = [
+  'https://pipedapi.kavin.rocks',
+  'https://pipedapi.adminforge.de',
+  'https://api.piped.projectsegfau.lt',
+  'https://pipedapi.darkness.services',
+  'https://pipedapi.moomoo.me',
+];
+const INVIDIOUS_FALLBACK = [
+  'https://vid.puffyan.us',
+  'https://invidious.fdn.fr',
+  'https://yt.artemislena.eu',
+  'https://invidious.perennialte.ch',
+  'https://inv.tux.pizza',
+];
 
 /**
- * 透過 Piped API 解析 YouTube 音頻串流
- * @see https://docs.piped.video/docs/api-documentation/
+ * 從 Piped 官方 API 動態獲取活躍的 Piped 實例清單
+ * @see https://piped-instances.kavin.rocks/
  */
+async function discoverPipedInstances(): Promise<string[]> {
+  if (_pipedCache && Date.now() - _cacheTs < CACHE_TTL) return _pipedCache;
+  try {
+    const res = await fetch('https://piped-instances.kavin.rocks/', {
+      signal: AbortSignal.timeout(5_000), headers: PROXY_HEADERS,
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const text = await res.text();
+    const list: any[] = JSON.parse(text);
+    const urls = list
+      .filter((i) => i.api_url && !i.cdn)
+      .map((i) => (i.api_url as string).replace(/\/$/, ''))
+      .slice(0, 10);
+    if (urls.length > 0) {
+      _pipedCache = urls;
+      _cacheTs = Date.now();
+      console.log(`[youtube-audio] Discovered ${urls.length} Piped instances`);
+      return urls;
+    }
+  } catch (err) {
+    console.warn('[youtube-audio] Piped discovery failed:', (err as Error).message?.slice(0, 80));
+  }
+  return PIPED_FALLBACK;
+}
+
+/**
+ * 從 Invidious 官方 API 動態獲取活躍的 Invidious 實例清單
+ * @see https://api.invidious.io/instances.json
+ */
+async function discoverInvidiousInstances(): Promise<string[]> {
+  if (_invidiousCache && Date.now() - _cacheTs < CACHE_TTL) return _invidiousCache;
+  try {
+    const res = await fetch('https://api.invidious.io/instances.json', {
+      signal: AbortSignal.timeout(5_000), headers: PROXY_HEADERS,
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const text = await res.text();
+    const list: [string, any][] = JSON.parse(text);
+    const urls = list
+      .filter(([, info]) => info.api === true && info.type === 'https' && info.uri)
+      .map(([, info]) => (info.uri as string).replace(/\/$/, ''))
+      .slice(0, 10);
+    if (urls.length > 0) {
+      _invidiousCache = urls;
+      _cacheTs = Date.now();
+      console.log(`[youtube-audio] Discovered ${urls.length} Invidious instances`);
+      return urls;
+    }
+  } catch (err) {
+    console.warn('[youtube-audio] Invidious discovery failed:', (err as Error).message?.slice(0, 80));
+  }
+  return INVIDIOUS_FALLBACK;
+}
+
+// ── Piped 解析 ──────────────────────────────────────────────────
 async function resolveViaPiped(videoId: string): Promise<ProxyAudioResult> {
-  for (const instance of PIPED_INSTANCES) {
+  const instances = await discoverPipedInstances();
+  for (const instance of instances) {
     try {
       const res = await fetch(`${instance}/streams/${videoId}`, {
-        signal: AbortSignal.timeout(10_000),
-        headers: PROXY_HEADERS,
+        signal: AbortSignal.timeout(8_000), headers: PROXY_HEADERS,
       });
       if (!res.ok) { console.warn(`[youtube-audio] Piped ${instance} → ${res.status}`); continue; }
       const text = await res.text();
-      if (!text || text.length < 2) { console.warn(`[youtube-audio] Piped ${instance} → empty body`); continue; }
+      if (!text || text.length < 2) { console.warn(`[youtube-audio] Piped ${instance} → empty`); continue; }
       let data: any;
-      try { data = JSON.parse(text); } catch { console.warn(`[youtube-audio] Piped ${instance} → invalid JSON`); continue; }
-      if (data.error) { console.warn(`[youtube-audio] Piped ${instance} → API error: ${data.error}`); continue; }
+      try { data = JSON.parse(text); } catch { console.warn(`[youtube-audio] Piped ${instance} → bad JSON`); continue; }
+      if (data.error) { console.warn(`[youtube-audio] Piped ${instance} → ${String(data.error).slice(0, 60)}`); continue; }
       const duration: number = data.duration || 0;
       const streams: any[] = (data.audioStreams || []).filter((s: any) => s.url);
-      if (streams.length === 0) continue;
-      // 以 bitrate 接近 128kbps 為排序依據（品質夠用且檔案適中）
+      if (streams.length === 0) { console.warn(`[youtube-audio] Piped ${instance} → no audio streams`); continue; }
       streams.sort((a: any, b: any) =>
         Math.abs((a.bitrate ?? 0) - 128_000) - Math.abs((b.bitrate ?? 0) - 128_000)
       );
@@ -249,33 +308,30 @@ async function resolveViaPiped(videoId: string): Promise<ProxyAudioResult> {
       console.log(`[youtube-audio] Piped ${host} → ${ext} @ ${Math.round((fmt.bitrate ?? 0) / 1000)}kbps, ${Math.round(duration / 60)}min`);
       return { url: fmt.url, ext, duration, source: `Piped(${host})` };
     } catch (err) {
-      console.warn(`[youtube-audio] Piped ${instance} failed:`, (err as Error).message?.slice(0, 80));
+      console.warn(`[youtube-audio] Piped ${instance} err:`, (err as Error).message?.slice(0, 60));
     }
   }
   throw new Error('All Piped instances failed');
 }
 
-/**
- * 透過 Invidious API 解析 YouTube 音頻串流
- * @see https://docs.invidious.io/api/
- */
+// ── Invidious 解析 ──────────────────────────────────────────────
 async function resolveViaInvidious(videoId: string): Promise<ProxyAudioResult> {
-  for (const instance of INVIDIOUS_INSTANCES) {
+  const instances = await discoverInvidiousInstances();
+  for (const instance of instances) {
     try {
       const res = await fetch(`${instance}/api/v1/videos/${videoId}`, {
-        signal: AbortSignal.timeout(10_000),
-        headers: PROXY_HEADERS,
+        signal: AbortSignal.timeout(8_000), headers: PROXY_HEADERS,
       });
       if (!res.ok) { console.warn(`[youtube-audio] Invidious ${instance} → ${res.status}`); continue; }
       const text = await res.text();
-      if (!text || text.length < 2) { console.warn(`[youtube-audio] Invidious ${instance} → empty body`); continue; }
+      if (!text || text.length < 2) { console.warn(`[youtube-audio] Invidious ${instance} → empty`); continue; }
       let data: any;
-      try { data = JSON.parse(text); } catch { console.warn(`[youtube-audio] Invidious ${instance} → invalid JSON`); continue; }
-      if (data.error) { console.warn(`[youtube-audio] Invidious ${instance} → API error: ${data.error}`); continue; }
+      try { data = JSON.parse(text); } catch { console.warn(`[youtube-audio] Invidious ${instance} → bad JSON`); continue; }
+      if (data.error) { console.warn(`[youtube-audio] Invidious ${instance} → ${String(data.error).slice(0, 60)}`); continue; }
       const duration: number = data.lengthSeconds || 0;
       const formats: any[] = data.adaptiveFormats || [];
       const audioFormats = formats.filter((f) => f.type?.startsWith('audio/') && f.url);
-      if (audioFormats.length === 0) continue;
+      if (audioFormats.length === 0) { console.warn(`[youtube-audio] Invidious ${instance} → no audio fmts`); continue; }
       audioFormats.sort((a, b) => Math.abs((a.bitrate ?? 0) - 128_000) - Math.abs((b.bitrate ?? 0) - 128_000));
       const fmt = audioFormats[0];
       const ext = (fmt.type as string).includes('webm') ? 'webm' : 'm4a';
@@ -283,10 +339,50 @@ async function resolveViaInvidious(videoId: string): Promise<ProxyAudioResult> {
       console.log(`[youtube-audio] Invidious ${host} → ${ext} @ ${Math.round((fmt.bitrate ?? 0) / 1000)}kbps, ${Math.round(duration / 60)}min`);
       return { url: fmt.url as string, ext, duration, source: `Invidious(${host})` };
     } catch (err) {
-      console.warn(`[youtube-audio] Invidious ${instance} failed:`, (err as Error).message?.slice(0, 80));
+      console.warn(`[youtube-audio] Invidious ${instance} err:`, (err as Error).message?.slice(0, 60));
     }
   }
   throw new Error('All Invidious instances failed');
+}
+
+// ── Cobalt API 解析（自帶下載代理，不受 IP 限制）─────────────────
+const COBALT_INSTANCES = [
+  'https://api.cobalt.tools',
+];
+
+/**
+ * 透過 Cobalt API 取得 YouTube 音頻下載 URL。
+ * Cobalt 以 tunnel 模式代理下載，不暴露 Lambda IP 給 YouTube。
+ * @see https://github.com/imputnet/cobalt
+ */
+async function resolveViaCobalt(videoId: string): Promise<ProxyAudioResult> {
+  const ytUrl = `https://www.youtube.com/watch?v=${videoId}`;
+  for (const instance of COBALT_INSTANCES) {
+    try {
+      const res = await fetch(instance, {
+        method: 'POST',
+        signal: AbortSignal.timeout(15_000),
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ url: ytUrl, downloadMode: 'audio', audioFormat: 'mp3' }),
+      });
+      if (!res.ok) { console.warn(`[youtube-audio] Cobalt ${instance} → ${res.status}`); continue; }
+      const text = await res.text();
+      if (!text || text.length < 2) continue;
+      let data: any;
+      try { data = JSON.parse(text); } catch { console.warn(`[youtube-audio] Cobalt → bad JSON`); continue; }
+      if (data.status === 'error') { console.warn(`[youtube-audio] Cobalt error: ${data.error?.code || data.error}`); continue; }
+      const dlUrl: string = data.url;
+      if (!dlUrl) { console.warn('[youtube-audio] Cobalt → no URL in response'); continue; }
+      console.log(`[youtube-audio] Cobalt → mp3 download URL obtained (status: ${data.status})`);
+      return { url: dlUrl, ext: 'mp3', duration: 0, source: 'Cobalt' };
+    } catch (err) {
+      console.warn(`[youtube-audio] Cobalt ${instance} err:`, (err as Error).message?.slice(0, 80));
+    }
+  }
+  throw new Error('Cobalt API failed');
 }
 
 /**
@@ -344,11 +440,12 @@ export async function POST(request: Request) {
     await mkdir(chunkDir, { recursive: true });
 
     // ── 音頻下載策略（多代理 + yt-dlp 備案）──────────────────────
-    // 策略層級：Piped (5 實例) → Invidious (5 實例) → yt-dlp (最後手段)
-    // 代理方案透過 Google CDN 直連下載，不受 AWS datacenter IP 封鎖影響
+    // 策略層級：Piped (動態) → Invidious (動態) → Cobalt → yt-dlp
+    // 代理方案不受 AWS datacenter IP 封鎖影響
     const proxyStrategies: Array<{ name: string; fn: () => Promise<ProxyAudioResult> }> = [
       { name: 'Piped', fn: () => resolveViaPiped(videoId) },
       { name: 'Invidious', fn: () => resolveViaInvidious(videoId) },
+      { name: 'Cobalt', fn: () => resolveViaCobalt(videoId) },
     ];
 
     let downloaded = false;
