@@ -1,0 +1,460 @@
+/* ==================== Wrapper ==================== */
+.wrapper {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+/* ==================== Tab Bar ==================== */
+.tabBar {
+  display: flex;
+  gap: 0;
+  border-bottom: 2px solid #e2e8f0;
+  margin-bottom: 0;
+}
+
+.tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.65rem 1.25rem;
+  font-size: 0.88rem;
+  font-weight: 500;
+  color: #64748b;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -2px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.tab:hover {
+  color: #4f46e5;
+  background: #f8fafc;
+}
+
+.tabActive {
+  color: #4f46e5;
+  border-bottom-color: #4f46e5;
+  font-weight: 600;
+}
+
+.tabIcon {
+  font-size: 1.05rem;
+}
+
+/* ==================== Tab Content ==================== */
+.tabContent {
+  padding: 1rem 0 0;
+}
+
+/* ==================== YouTube Panel ==================== */
+.ytPanel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.panelDesc {
+  font-size: 0.88rem;
+  color: #475569;
+  line-height: 1.6;
+  margin: 0;
+}
+
+.panelHint {
+  font-size: 0.78rem;
+  color: #94a3b8;
+}
+
+.ytInputRow {
+  display: flex;
+  gap: 0.5rem;
+  align-items: stretch;
+}
+
+.ytInput {
+  flex: 1;
+  padding: 0.6rem 0.85rem;
+  font-size: 0.88rem;
+  border: 1.5px solid #d1d5db;
+  border-radius: 8px;
+  outline: none;
+  transition: border-color 0.2s ease;
+  background: #fff;
+}
+
+.ytInput:focus {
+  border-color: #6366f1;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+}
+
+.ytInput:disabled {
+  opacity: 0.6;
+  background: #f8fafc;
+}
+
+.ytFetchBtn {
+  padding: 0.6rem 1.1rem;
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: #fff;
+  background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.25);
+}
+
+.ytFetchBtn:hover:not(:disabled) {
+  background: linear-gradient(135deg, #4f46e5 0%, #4338ca 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.35);
+}
+
+.ytFetchBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+/* ---- YouTube 時段選擇器 ---- */
+.ytSegmentToggle {
+  display: flex;
+  align-items: center;
+}
+
+.ytSegmentBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.3rem 0.75rem;
+  font-size: 0.78rem;
+  color: #6b7280;
+  background: transparent;
+  border: 1px dashed #d1d5db;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.ytSegmentBtn:hover:not(:disabled) {
+  color: #7c3aed;
+  border-color: #7c3aed;
+  background: #f5f3ff;
+}
+
+.ytSegmentBtnActive {
+  color: #7c3aed;
+  border-color: #7c3aed;
+  background: #f5f3ff;
+  border-style: solid;
+}
+
+.ytSegmentBtn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.ytSegmentRow {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  padding: 0.6rem 0.85rem;
+  background: #faf5ff;
+  border: 1px solid #e9d5ff;
+  border-radius: 10px;
+}
+
+.ytSegmentLabel {
+  font-size: 0.78rem;
+  color: #6d28d9;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.ytSegmentInput {
+  width: 100px;
+  padding: 0.3rem 0.5rem;
+  font-size: 0.82rem;
+  font-family: monospace;
+  letter-spacing: 0.05em;
+  border: 1px solid #c4b5fd;
+  border-radius: 6px;
+  background: #fff;
+  color: #1f2937;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.ytSegmentInput:focus {
+  border-color: #7c3aed;
+  box-shadow: 0 0 0 2px rgba(124, 58, 237, 0.15);
+}
+
+.ytSegmentInput:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.ytSegmentArrow {
+  font-size: 0.9rem;
+  color: #9ca3af;
+}
+
+.ytSegmentHint {
+  font-size: 0.73rem;
+  color: #9ca3af;
+  white-space: nowrap;
+}
+
+/* ==================== Audio Panel ==================== */
+.audioPanel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+/* Audio drop zone */
+.audioDropZone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  width: 100%;
+  min-height: 130px;
+  padding: 1.5rem 1rem;
+  border: 2px dashed #c7d2fe;
+  border-radius: 12px;
+  background: #f8faff;
+  cursor: pointer;
+  transition: border-color 0.2s ease, background 0.2s ease;
+  box-sizing: border-box;
+  text-align: center;
+}
+
+.audioDropZone:hover {
+  border-color: #6366f1;
+  background: #eef2ff;
+}
+
+.audioDropZoneDragging {
+  border-color: #4f46e5;
+  background: #e0e7ff;
+  box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.12);
+}
+
+.audioDropZoneDisabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.audioDropIcon {
+  font-size: 2rem;
+  line-height: 1;
+}
+
+.audioDropMain {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #4f46e5;
+}
+
+.audioDropSub {
+  font-size: 0.78rem;
+  color: #94a3b8;
+}
+
+/* ==================== Status Messages ==================== */
+.statusLoading {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.65rem 1rem;
+  background: linear-gradient(135deg, #dbeafe 0%, #e0e7ff 100%);
+  border-radius: 10px;
+  border: 1px solid rgba(59, 130, 246, 0.2);
+  font-size: 0.85rem;
+  color: #1e40af;
+}
+
+.statusError {
+  padding: 0.65rem 1rem;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 10px;
+  font-size: 0.85rem;
+  color: #dc2626;
+  line-height: 1.5;
+}
+
+.statusDone {
+  padding: 0.65rem 1rem;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-radius: 10px;
+  font-size: 0.85rem;
+  color: #15803d;
+  line-height: 1.5;
+}
+
+.spinner {
+  display: inline-block;
+  animation: spin 1.2s linear infinite;
+  font-size: 1.1rem;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* ==================== Transcript Review ==================== */
+.reviewSection {
+  margin-top: 1rem;
+  padding: 1rem 1.25rem;
+  background: #fafbff;
+  border: 1px solid #e0e7ff;
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.reviewHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.reviewTitle {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #1e293b;
+  margin: 0;
+}
+
+.reviewBadge {
+  display: inline-flex;
+  padding: 0.15rem 0.55rem;
+  font-size: 0.7rem;
+  font-weight: 500;
+  color: #6366f1;
+  background: #e0e7ff;
+  border-radius: 20px;
+}
+
+.charCount {
+  font-size: 0.78rem;
+  color: #94a3b8;
+}
+
+.reviewTextarea {
+  width: 100%;
+  min-height: 200px;
+  padding: 0.75rem;
+  font-size: 0.88rem;
+  line-height: 1.65;
+  border: 1.5px solid #d1d5db;
+  border-radius: 8px;
+  resize: vertical;
+  background: #fff;
+  color: #1e293b;
+  font-family: inherit;
+  box-sizing: border-box;
+}
+
+.reviewTextarea:focus {
+  outline: none;
+  border-color: #6366f1;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+}
+
+.reviewActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+.reviewCancelBtn {
+  padding: 0.5rem 1rem;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: #64748b;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.reviewCancelBtn:hover {
+  background: #e2e8f0;
+  color: #334155;
+}
+
+.reviewConfirmBtn {
+  padding: 0.5rem 1.25rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #fff;
+  background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.25);
+}
+
+.reviewConfirmBtn:hover:not(:disabled) {
+  background: linear-gradient(135deg, #4f46e5 0%, #4338ca 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.35);
+}
+
+.reviewConfirmBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+/* ==================== Responsive ==================== */
+@media (max-width: 768px) {
+  .tabBar {
+    overflow-x: auto;
+  }
+
+  .tab {
+    padding: 0.5rem 0.85rem;
+    font-size: 0.82rem;
+  }
+
+  .ytInputRow {
+    flex-direction: column;
+  }
+
+  .ytFetchBtn {
+    width: 100%;
+    text-align: center;
+  }
+
+  .reviewActions {
+    flex-direction: column;
+  }
+
+  .reviewCancelBtn,
+  .reviewConfirmBtn {
+    width: 100%;
+    text-align: center;
+  }
+}

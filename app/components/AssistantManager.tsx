@@ -4,7 +4,7 @@ import { ASSISTANT_IDS, VECTOR_STORE_IDS } from '../config/constants';
 import stylesGuide from '../sunday-guide/SundayGuide.module.css';
 import { useCredit } from '../contexts/CreditContext';
 import { useAuth } from '../contexts/AuthContext';
-import { updateFileUploadTokenUsage, updateFileProcessingTokenUsage } from '../utils/fileProcessingTokens';
+// Token deduction is done via /api/usage/update-tokens (server-side) to avoid browser DynamoDB SDK issues
 
 interface AssistantManagerProps {
   onFileProcessed: (content: {
@@ -62,6 +62,9 @@ export default function AssistantManager({
   const [fileExists, setFileExists] = useState<boolean>(false);  // 新增：檔案是否已存在的狀態
   // 新增：處理完成訊息顯示狀態
   const [showFinalResult, setShowFinalResult] = useState(false);
+  // Drag-and-drop state
+  const [isDragging, setIsDragging] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   
   // 獲取PDT時間的輔助函數
   const getPDTTime = () => {
@@ -188,12 +191,18 @@ export default function AssistantManager({
       setUploading(false);
       setUploadProgress(20);
       
-      // 文件上传成功后，记录 token 使用量
+      // 文件上传成功后，扣除 token 使用量（透過 server-side API，避免 browser 直接呼叫 DynamoDB）
       if (user?.user_id) {
-        // 根据文件大小估算页数，这里使用一个简单的估算公式
-        const estimatedPages = Math.max(1, Math.ceil(file.size / (100 * 1024))); // 每 100KB 估算为 1 页
-        await updateFileUploadTokenUsage(user.user_id, estimatedPages);
-        // 立即刷新使用量显示
+        const estimatedPages = Math.max(1, Math.ceil(file.size / (100 * 1024))); // 每 100KB 估算為 1 頁
+        try {
+          await fetch('/api/usage/update-tokens', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userId: user.user_id, type: 'upload', estimatedPages }),
+          });
+        } catch (tokenErr) {
+          console.error('[AssistantManager] 上傳 token 扣除失敗:', tokenErr);
+        }
         await refreshUsage();
       }
       
@@ -225,19 +234,24 @@ export default function AssistantManager({
     // 先通知父組件處理結果
     onFileProcessed(content);
     
-    // 文件处理成功后，记录 token 使用量
+    // 文件处理成功后，扣除 token 使用量（透過 server-side API，避免 browser 直接呼叫 DynamoDB）
     if (user?.user_id) {
-      // 估算处理的页数，可以根据内容长度来估算
-      const textLength = (content.summary?.length || 0) + 
-                         (content.fullText?.length || 0) + 
-                         (content.devotional?.length || 0) + 
+      const textLength = (content.summary?.length || 0) +
+                         (content.fullText?.length || 0) +
+                         (content.devotional?.length || 0) +
                          (content.bibleStudy?.length || 0);
-      
-      // 每 5000 字符估算为 1 页
-      const estimatedPages = Math.max(1, Math.ceil(textLength / 5000));
-      await updateFileProcessingTokenUsage(user.user_id, estimatedPages);
+      const estimatedPages = Math.max(1, Math.ceil(textLength / 5000)); // 每 5000 字估算為 1 頁
+      try {
+        await fetch('/api/usage/update-tokens', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId: user.user_id, type: 'process', estimatedPages }),
+        });
+      } catch (tokenErr) {
+        console.error('[AssistantManager] 處理 token 扣除失敗:', tokenErr);
+      }
     }
-    
+
     // 立即更新信用点数使用量
     await refreshUsage();
     
@@ -536,6 +550,30 @@ export default function AssistantManager({
     );
   };
 
+  // Drag-and-drop handlers
+  const handleDragEnter = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!disabled) setIsDragging(true);
+  };
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+  };
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+    if (disabled) return;
+    const file = e.dataTransfer.files?.[0];
+    if (file) handleFileUpload(file);
+  };
+
   return (
     <div className={styles.container}>
       {error && (
@@ -545,18 +583,35 @@ export default function AssistantManager({
       )}
       <div className={styles.uploadSection}>
         <div className={styles.uploadForm}>
+          {/* Hidden file input */}
           <input
+            ref={fileInputRef}
             type="file"
             accept=".pdf,.txt,.doc,.docx"
+            style={{ display: 'none' }}
             onChange={(e) => {
               const file = e.target.files?.[0];
-              if (file) {
-                handleFileUpload(file);
-              }
+              if (file) handleFileUpload(file);
+              // reset so same file can be re-selected
+              e.target.value = '';
             }}
             disabled={disabled}
           />
-          <h3><span className={styles.fileTypes}>支持格式：.pdf, .txt, .doc, .docx</span></h3>
+          {/* Drag-and-drop zone */}
+          <div
+            className={`${styles.dropZone} ${isDragging ? styles.dropZoneDragging : ''} ${disabled ? styles.dropZoneDisabled : ''}`}
+            onDragEnter={handleDragEnter}
+            onDragLeave={handleDragLeave}
+            onDragOver={handleDragOver}
+            onDrop={handleDrop}
+            onClick={() => { if (!disabled) fileInputRef.current?.click(); }}
+          >
+            <span className={styles.dropIcon}>📄</span>
+            <span className={styles.dropMain}>
+              {isDragging ? '放开以上传' : '点击或拖放文件到此处'}
+            </span>
+            <span className={styles.dropSub}>支持格式：.pdf、.txt、.doc、.docx</span>
+          </div>
           
           {uploading && (
             <div className={styles.loadingCircle}>

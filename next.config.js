@@ -1,5 +1,9 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  experimental: {
+    // 保持原生 require，避免 Next.js bundle 後路徑失效
+    serverComponentsExternalPackages: ['ffmpeg-static', 'yt-dlp-wrap'],
+  },
   env: {
     OPENAI_API_KEY: process.env.OPENAI_API_KEY?.trim(),
     OPENAI_ORG_ID: process.env.OPENAI_ORG_ID?.trim(),
