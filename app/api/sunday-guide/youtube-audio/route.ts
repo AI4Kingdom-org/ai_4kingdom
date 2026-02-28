@@ -32,10 +32,11 @@ let ytDlpPath: string | null = null;
  * - --no-check-certificates：避免 Lambda 上證書問題
  */
 const YT_DLP_COMMON_ARGS = [
-  '--js-runtimes', 'nodejs',
-  '--extractor-args', '"youtube:player_client=ios,mweb"',
+  '--js-runtimes', 'node',
+  '--extractor-args', '"youtube:player_client=tv_embedded,ios,mweb"',
   '--user-agent', '"Mozilla/5.0 (iPhone; CPU iPhone OS 17_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.6 Mobile/15E148 Safari/604.1"',
   '--no-check-certificates',
+  '--no-warnings',
 ].join(' ');
 
 /**
