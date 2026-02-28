@@ -92,6 +92,9 @@ cursorrules.txt
 app/temp/*
 !app/temp/.gitkeep
 
+# yt-dlp binary (auto-downloaded)
+/.bin/
+
 # 忽略所有.env文件
 .env
 .venv
