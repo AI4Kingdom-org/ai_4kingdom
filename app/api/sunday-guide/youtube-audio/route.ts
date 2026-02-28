@@ -25,6 +25,20 @@ const openai = new OpenAI({
 let ytDlpPath: string | null = null;
 
 /**
+ * yt-dlp 通用參數：
+ * - --js-runtimes nodejs：使用 Lambda 上已安裝的 Node.js 作為 JS runtime
+ * - --extractor-args：使用 ios / mweb 客戶端 (跳過 YouTube datacenter IP 機器人偵測)
+ * - --user-agent：模擬真實瀏覽器
+ * - --no-check-certificates：避免 Lambda 上證書問題
+ */
+const YT_DLP_COMMON_ARGS = [
+  '--js-runtimes', 'nodejs',
+  '--extractor-args', 'youtube:player_client=ios,mweb',
+  '--user-agent', 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.6 Mobile/15E148 Safari/604.1',
+  '--no-check-certificates',
+].join(' ');
+
+/**
  * 確保 yt-dlp 二進制可用。
  * 優先使用系統安裝的 yt-dlp，否則自動下載。
  * Linux/Lambda：下載 yt-dlp_linux 獨立二進制（內含 Python，不需要系統 python3）
@@ -224,7 +238,7 @@ export async function POST(request: Request) {
     // ── Amplify 相容：檢查影片時長 ≤ 100 分鐘 ───────────────────────
     try {
       const { stdout: infoJson } = await execAsync(
-        `"${ytDlp}" --dump-json --no-playlist "https://www.youtube.com/watch?v=${videoId}"`,
+        `"${ytDlp}" ${YT_DLP_COMMON_ARGS} --dump-json --no-playlist "https://www.youtube.com/watch?v=${videoId}"`,
         { timeout: 30_000, maxBuffer: 10 * 1024 * 1024 }
       );
       const info = JSON.parse(infoJson);
@@ -252,7 +266,7 @@ export async function POST(request: Request) {
     const formatSelector =
       'bestaudio[abr<=48][ext=webm]/bestaudio[abr<=48]/bestaudio[abr<=64][ext=m4a]/bestaudio[ext=webm]/bestaudio[ext=m4a]/bestaudio';
     const outputTemplate = join(tmpDir, '%(id)s.%(ext)s');
-    const ytDlpCmd = `"${ytDlp}" -f "${formatSelector}" --no-playlist --no-post-overwrites -o "${outputTemplate}" "https://www.youtube.com/watch?v=${videoId}"`;
+    const ytDlpCmd = `"${ytDlp}" ${YT_DLP_COMMON_ARGS} -f "${formatSelector}" --no-playlist --no-post-overwrites -o "${outputTemplate}" "https://www.youtube.com/watch?v=${videoId}"`;
 
     console.log('[youtube-audio] Running yt-dlp...');
     const { stderr } = await execAsync(ytDlpCmd, {
