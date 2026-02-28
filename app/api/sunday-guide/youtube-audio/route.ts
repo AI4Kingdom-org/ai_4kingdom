@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import OpenAI from 'openai';
 import { exec } from 'child_process';
 import { promisify } from 'util';
-import { unlink, mkdir, readdir, readFile } from 'fs/promises';
+import { unlink, mkdir, readdir, readFile, writeFile, chmod } from 'fs/promises';
 import { existsSync, statSync } from 'fs';
 import { join } from 'path';
 import os from 'os';
@@ -26,7 +26,9 @@ let ytDlpPath: string | null = null;
 
 /**
  * 確保 yt-dlp 二進制可用。
- * 優先使用系統安裝的 yt-dlp，否則透過 yt-dlp-wrap 自動下載。
+ * 優先使用系統安裝的 yt-dlp，否則自動下載。
+ * Linux/Lambda：下載 yt-dlp_linux 獨立二進制（內含 Python，不需要系統 python3）
+ * Windows：透過 yt-dlp-wrap 下載 yt-dlp.exe
  */
 async function ensureYtDlp(): Promise<string> {
   if (ytDlpPath) return ytDlpPath;
@@ -45,7 +47,7 @@ async function ensureYtDlp(): Promise<string> {
   // Lambda 環境只有 /tmp 可寫，改用 os.tmpdir()
   const binDir = join(os.tmpdir(), 'yt-dlp-bin');
   const isWindows = os.platform() === 'win32';
-  const binaryName = isWindows ? 'yt-dlp.exe' : 'yt-dlp';
+  const binaryName = isWindows ? 'yt-dlp.exe' : 'yt-dlp_linux';
   const binaryPath = join(binDir, binaryName);
 
   if (existsSync(binaryPath)) {
@@ -54,11 +56,30 @@ async function ensureYtDlp(): Promise<string> {
   }
 
   console.log('[youtube-audio] Downloading yt-dlp binary...');
-  const YTDlpWrap = (await import('yt-dlp-wrap')).default;
   if (!existsSync(binDir)) {
     await mkdir(binDir, { recursive: true });
   }
-  await YTDlpWrap.downloadFromGithub(binaryPath);
+
+  if (isWindows) {
+    // Windows：使用 yt-dlp-wrap 內建下載器（下載 yt-dlp.exe）
+    const YTDlpWrap = (await import('yt-dlp-wrap')).default;
+    await YTDlpWrap.downloadFromGithub(binaryPath);
+  } else {
+    // Linux/Lambda：下載獨立二進制，不需要 python3
+    // x86_64 → yt-dlp_linux，ARM64 → yt-dlp_linux_aarch64
+    const assetName = process.arch === 'arm64' ? 'yt-dlp_linux_aarch64' : 'yt-dlp_linux';
+    const downloadUrl = `https://github.com/yt-dlp/yt-dlp/releases/latest/download/${assetName}`;
+    console.log(`[youtube-audio] Fetching standalone binary: ${assetName}`);
+
+    const response = await fetch(downloadUrl, { redirect: 'follow' });
+    if (!response.ok) {
+      throw new Error(`Failed to download yt-dlp: HTTP ${response.status}`);
+    }
+    const arrayBuffer = await response.arrayBuffer();
+    await writeFile(binaryPath, Buffer.from(arrayBuffer));
+    await chmod(binaryPath, 0o755);
+  }
+
   console.log('[youtube-audio] yt-dlp downloaded to:', binaryPath);
   ytDlpPath = binaryPath;
   return ytDlpPath;
