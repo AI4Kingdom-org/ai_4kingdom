@@ -308,7 +308,10 @@ app.post('/api/audio-transcribe',
   authMiddleware,
   express.raw({ type: '*/*', limit: '250mb' }),
   async (req: express.Request, res: express.Response) => {
-    const fileName = (req.headers['x-filename'] as string) || 'audio.mp3';
+    const rawFileName = (req.headers['x-filename'] as string) || 'audio.mp3';
+    // Front-end encodes filename with encodeURIComponent to stay ISO-8859-1 safe
+    let fileName = rawFileName;
+    try { fileName = decodeURIComponent(rawFileName); } catch { /* already plain ASCII */ }
     const ext = (fileName.split('.').pop() || 'mp3').toLowerCase();
     const tmpDir = join(os.tmpdir(), `audio-upload-${Date.now()}`);
     const chunkDir = join(tmpDir, 'chunks');

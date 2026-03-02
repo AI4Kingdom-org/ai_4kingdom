@@ -60,7 +60,8 @@ function SundayGuideContent() {
   const [pdfError, setPdfError] = useState<string | null>(null);
   const contentRef = useRef<HTMLDivElement>(null);
 
-  const hasUploadPermission = canUploadFiles();
+  const devSkip = process.env.NEXT_PUBLIC_DEV_SKIP_AUTH === 'true';
+  const hasUploadPermission = devSkip || canUploadFiles();
 
   // Whether any file is selected (controls guide section visibility)
   const hasFileSelected = !!selectedFileId;
@@ -419,7 +420,12 @@ function SundayGuideContent() {
 export default function SundayGuideV2() {
   const { user, loading } = useAuth();
 
-  if (loading) {
+  // NEXT_PUBLIC_DEV_SKIP_AUTH=true in .env.local bypasses the auth gate for
+  // local development. This flag is NOT set in amplify.yml, so production is
+  // unaffected. It is baked at build time (NEXT_PUBLIC_*), so no runtime overhead.
+  const devSkip = process.env.NEXT_PUBLIC_DEV_SKIP_AUTH === 'true';
+
+  if (loading && !devSkip) {
     return (
       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh', fontSize: '1rem', color: '#64748b' }}>
         載入中...
@@ -427,7 +433,7 @@ export default function SundayGuideV2() {
     );
   }
 
-  if (!user) {
+  if (!user && !devSkip) {
     return (
       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh', fontSize: '1rem', color: '#64748b' }}>
         請先登入
