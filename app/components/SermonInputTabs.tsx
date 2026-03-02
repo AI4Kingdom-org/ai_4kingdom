@@ -243,25 +243,20 @@ export default function SermonInputTabs({
       : `（${sizeMB.toFixed(1)}MB，约需 1-2 分钟）`;
     setAudioTranscription({
       status: 'loading',
-      message: `正在转录「${file.name}」${timeHint}...`,
+      message: `正在取得轉錄配置...`,
     });
 
     try {
       let data: any;
 
-      if (isLarge) {
-        // 大檔案：先取得 Worker 直傳 config，再直送 Fly.io（繞過 Amplify 10MB 限制）
-        const configRes = await fetch('/api/sunday-guide/transcription');
-        const config = await configRes.json();
+      // 先取得 Worker 配置。若 directUpload=true（Amplify / 有設 YOUTUBE_WORKER_URL），
+      // 無論檔案大小都直送 Worker，避免 API Gateway 29s timeout。
+      // 若 directUpload=false（本地無 Worker 且檔案 ≤10MB），走 Lambda 路徑。
+      const configRes = await fetch('/api/sunday-guide/transcription');
+      const config = await configRes.json().catch(() => ({ directUpload: false }));
 
-        if (!config.directUpload) {
-          setAudioTranscription({
-            status: 'error',
-            message: `文件 ${sizeMB.toFixed(1)}MB 超出伺服器限制（10MB）。請選擇較短的音頻，或聯絡管理員設定轉錄服務。`,
-          });
-          return;
-        }
-
+      if (config.directUpload) {
+        // 直送 Fly.io Worker（無 API Gateway timeout 限制）
         setAudioTranscription({
           status: 'loading',
           message: `正在上傳「${file.name}」到轉錄服務${timeHint}...`,
@@ -286,12 +281,16 @@ export default function SermonInputTabs({
         if (!workerRes.ok) {
           setAudioTranscription({
             status: 'error',
-            message: data.message || data.error || '轉錄失敗，請重試。',
+            message: data.message || data.error || `轉錄失敗（HTTP ${workerRes.status}），請重試。`,
           });
           return;
         }
-      } else {
-        // 小檔案（≤10MB）：走 Amplify Lambda 正常路徑
+      } else if (!isLarge) {
+        // 本地開發 且 檔案 ≤10MB：走 Amplify Lambda 路徑
+        setAudioTranscription({
+          status: 'loading',
+          message: `正在转录「${file.name}」${timeHint}...`,
+        });
         const formData = new FormData();
         formData.append('file', file);
         const res = await fetch('/api/sunday-guide/transcription', {
@@ -304,10 +303,17 @@ export default function SermonInputTabs({
         if (!res.ok) {
           setAudioTranscription({
             status: 'error',
-            message: data.message || data.error || '转录失败',
+            message: data.message || data.error || `转录失败（HTTP ${res.status}）`,
           });
           return;
         }
+      } else {
+        // directUpload=false 且檔案 >10MB：無法處理
+        setAudioTranscription({
+          status: 'error',
+          message: `文件 ${sizeMB.toFixed(1)}MB 超出伺服器限制（10MB）。請聯絡管理員設定轉錄服務。`,
+        });
+        return;
       }
 
       setAudioTranscription({
