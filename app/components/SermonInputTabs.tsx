@@ -263,7 +263,8 @@ export default function SermonInputTabs({
         });
 
         const headers: Record<string, string> = {
-          'x-filename': file.name,
+          // encodeURIComponent: HTTP headers must be ISO-8859-1; encode non-ASCII filenames
+          'x-filename': encodeURIComponent(file.name),
           'content-type': file.type || 'application/octet-stream',
         };
         if (config.workerSecret) headers['x-worker-secret'] = config.workerSecret;
