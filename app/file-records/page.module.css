@@ -10,6 +10,33 @@
   color: #333;
 }
 
+.statsSection {
+  background: #f8f9fa;
+  padding: 1rem;
+  border-radius: 6px;
+  margin-bottom: 1.5rem;
+  display: flex;
+  gap: 2rem;
+  align-items: center;
+}
+
+.statItem {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.statLabel {
+  font-weight: 500;
+  color: #666;
+}
+
+.statValue {
+  font-weight: bold;
+  color: #4a90e2;
+  font-size: 1.1rem;
+}
+
 .section {
   background: #fff;
   padding: 1.5rem;
@@ -151,32 +178,53 @@
 
 .paginationControls {
   display: flex;
-  justify-content: center;
-  gap: 0.5rem;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
   margin-top: 1.5rem;
 }
 
+.paginationInfo {
+  font-size: 0.9rem;
+  color: #666;
+  font-weight: 500;
+}
+
+.paginationButtons {
+  display: flex;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
 .pageButton {
-  padding: 0.5rem 1rem;
-  border: 1px solid #ddd;
+  padding: 0.6rem 1rem;
+  border: 2px solid #ddd;
   background-color: #fff;
   cursor: pointer;
-  border-radius: 4px;
+  border-radius: 6px;
+  font-weight: 600;
+  color: #333;
+  min-width: 44px;
+  transition: all 0.2s ease;
 }
 
 .pageButton:hover {
-  background-color: #f5f5f5;
+  background-color: #f0f7ff;
+  border-color: #4a90e2;
+  color: #4a90e2;
 }
 
 .pageButton.active {
   background-color: #4a90e2;
   color: white;
   border-color: #4a90e2;
+  box-shadow: 0 2px 4px rgba(74, 144, 226, 0.3);
 }
 
 .pageButton:disabled {
-  background-color: #f5f5f5;
-  color: #ccc;
+  background-color: #f8f9fa;
+  color: #aaa;
+  border-color: #e9ecef;
   cursor: not-allowed;
 }
 
@@ -193,5 +241,27 @@
   padding: 0.5rem;
   border-radius: 4px;
   border: 1px solid #ccc;
-  min-width: 250px;
+  min-width: 300px;
+  font-size: 0.9rem;
+}
+
+/* 搜尋高亮樣式 */
+.highlight {
+  background-color: #ffeb3b;
+  color: #333;
+  font-weight: bold;
+  border-radius: 2px;
+  padding: 0 2px;
+}
+
+.searchResults {
+  margin-top: 0.5rem;
+  font-size: 0.9rem;
+  color: #4a90e2;
+  font-weight: 500;
+}
+
+.searchTotal {
+  color: #666;
+  font-weight: normal;
 }

@@ -1,8 +1,8 @@
 /**
- * YouTube Audio Worker — Fly.io 微服務
+ * YouTube Audio Worker - runs on Fly.io
  *
- * 部署於 Fly.io（永久免費 VM，非 AWS IP），yt-dlp 可正常下載 YouTube 音頻。
- * 完整流程：yt-dlp 下載 → ffmpeg 分片 → Whisper 轉錄 → GPT-4o-mini 格式化
+ * Strategy 1: youtube_transcript_api (Python) - fast, no bot detection
+ * Strategy 2: yt-dlp audio download + ffmpeg + Whisper + GPT
  */
 import express from 'express';
 import { exec } from 'child_process';
@@ -21,7 +21,7 @@ app.use(express.json());
 const execAsync = promisify(exec);
 const PORT = parseInt(process.env.PORT || '8080', 10);
 
-// ── 安全驗證 ────────────────────────────────
+// Auth
 const SHARED_SECRET = process.env.WORKER_SECRET || '';
 
 function authMiddleware(
@@ -38,7 +38,7 @@ function authMiddleware(
   next();
 }
 
-// ── OpenAI（延遲初始化，避免啟動時缺少 API Key 就報錯）───
+// Lazy OpenAI client
 let _openai: OpenAI | null = null;
 function getOpenAI(): OpenAI {
   if (!_openai) {
@@ -48,18 +48,100 @@ function getOpenAI(): OpenAI {
   return _openai;
 }
 
-// ── 常數 ────────────────────────────────────
+// Constants
 const WHISPER_MAX_BYTES = 24 * 1024 * 1024;
 const CHUNK_DURATION_SEC = 20 * 60;
 const MAX_VIDEO_DURATION_SEC = 100 * 60;
+const COOKIES_PATH = join(os.tmpdir(), 'yt-cookies.txt');
 
-// ── yt-dlp ──────────────────────────────────
+// Write YouTube cookies from env var (set via: flyctl secrets set YOUTUBE_COOKIES="$(cat cookies.txt)")
+async function initCookies(): Promise<void> {
+  const raw = process.env.YOUTUBE_COOKIES;
+  if (!raw) { console.log('[worker] No YOUTUBE_COOKIES set, yt-dlp will run without cookies'); return; }
+  await writeFile(COOKIES_PATH, raw, 'utf8');
+  console.log(`[worker] Wrote YouTube cookies to ${COOKIES_PATH} (${raw.length} chars)`);
+}
+
+function cookiesArg(): string {
+  return existsSync(COOKIES_PATH) ? `--cookies "${COOKIES_PATH}"` : '';
+}
+
+// Proxy support: set YTDLP_PROXY env var, e.g. "socks5://user:pass@host:port" or "http://user:pass@host:port"
+// Webshare.io residential proxy: https://proxy.webshare.io/ (~$3/month)
+function proxyArg(): string {
+  const p = process.env.YTDLP_PROXY;
+  return p ? `--proxy "${p}"` : '';
+}
+
+// Python script for youtube_transcript_api (bypasses bot detection via timedtext API)
+const TRANSCRIPT_SCRIPT = `
+import sys, json
+from youtube_transcript_api import YouTubeTranscriptApi, TranscriptsDisabled, NoTranscriptFound
+
+video_id = sys.argv[1]
+langs = sys.argv[2:] or ['zh-TW','zh-Hant','zh-Hans','zh','en']
+try:
+    transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
+    transcript = None
+    for lang in langs:
+        try:
+            transcript = transcript_list.find_transcript([lang])
+            break
+        except: pass
+    if not transcript:
+        for t in transcript_list:
+            transcript = t
+            break
+    if not transcript:
+        print("NO_TRANSCRIPT", file=sys.stderr); sys.exit(1)
+    data = transcript.fetch()
+    print(' '.join(item['text'] for item in data if item.get('text')))
+except TranscriptsDisabled:
+    print("TRANSCRIPTS_DISABLED", file=sys.stderr); sys.exit(1)
+except NoTranscriptFound:
+    print("NO_TRANSCRIPT", file=sys.stderr); sys.exit(1)
+except Exception as e:
+    print(f"ERROR: {e}", file=sys.stderr); sys.exit(1)
+`;
+
+// Path to the Python transcript script (written to disk at startup to avoid shell escaping issues)
+const TRANSCRIPT_SCRIPT_PATH = join(os.tmpdir(), 'yt_transcript.py');
+
+async function ensureTranscriptScript(): Promise<void> {
+  try {
+    await writeFile(TRANSCRIPT_SCRIPT_PATH, TRANSCRIPT_SCRIPT, 'utf8');
+    console.log('[worker] Transcript script written to', TRANSCRIPT_SCRIPT_PATH);
+  } catch (e) {
+    console.error('[worker] Failed to write transcript script:', e);
+  }
+}
+
+async function getYouTubeTranscript(videoId: string): Promise<string | null> {
+  try {
+    const cmd = `python3 "${TRANSCRIPT_SCRIPT_PATH}" ${videoId} zh-TW zh-Hant zh-Hans zh en`;
+    const { stdout, stderr } = await execAsync(cmd, { timeout: 30_000, maxBuffer: 10 * 1024 * 1024 });
+    if (stderr && !stdout.trim()) {
+      console.log(`[worker] Transcript fetch stderr: ${stderr.slice(0, 200)}`);
+      return null;
+    }
+    const text = stdout.trim();
+    if (!text) return null;
+    console.log(`[worker] Transcript fetched: ${text.length} chars`);
+    return text;
+  } catch (err: any) {
+    const msg = err?.stderr || err?.message || '';
+    console.log(`[worker] youtube_transcript_api: ${msg.slice(0, 200)}`);
+    return null;
+  }
+}
+
+// yt-dlp binary management
 let ytDlpBin: string | null = null;
 
 async function ensureYtDlp(): Promise<string> {
   if (ytDlpBin) return ytDlpBin;
 
-  // 1. 系統 yt-dlp (Dockerfile 已安裝)
+  // 1. Try system yt-dlp (installed in Dockerfile)
   try {
     const { stdout } = await execAsync('yt-dlp --version', { timeout: 5000 });
     if (stdout.trim()) {
@@ -69,7 +151,7 @@ async function ensureYtDlp(): Promise<string> {
     }
   } catch { /* not in PATH */ }
 
-  // 2. 自動下載到 /tmp
+  // 2. Download to /tmp
   const binDir = join(os.tmpdir(), 'yt-dlp-bin');
   const binaryPath = join(binDir, 'yt-dlp_linux');
   if (existsSync(binaryPath)) { ytDlpBin = binaryPath; return ytDlpBin; }
@@ -88,17 +170,32 @@ async function ensureYtDlp(): Promise<string> {
   return ytDlpBin;
 }
 
-// ── ffmpeg ──────────────────────────────────
+// ffmpeg detection
 async function ensureFfmpeg(): Promise<string> {
-  try {
-    await execAsync('ffmpeg -version', { timeout: 5000 });
-    return 'ffmpeg';
-  } catch {
-    throw new Error('ffmpeg not available on this host');
+  const candidates = ['ffmpeg', '/usr/bin/ffmpeg', '/usr/local/bin/ffmpeg'];
+  for (const bin of candidates) {
+    try {
+      const { stdout } = await execAsync(`${bin} -version`, { timeout: 10000 });
+      console.log(`[worker] ffmpeg found: ${bin}`, (stdout || '').split('\n')[0]);
+      return bin;
+    } catch (err: any) {
+      console.log(`[worker] ffmpeg check failed for "${bin}":`, err?.message?.slice(0, 200) || 'unknown error');
+    }
   }
+  try {
+    const { stdout } = await execAsync('which ffmpeg', { timeout: 5000 });
+    const found = stdout.trim();
+    if (found) {
+      console.log(`[worker] ffmpeg found via which: ${found}`);
+      return found;
+    }
+  } catch (err: any) {
+    console.log('[worker] which ffmpeg failed:', err?.message?.slice(0, 200));
+  }
+  throw new Error('ffmpeg not available on this host (all candidates failed)');
 }
 
-// ── 音頻工具 ────────────────────────────────
+// Audio utilities
 async function getAudioDuration(ffmpeg: string, filePath: string): Promise<number> {
   try {
     const result = await execAsync(`"${ffmpeg}" -i "${filePath}"`, { timeout: 15000 })
@@ -136,7 +233,7 @@ async function transcribeFile(filePath: string, ext: string): Promise<string> {
   return typeof result === 'string' ? result : (result as any).text || String(result);
 }
 
-// ── GPT 格式化 ──────────────────────────────
+// GPT formatting
 async function formatTranscript(rawText: string): Promise<string> {
   if (!rawText || rawText.trim().length < 50) return rawText.trim();
   try {
@@ -149,14 +246,15 @@ async function formatTranscript(rawText: string): Promise<string> {
         messages: [
           {
             role: 'system',
-            content: `你是一位專業的文字編輯，負責整理語音轉錄文字。
-請對輸入的文字進行以下處理：
-1. 加上正確的中文標點符號（句號、逗號、問號、感嘆號、頓號等）
-2. 適當分段，使文字結構清晰（根據語意換行，段落之間加一個空行）
-3. 修正明顯的同音字/語音辨識錯誤（如「的地得」、「再在」等）
-4. 保留所有原始語義，不刪減、不改寫、不添加內容
-5. 如原文有重複詞彙（口語習慣），保留不刪
-只輸出整理後的文字，不要加任何說明或前言。`,
+            content: [
+              'You are a transcript editor. Clean up the following speech transcript:',
+              '1. Remove filler words and repetitions',
+              '2. Fix punctuation and sentence boundaries',
+              '3. Merge broken sentences for readability',
+              '4. Remove clearly off-topic interjections',
+              '5. Preserve the original meaning and language (keep Chinese as Chinese)',
+              'Return only the cleaned transcript text, no commentary.',
+            ].join('\n'),
           },
           { role: 'user', content: chunk },
         ],
@@ -178,7 +276,7 @@ function splitText(text: string, maxChars: number): string[] {
   while (start < text.length) {
     let end = start + maxChars;
     if (end >= text.length) { chunks.push(text.slice(start)); break; }
-    const breakChars = ['。', '！', '？', '…', '\n', ' ', '，'];
+    const breakChars = ['\u3002', '\uff0c', '\uff01', '\uff1f', '\n', ' ', '\u3001'];
     let cutAt = end;
     for (const ch of breakChars) {
       const idx = text.lastIndexOf(ch, end);
@@ -190,7 +288,6 @@ function splitText(text: string, maxChars: number): string[] {
   return chunks;
 }
 
-// ── extractVideoId ──────────────────────────
 function extractVideoId(url: string): string | null {
   const patterns = [
     /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/|youtube\.com\/v\/|youtube\.com\/shorts\/)([a-zA-Z0-9_-]{11})/,
@@ -203,7 +300,7 @@ function extractVideoId(url: string): string | null {
   return null;
 }
 
-// ── 主 API ──────────────────────────────────
+// Main API endpoint
 app.post('/api/youtube-audio', authMiddleware, async (req: express.Request, res: express.Response) => {
   const tmpDir = join(os.tmpdir(), `yt-audio-${Date.now()}`);
   const chunkDir = join(tmpDir, 'chunks');
@@ -211,26 +308,53 @@ app.post('/api/youtube-audio', authMiddleware, async (req: express.Request, res:
   try {
     const { url, startTime, endTime } = req.body;
     if (!url || typeof url !== 'string') {
-      res.status(400).json({ error: 'INVALID_URL', message: '請提供有效的 YouTube URL' });
+      res.status(400).json({ error: 'INVALID_URL', message: 'Please provide a valid YouTube URL' });
       return;
     }
 
     const videoId = extractVideoId(url);
     if (!videoId) {
-      res.status(400).json({ error: 'INVALID_URL', message: '無法識別 YouTube 影片 ID' });
+      res.status(400).json({ error: 'INVALID_URL', message: 'Cannot extract YouTube video ID' });
       return;
     }
 
     console.log(`[worker] Starting: ${videoId}`);
 
+    // Strategy 1: youtube_transcript_api (no bot detection)
+    // Skip if startTime/endTime specified (cannot time-filter captions easily)
+    if (!startTime && !endTime) {
+      console.log('[worker] Trying YouTube transcript API first...');
+      const transcriptText = await getYouTubeTranscript(videoId);
+      if (transcriptText && transcriptText.length > 50) {
+        console.log('[worker] Transcript available, skipping audio download');
+        const formatted = await formatTranscript(transcriptText);
+        res.json({
+          transcript: formatted,
+          source: 'youtube_transcript',
+          videoId,
+          charCount: formatted.length,
+        });
+        return;
+      }
+      console.log('[worker] No transcript, falling back to audio download');
+    } else {
+      console.log('[worker] Time range specified, skipping transcript, using audio');
+    }
+
+    // Strategy 2: yt-dlp + Whisper
     const [ytDlp, ffmpeg] = await Promise.all([ensureYtDlp(), ensureFfmpeg()]);
     await mkdir(tmpDir, { recursive: true });
     await mkdir(chunkDir, { recursive: true });
 
-    // ── 時長預檢 ──────────────────────────
+    const fakeUA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
+    const ytBase = `"${ytDlp}" --user-agent "${fakeUA}" --add-headers "Accept-Language:zh-TW,zh;q=0.9,en;q=0.8" ${cookiesArg()} ${proxyArg()}`.trim();
+    // tv_embedded often bypasses bot detection; web_creator is another good option
+    const playerClients = ['tv_embedded', 'ios', 'web_creator', 'android', 'mweb', 'web'];
+
+    // Check video duration
     try {
       const { stdout: infoJson } = await execAsync(
-        `"${ytDlp}" --dump-json --no-playlist "https://www.youtube.com/watch?v=${videoId}"`,
+        `${ytBase} --extractor-args "youtube:player_client=tv_embedded" --dump-json --no-playlist "https://www.youtube.com/watch?v=${videoId}"`,
         { timeout: 30_000, maxBuffer: 10 * 1024 * 1024 },
       );
       const dur: number = JSON.parse(infoJson).duration || 0;
@@ -238,39 +362,78 @@ app.post('/api/youtube-audio', authMiddleware, async (req: express.Request, res:
       if (dur > MAX_VIDEO_DURATION_SEC) {
         res.status(400).json({
           error: 'VIDEO_TOO_LONG',
-          message: `影片時長約 ${Math.round(dur / 60)} 分鐘，超出上限（100 分鐘）。`,
+          message: `Video is ${Math.round(dur / 60)} min, exceeds 100 min limit`,
         });
         return;
       }
-    } catch { /* 預檢失敗不阻擋 */ }
+    } catch { /* ignore duration check errors */ }
 
-    // ── 下載音頻 ──────────────────────────
+    // Format selector
     const fmtSel = 'bestaudio[abr<=48][ext=webm]/bestaudio[abr<=48]/bestaudio[abr<=64][ext=m4a]/bestaudio[ext=webm]/bestaudio[ext=m4a]/bestaudio';
     const outTpl = join(tmpDir, '%(id)s.%(ext)s');
-    const dlCmd = `"${ytDlp}" -f "${fmtSel}" --no-playlist --no-post-overwrites -o "${outTpl}" "https://www.youtube.com/watch?v=${videoId}"`;
+    let downloadOk = false;
+    let lastErr = '';
     console.log('[worker] Downloading audio...');
-    const { stderr } = await execAsync(dlCmd, { timeout: 600_000, maxBuffer: 50 * 1024 * 1024 });
-    if (stderr) console.log('[worker] yt-dlp stderr:', stderr.slice(0, 300));
 
-    // ── 找到下載的音頻檔 ──────────────────
+    for (const client of playerClients) {
+      const dlCmd = `${ytBase} --extractor-args "youtube:player_client=${client}" -f "${fmtSel}" --no-playlist --no-post-overwrites -o "${outTpl}" "https://www.youtube.com/watch?v=${videoId}"`;
+      try {
+        console.log(`[worker] Trying player_client=${client}...`);
+        const { stderr } = await execAsync(dlCmd, { timeout: 600_000, maxBuffer: 50 * 1024 * 1024 });
+        if (stderr) console.log('[worker] yt-dlp stderr:', stderr.slice(0, 300));
+        downloadOk = true;
+        console.log(`[worker] Download succeeded with player_client=${client}`);
+        break;
+      } catch (dlError: any) {
+        lastErr = dlError?.stderr || dlError?.message || 'unknown';
+        console.log(`[worker] player_client=${client} failed:`, lastErr.slice(0, 300));
+      }
+    }
+
+    if (!downloadOk) {
+      try {
+        console.log('[worker] Trying default (no player_client)...');
+        const dlCmd = `${ytBase} -f "${fmtSel}" --no-playlist --no-post-overwrites -o "${outTpl}" "https://www.youtube.com/watch?v=${videoId}"`;
+        const { stderr } = await execAsync(dlCmd, { timeout: 600_000, maxBuffer: 50 * 1024 * 1024 });
+        if (stderr) console.log('[worker] yt-dlp stderr:', stderr.slice(0, 300));
+        downloadOk = true;
+        console.log('[worker] Download succeeded with default');
+      } catch (dlError: any) {
+        lastErr = dlError?.stderr || dlError?.message || 'unknown';
+        console.log('[worker] Default also failed:', lastErr.slice(0, 300));
+      }
+    }
+
+    if (!downloadOk) {
+      const isBotBlock = lastErr.includes('Sign in to confirm') || lastErr.includes('not a bot');
+      res.status(isBotBlock ? 403 : 500).json({
+        error: isBotBlock ? 'BOT_DETECTED' : 'DOWNLOAD_FAILED',
+        message: isBotBlock
+          ? 'YouTube bot detection triggered. Please try again later.'
+          : `Download failed: ${lastErr.slice(0, 200)}`,
+      });
+      return;
+    }
+
+    // Find downloaded audio file
     const allFiles = await readdir(tmpDir);
     const audioFile = allFiles.find((f) => /\.(m4a|webm|mp3|ogg|opus|wav|mp4|aac)$/i.test(f));
     if (!audioFile) {
       console.error('[worker] No audio file. Files:', allFiles);
-      res.status(500).json({ error: 'DOWNLOAD_FAILED', message: '下載音頻失敗' });
+      res.status(500).json({ error: 'DOWNLOAD_FAILED', message: 'No audio file found after download' });
       return;
     }
 
     let audioPath = join(tmpDir, audioFile);
     const ext = audioFile.split('.').pop()?.toLowerCase() || 'm4a';
 
-    // ── 時段裁剪 ────────────────────────────
+    // Trim to time range if specified
     if (startTime || endTime) {
       const trimmedPath = join(tmpDir, `trimmed.${ext}`);
       const ssArg = startTime ? `-ss "${startTime}"` : '';
       const toArg = endTime ? `-to "${endTime}"` : '';
       const trimCmd = `"${ffmpeg}" -i "${audioPath}" ${ssArg} ${toArg} -c copy "${trimmedPath}"`;
-      console.log(`[worker] Trimming: ${startTime || '00:00:00'} → ${endTime || 'end'}`);
+      console.log(`[worker] Trimming: ${startTime || '00:00:00'} to ${endTime || 'end'}`);
       await execAsync(trimCmd, { timeout: 60_000, maxBuffer: 50 * 1024 * 1024 });
       if (existsSync(trimmedPath)) audioPath = trimmedPath;
     }
@@ -279,7 +442,7 @@ app.post('/api/youtube-audio', authMiddleware, async (req: express.Request, res:
     const fileMB = fileBytes / (1024 * 1024);
     console.log(`[worker] Audio: ${fileMB.toFixed(1)} MB`);
 
-    // ── Whisper 轉錄 ────────────────────────
+    // Transcribe with Whisper
     let transcript = '';
     if (fileBytes <= WHISPER_MAX_BYTES) {
       console.log('[worker] Transcribing directly...');
@@ -301,11 +464,11 @@ app.post('/api/youtube-audio', authMiddleware, async (req: express.Request, res:
     }
 
     if (!transcript.trim()) {
-      res.status(422).json({ error: 'EMPTY_TRANSCRIPTION', message: '轉錄結果為空' });
+      res.status(422).json({ error: 'EMPTY_TRANSCRIPTION', message: 'Transcription returned empty result' });
       return;
     }
 
-    console.log(`[worker] Whisper done: ${transcript.length} chars — formatting...`);
+    console.log(`[worker] Whisper done: ${transcript.length} chars, formatting...`);
     const formatted = await formatTranscript(transcript.trim());
     console.log(`[worker] Done: ${formatted.length} chars`);
 
@@ -322,16 +485,16 @@ app.post('/api/youtube-audio', authMiddleware, async (req: express.Request, res:
     if (msg.includes('Sign in to confirm') || msg.includes('bot')) {
       res.status(503).json({
         error: 'YOUTUBE_BLOCKED',
-        message: '此 YouTube 影片受到機器人偵測限制，請改用手動上傳音頻。',
+        message: 'YouTube bot detection triggered. Please try again later.',
       });
       return;
     }
     if (msg.includes('Video unavailable') || msg.includes('Private video')) {
-      res.status(404).json({ error: 'VIDEO_UNAVAILABLE', message: '影片無法訪問' });
+      res.status(404).json({ error: 'VIDEO_UNAVAILABLE', message: 'Video is unavailable or private' });
       return;
     }
 
-    res.status(500).json({ error: 'TRANSCRIPTION_FAILED', message: msg || '處理失敗' });
+    res.status(500).json({ error: 'TRANSCRIPTION_FAILED', message: msg || 'Unknown error' });
   } finally {
     try {
       if (existsSync(tmpDir)) await rm(tmpDir, { recursive: true, force: true });
@@ -339,12 +502,14 @@ app.post('/api/youtube-audio', authMiddleware, async (req: express.Request, res:
   }
 });
 
-// ── 健康檢查 ─────────────────────────────────
+// Health check
 app.get('/health', (_req: express.Request, res: express.Response) => {
   res.json({ status: 'ok', service: 'youtube-audio-worker' });
 });
 
-// ── 啟動 ────────────────────────────────────
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`[worker] YouTube Audio Worker running on port ${PORT}`);
+// Start server
+Promise.all([initCookies(), ensureTranscriptScript()]).then(() => {
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`[worker] YouTube Audio Worker running on port ${PORT}`);
+  });
 });
