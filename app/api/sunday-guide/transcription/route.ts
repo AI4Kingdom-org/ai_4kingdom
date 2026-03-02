@@ -2,6 +2,24 @@ import { NextResponse } from 'next/server';
 import OpenAI from 'openai';
 import { formatTranscript } from '../../../lib/formatTranscript';
 
+/**
+ * GET /api/sunday-guide/transcription
+ * 回傳大檔案直接上傳到 Fly.io Worker 所需的 config。
+ * 前端在檔案 > 10MB 時呼叫此端點，取得 uploadUrl 後直接上傳，繞過 Amplify 10MB 限制。
+ */
+export async function GET() {
+  const workerUrl = process.env.YOUTUBE_WORKER_URL;
+  const workerSecret = process.env.YOUTUBE_WORKER_SECRET;
+  if (!workerUrl) {
+    return NextResponse.json({ directUpload: false });
+  }
+  return NextResponse.json({
+    directUpload: true,
+    uploadUrl: `${workerUrl}/api/audio-transcribe`,
+    workerSecret: workerSecret || '',
+  });
+}
+
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
@@ -13,8 +31,8 @@ const ALLOWED_TYPES = new Set([
   'video/mp4', 'video/webm',
 ]);
 
-// Amplify 相容：API Gateway payload 限制 10MB
-const MAX_UPLOAD_BYTES = 10 * 1024 * 1024; // 10 MB
+// Amplify Lambda 直接處理上限（API Gateway payload 限制）
+const MAX_UPLOAD_BYTES = 10 * 1024 * 1024; // 10 MB（大於此限制請走 GET /config 後直送 Worker）
 
 /**
  * POST /api/sunday-guide/transcription

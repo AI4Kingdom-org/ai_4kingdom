@@ -301,6 +301,63 @@ function extractVideoId(url: string): string | null {
 }
 
 // Main API endpoint
+// ── 音頻檔案直接上傳轉錄端點（繞過 Amplify 10MB 限制）──────────────
+// 前端直接 POST binary 到此端點，X-Filename header 傳檔名
+// 支援最大 250MB，自動 ffmpeg 分片後逐片 Whisper 轉錄
+app.post('/api/audio-transcribe',
+  authMiddleware,
+  express.raw({ type: '*/*', limit: '250mb' }),
+  async (req: express.Request, res: express.Response) => {
+    const fileName = (req.headers['x-filename'] as string) || 'audio.mp3';
+    const ext = (fileName.split('.').pop() || 'mp3').toLowerCase();
+    const tmpDir = join(os.tmpdir(), `audio-upload-${Date.now()}`);
+    const chunkDir = join(tmpDir, 'chunks');
+    try {
+      await mkdir(tmpDir, { recursive: true });
+      await mkdir(chunkDir, { recursive: true });
+      const audioPath = join(tmpDir, `upload.${ext}`);
+      await writeFile(audioPath, req.body as Buffer);
+      const fileSizeBytes = statSync(audioPath).size;
+      const fileSizeMB = fileSizeBytes / (1024 * 1024);
+      console.log(`[worker] Audio upload: ${fileName} (${fileSizeMB.toFixed(1)}MB)`);
+      const WHISPER_MAX_BYTES = 24 * 1024 * 1024;
+      const CHUNK_DURATION_SEC = 20 * 60;
+      let transcript = '';
+      if (fileSizeBytes <= WHISPER_MAX_BYTES) {
+        console.log('[worker] Transcribing directly...');
+        transcript = await transcribeFile(audioPath, ext);
+      } else {
+        const ffmpeg = await ensureFfmpeg();
+        const chunks = await splitAudio(ffmpeg, audioPath, chunkDir, CHUNK_DURATION_SEC);
+        console.log(`[worker] Split into ${chunks.length} chunks`);
+        const parts: string[] = [];
+        for (let i = 0; i < chunks.length; i++) {
+          const chunkPath = chunks[i];
+          const chunkExt = chunkPath.split('.').pop()?.toLowerCase() || ext;
+          const chunkBytes = statSync(chunkPath).size;
+          if (chunkBytes > WHISPER_MAX_BYTES) { console.warn(`[worker] Chunk ${i + 1} too large, skipping`); continue; }
+          console.log(`[worker] Transcribing chunk ${i + 1}/${chunks.length}...`);
+          const part = await transcribeFile(chunkPath, chunkExt);
+          if (part.trim()) parts.push(part.trim());
+        }
+        transcript = parts.join(' ');
+      }
+      if (!transcript || !transcript.trim()) {
+        res.status(422).json({ error: 'EMPTY_TRANSCRIPTION', message: '轉錄結果為空，請確認音頻包含語音內容。' });
+        return;
+      }
+      console.log(`[worker] Whisper done: ${transcript.length} chars, formatting...`);
+      const formatted = await formatTranscript(transcript.trim());
+      console.log(`[worker] Done: ${formatted.length} chars`);
+      res.json({ transcript: formatted, source: 'whisper', fileName, charCount: formatted.length });
+    } catch (error: any) {
+      console.error('[worker] audio-transcribe error:', error);
+      res.status(500).json({ error: 'TRANSCRIPTION_FAILED', message: error?.message || 'Unknown error' });
+    } finally {
+      try { if (existsSync(tmpDir)) await rm(tmpDir, { recursive: true, force: true }); } catch { /* ignore */ }
+    }
+  });
+
 app.post('/api/youtube-audio', authMiddleware, async (req: express.Request, res: express.Response) => {
   const tmpDir = join(os.tmpdir(), `yt-audio-${Date.now()}`);
   const chunkDir = join(tmpDir, 'chunks');
