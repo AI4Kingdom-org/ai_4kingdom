@@ -18,6 +18,23 @@ import OpenAI from 'openai';
 const app = express();
 app.use(express.json());
 
+// CORS: allow cross-origin requests from any Amplify / custom domain
+app.use((req: express.Request, res: express.Response, next: express.NextFunction) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader(
+    'Access-Control-Allow-Headers',
+    'content-type, x-worker-secret, x-filename, authorization',
+  );
+  // Preflight: browsers send OPTIONS before the real POST — respond immediately
+  // without going through authMiddleware (which would reject it as Unauthorized)
+  if (req.method === 'OPTIONS') {
+    res.sendStatus(204);
+    return;
+  }
+  next();
+});
+
 const execAsync = promisify(exec);
 const PORT = parseInt(process.env.PORT || '8080', 10);
 
