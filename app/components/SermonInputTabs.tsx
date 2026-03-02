@@ -65,11 +65,14 @@ export default function SermonInputTabs({
   const [activeTranscriptTab, setActiveTranscriptTab] = useState<'youtube' | 'audio' | null>(null);
 
   // ---- Tab definitions ----
-  const tabs: { id: TabId; icon: string; label: string }[] = [
+  // Production: hide YouTube tab (set NEXT_PUBLIC_HIDE_YOUTUBE_TAB=true in Amplify)
+  const hideYoutube = process.env.NEXT_PUBLIC_HIDE_YOUTUBE_TAB === 'true';
+  const allTabs: { id: TabId; icon: string; label: string }[] = [
     { id: 'pdf', icon: '📄', label: 'PDF / 文件' },
     { id: 'youtube', icon: '▶️', label: 'YouTube' },
     { id: 'audio', icon: '🎵', label: '音频文件' },
   ];
+  const tabs = hideYoutube ? allTabs.filter((t) => t.id !== 'youtube') : allTabs;
 
   // =========================================================================
   // Helpers
@@ -225,37 +228,86 @@ export default function SermonInputTabs({
     }
 
     const sizeMB = file.size / (1024 * 1024);
-    if (sizeMB > 10) {
+    // 200MB 上限（100 分鐘音頻約 92MB @ 128kbps）
+    if (sizeMB > 200) {
       setAudioTranscription({
         status: 'error',
-        message: `文件 ${sizeMB.toFixed(1)}MB 超出限制（最大 10MB）。较长的音频请改用 YouTube 链接方式。`,
+        message: `文件 ${sizeMB.toFixed(1)}MB 超出限制（最大 200MB）。`,
       });
       return;
     }
 
-    const timeHint = `（${sizeMB.toFixed(1)}MB，约需 1-2 分钟）`;
+    const isLarge = sizeMB > 10;
+    const timeHint = isLarge
+      ? `（${sizeMB.toFixed(1)}MB，約需 3-10 分鐘，請耐心等待）`
+      : `（${sizeMB.toFixed(1)}MB，约需 1-2 分钟）`;
     setAudioTranscription({
       status: 'loading',
       message: `正在转录「${file.name}」${timeHint}...`,
     });
 
     try {
-      const formData = new FormData();
-      formData.append('file', file);
+      let data: any;
 
-      const res = await fetch('/api/sunday-guide/transcription', {
-        method: 'POST',
-        body: formData,
-      });
+      if (isLarge) {
+        // 大檔案：先取得 Worker 直傳 config，再直送 Fly.io（繞過 Amplify 10MB 限制）
+        const configRes = await fetch('/api/sunday-guide/transcription');
+        const config = await configRes.json();
 
-      const data = await res.json();
+        if (!config.directUpload) {
+          setAudioTranscription({
+            status: 'error',
+            message: `文件 ${sizeMB.toFixed(1)}MB 超出伺服器限制（10MB）。請選擇較短的音頻，或聯絡管理員設定轉錄服務。`,
+          });
+          return;
+        }
 
-      if (!res.ok) {
         setAudioTranscription({
-          status: 'error',
-          message: data.message || data.error || '转录失败',
+          status: 'loading',
+          message: `正在上傳「${file.name}」到轉錄服務${timeHint}...`,
         });
-        return;
+
+        const headers: Record<string, string> = {
+          'x-filename': file.name,
+          'content-type': file.type || 'application/octet-stream',
+        };
+        if (config.workerSecret) headers['x-worker-secret'] = config.workerSecret;
+
+        const workerRes = await fetch(config.uploadUrl, {
+          method: 'POST',
+          headers,
+          body: file,
+        });
+
+        let rawText = '';
+        try { rawText = await workerRes.text(); } catch { /* ignore */ }
+        try { data = rawText.trim() ? JSON.parse(rawText) : {}; } catch { data = {}; }
+
+        if (!workerRes.ok) {
+          setAudioTranscription({
+            status: 'error',
+            message: data.message || data.error || '轉錄失敗，請重試。',
+          });
+          return;
+        }
+      } else {
+        // 小檔案（≤10MB）：走 Amplify Lambda 正常路徑
+        const formData = new FormData();
+        formData.append('file', file);
+        const res = await fetch('/api/sunday-guide/transcription', {
+          method: 'POST',
+          body: formData,
+        });
+        let rawText = '';
+        try { rawText = await res.text(); } catch { /* ignore */ }
+        try { data = rawText.trim() ? JSON.parse(rawText) : {}; } catch { data = {}; }
+        if (!res.ok) {
+          setAudioTranscription({
+            status: 'error',
+            message: data.message || data.error || '转录失败',
+          });
+          return;
+        }
       }
 
       setAudioTranscription({
@@ -609,7 +661,7 @@ export default function SermonInputTabs({
               上传音频文件，系统将使用 AI 语音识别自动转录为文字。
               <br />
               <span className={styles.panelHint}>
-                支持格式：mp3、wav、m4a、mp4、webm、ogg（最大 10MB，约 8 分钟）
+                支持格式：mp3、wav、m4a、mp4、webm、ogg（最大 200MB，约 160 分钟）
               </span>
             </p>
 
@@ -654,7 +706,7 @@ export default function SermonInputTabs({
               <span className={styles.audioDropMain}>
                 {audioDragging ? '放开以上传' : '点击或拖放音频文件到此处'}
               </span>
-              <span className={styles.audioDropSub}>mp3、wav、m4a、mp4、webm、ogg（最大 10MB，约 8 分钟）</span>
+              <span className={styles.audioDropSub}>mp3、wav、m4a、mp4、webm、ogg（最大 200MB，约 160 分钟）</span>
             </div>
 
             {/* Status messages */}
