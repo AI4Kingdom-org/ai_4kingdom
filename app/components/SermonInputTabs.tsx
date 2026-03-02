@@ -65,11 +65,14 @@ export default function SermonInputTabs({
   const [activeTranscriptTab, setActiveTranscriptTab] = useState<'youtube' | 'audio' | null>(null);
 
   // ---- Tab definitions ----
-  const tabs: { id: TabId; icon: string; label: string }[] = [
+  // Production: hide YouTube tab (set NEXT_PUBLIC_HIDE_YOUTUBE_TAB=true in Amplify)
+  const hideYoutube = process.env.NEXT_PUBLIC_HIDE_YOUTUBE_TAB === 'true';
+  const allTabs: { id: TabId; icon: string; label: string }[] = [
     { id: 'pdf', icon: '📄', label: 'PDF / 文件' },
     { id: 'youtube', icon: '▶️', label: 'YouTube' },
     { id: 'audio', icon: '🎵', label: '音频文件' },
   ];
+  const tabs = hideYoutube ? allTabs.filter((t) => t.id !== 'youtube') : allTabs;
 
   // =========================================================================
   // Helpers
@@ -658,7 +661,7 @@ export default function SermonInputTabs({
               上传音频文件，系统将使用 AI 语音识别自动转录为文字。
               <br />
               <span className={styles.panelHint}>
-                支持格式：mp3、wav、m4a、mp4、webm、ogg（最大 10MB，约 8 分钟）
+                支持格式：mp3、wav、m4a、mp4、webm、ogg（最大 200MB，约 160 分钟）
               </span>
             </p>
 
@@ -703,7 +706,7 @@ export default function SermonInputTabs({
               <span className={styles.audioDropMain}>
                 {audioDragging ? '放开以上传' : '点击或拖放音频文件到此处'}
               </span>
-              <span className={styles.audioDropSub}>mp3、wav、m4a、mp4、webm、ogg（最大 10MB，约 8 分钟）</span>
+              <span className={styles.audioDropSub}>mp3、wav、m4a、mp4、webm、ogg（最大 200MB，约 160 分钟）</span>
             </div>
 
             {/* Status messages */}
