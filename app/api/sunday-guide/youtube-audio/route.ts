@@ -432,10 +432,17 @@ export async function POST(request: Request) {
         method: 'POST',
         headers,
         body: JSON.stringify(body),
-        signal: AbortSignal.timeout(900_000), // 15 分鐘超時
+        signal: AbortSignal.timeout(160_000), // 160 秒（Amplify Lambda 限制 180s，留 20s buffer）
       });
 
-      const data = await workerRes.json();
+      // 防禦：先讀 text 再 parse，避免 worker 回傳空 body 時 crash
+      let data: any;
+      const rawText = await workerRes.text();
+      try {
+        data = rawText.trim() ? JSON.parse(rawText) : { error: 'EMPTY_RESPONSE', message: 'Worker 回傳空 body' };
+      } catch {
+        data = { error: 'INVALID_JSON', message: `Worker 回傳非 JSON: ${rawText.slice(0, 200)}` };
+      }
       return NextResponse.json(data, { status: workerRes.status });
     } catch (proxyErr: any) {
       console.error('[youtube-audio] Fly.io proxy failed:', proxyErr);

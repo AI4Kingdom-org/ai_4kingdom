@@ -168,7 +168,14 @@ export default function SermonInputTabs({
           }),
         });
 
-        const audioData = await audioRes.json();
+        // 防禦：先讀 text 再 parse，避免空 body（Lambda 超時）crash
+        let audioData: Record<string, any> = {};
+        try {
+          const rawText = await audioRes.text();
+          if (rawText.trim()) audioData = JSON.parse(rawText);
+        } catch {
+          // empty or non-JSON response (e.g. Lambda/gateway timeout)
+        }
 
         if (!audioRes.ok) {
           setYtTranscription({
