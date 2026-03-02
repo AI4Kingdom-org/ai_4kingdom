@@ -50,6 +50,12 @@ const assistantOptions: AssistantOption[] = [
     label: '通用助手', 
     vectorStoreId: VECTOR_STORE_IDS?.GENERAL || 'vs_AMJIJ1zfGnzHpI1msv4T8Ww3' 
   }
+  ,
+  {
+    id: ASSISTANT_IDS?.JIAN_ZHU || 'asst_bGYjfmBTbjuF0tCGbJ0yEa8I',
+    label: '祝建牧師助手',
+    vectorStoreId: VECTOR_STORE_IDS?.JIAN_ZHU || 'vs_6853c96fdfb88191a8421097e5bea232'
+  }
 ];
 
 export default function FileUploadPage() {
@@ -71,7 +77,7 @@ export default function FileUploadPage() {
   // 處理檔案選擇
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
-    if (!files) return;
+    if (!files || files.length === 0) return;
 
     const newFiles: UploadFile[] = Array.from(files).map(file => ({
       file,
@@ -85,6 +91,7 @@ export default function FileUploadPage() {
 
   // 移除檔案
   const removeFile = (fileId: string) => {
+    if (!fileId) return;
     setUploadFiles(prev => prev.filter(f => f.id !== fileId));
   };
 
@@ -102,9 +109,15 @@ export default function FileUploadPage() {
     
     try {
       // 更新狀態為上傳中
-      setUploadFiles(prev => prev.map(f => 
-        f.id === id ? { ...f, status: 'uploading', progress: 0 } : f
-      ));      const formData = new FormData();
+      setUploadFiles(prev => {
+        const exists = prev.some(f => f.id === id);
+        if (!exists) return prev;
+        return prev.map(f => 
+          f.id === id ? { ...f, status: 'uploading', progress: 0 } : f
+        );
+      });
+
+      const formData = new FormData();
       formData.append('file', file);
       formData.append('userId', 'anonymous'); // 使用匿名用戶ID
 
@@ -114,7 +127,9 @@ export default function FileUploadPage() {
           method: 'POST',
           body: formData
         }
-      );      const data = await response.json();
+      );
+
+      const data = await response.json();
       
       console.log('[DEBUG] 檔案上傳響應:', {
         ok: response.ok,
@@ -126,39 +141,52 @@ export default function FileUploadPage() {
       if (response.ok && data.success) {
         // 上傳成功
         console.log('[DEBUG] 檔案上傳成功:', file.name);
-        setUploadFiles(prev => prev.map(f => 
-          f.id === id ? { ...f, status: 'success', progress: 100, completed: true } : f
-        ));
+        setUploadFiles(prev => {
+          const exists = prev.some(f => f.id === id);
+          if (!exists) return prev;
+          return prev.map(f => 
+            f.id === id ? { ...f, status: 'success', progress: 100, completed: true } : f
+          );
+        });
         return true;
       } else {
         // 上傳失敗
         console.log('[DEBUG] 檔案上傳失敗:', { fileName: file.name, error: data.error });
-        setUploadFiles(prev => prev.map(f => 
-          f.id === id ? { 
-            ...f, 
-            status: 'error', 
-            progress: 0,
-            errorMessage: data.error || '上傳失敗' 
-          } : f
-        ));
+        setUploadFiles(prev => {
+          const exists = prev.some(f => f.id === id);
+          if (!exists) return prev;
+          return prev.map(f => 
+            f.id === id ? { 
+              ...f, 
+              status: 'error', 
+              progress: 0,
+              errorMessage: data.error || '上傳失敗' 
+            } : f
+          );
+        });
         return false;
       }
     } catch (error) {
       // 發生錯誤
-      setUploadFiles(prev => prev.map(f => 
-        f.id === id ? { 
-          ...f, 
-          status: 'error', 
-          progress: 0,
-          errorMessage: error instanceof Error ? error.message : '網路錯誤' 
-        } : f
-      ));
+      setUploadFiles(prev => {
+        const exists = prev.some(f => f.id === id);
+        if (!exists) return prev;
+        return prev.map(f => 
+          f.id === id ? { 
+            ...f, 
+            status: 'error', 
+            progress: 0,
+            errorMessage: error instanceof Error ? error.message : '網路錯誤' 
+          } : f
+        );
+      });
       return false;
     }
   };
 
   // 開始上傳所有檔案
-  const handleUploadAll = async () => {    if (uploadFiles.length === 0) {
+  const handleUploadAll = async () => {
+    if (uploadFiles.length === 0) {
       setMessage({ type: 'error', text: '請先選擇要上傳的檔案' });
       return;
     }
@@ -232,7 +260,8 @@ export default function FileUploadPage() {
       case 'success': return '✅';
       case 'error': return '❌';
       default: return '⏳';
-    }  };
+    }
+  };
 
   return (
     <div className={styles.container}>

@@ -2,20 +2,32 @@
 
 import { useState, useEffect } from 'react';
 import styles from './page.module.css';
-import { ASSISTANT_IDS } from '../config/constants';
+import { ASSISTANT_IDS, VECTOR_STORE_IDS } from '../config/constants';
 import { useAuth } from '../contexts/AuthContext';
 import BackToPortalLink from '../components/BackToPortalLink';
 
 // 助手選擇器選項
 const assistantOptions = [
-  { id: '', label: '所有助手' },
+  { id: '', label: '所有助手(不含 Agape)' },
   { id: ASSISTANT_IDS.SUNDAY_GUIDE, label: '牧者助手' },
+  { id: ASSISTANT_IDS.AGAPE_CHURCH, label: 'Agape 牧者助手' },
   { id: ASSISTANT_IDS.JOHNSUNG, label: '宋尚節牧師' },
   { id: ASSISTANT_IDS.SPIRITUAL_PARTNER, label: '靈修伙伴' },
   { id: ASSISTANT_IDS.CHILDREN_MENTAL, label: '兒童心理' },
   { id: ASSISTANT_IDS.HOMESCHOOL, label: '家庭教育' },
   { id: ASSISTANT_IDS.GENERAL, label: '通用助手' }
 ];
+
+// 對應 assistantId -> vectorStoreId (刪除全部或其他操作需要)
+const assistantVectorMap: Record<string, string> = {
+  [ASSISTANT_IDS.SUNDAY_GUIDE]: VECTOR_STORE_IDS.SUNDAY_GUIDE,
+  [ASSISTANT_IDS.AGAPE_CHURCH]: VECTOR_STORE_IDS.AGAPE_CHURCH,
+  [ASSISTANT_IDS.JOHNSUNG]: VECTOR_STORE_IDS.JOHNSUNG,
+  [ASSISTANT_IDS.SPIRITUAL_PARTNER]: VECTOR_STORE_IDS.SPIRITUAL_PARTNER,
+  [ASSISTANT_IDS.CHILDREN_MENTAL]: VECTOR_STORE_IDS.CHILDREN_MENTAL,
+  [ASSISTANT_IDS.HOMESCHOOL]: VECTOR_STORE_IDS.HOMESCHOOL,
+  [ASSISTANT_IDS.GENERAL]: VECTOR_STORE_IDS.GENERAL
+};
 
 // 文件記錄類型定義
 interface FileRecord {
@@ -139,7 +151,13 @@ export default function FileRecordsPage() {
     setError(null);
     
     try {
-      const url = `/api/sunday-guide/documents${selectedAssistant ? `?assistantId=${selectedAssistant}` : ''}`;
+      let url = `/api/sunday-guide/documents`;
+      if (selectedAssistant) {
+        const params = new URLSearchParams({ assistantId: selectedAssistant });
+        // Agape 需帶專屬過濾 (顯示單位指定上傳者的公開檔案)
+        if (selectedAssistant === ASSISTANT_IDS.AGAPE_CHURCH) params.set('agapeFilter', 'true');
+        url += `?${params.toString()}`;
+      }
       const response = await fetch(url);
       
       if (!response.ok) {
@@ -180,7 +198,9 @@ export default function FileRecordsPage() {
     setDeleteMessage(null);
     
     try {
-      const queryParams = selectedAssistant ? `?vectorStoreId=${selectedAssistant}` : '';
+  // 刪除全部需用 vectorStoreId；若使用者選擇 assistantId 則映射，未選則不傳(表示全部)
+  const selectedVector = selectedAssistant ? assistantVectorMap[selectedAssistant] : undefined;
+  const queryParams = selectedVector ? `?vectorStoreId=${selectedVector}` : '';
       
       const response = await fetch(`/api/vector-store/delete-all${queryParams}`, {
         method: 'DELETE',
@@ -215,28 +235,11 @@ export default function FileRecordsPage() {
     }
   };
 
-  // 過濾記錄
-  const filteredRecords = records.filter(record => {
-    if (!searchTerm) return true;
-    
-    const searchLower = searchTerm.toLowerCase();
-    return (
-      record.fileName.toLowerCase().includes(searchLower) ||
-      record.updatedAt.toLowerCase().includes(searchLower)
-    );
-  });
-  
-  // 計算分頁（先排序，後分頁）
-  // 先依 updatedAt 由新到舊排序
-  const sortedRecords = [...filteredRecords].sort((a, b) => {
-    const dateA = new Date(a.updatedAt).getTime();
-    const dateB = new Date(b.updatedAt).getTime();
-    return dateB - dateA;
-  });
-  const totalPages = Math.ceil(sortedRecords.length / recordsPerPage);
-  const indexOfLastRecord = currentPage * recordsPerPage;
-  const indexOfFirstRecord = indexOfLastRecord - recordsPerPage;
-  const currentRecords = sortedRecords.slice(indexOfFirstRecord, indexOfLastRecord);
+  // 獲取助手名稱
+  const getAssistantName = (assistantId: string) => {
+    const assistant = assistantOptions.find(opt => opt.id === assistantId);
+    return assistant ? assistant.label : assistantId;
+  };
 
   // 格式化時間
   const formatDate = (dateString: string) => {
@@ -255,11 +258,62 @@ export default function FileRecordsPage() {
     }
   };
 
-  // 獲取助手名稱
-  const getAssistantName = (assistantId: string) => {
-    const assistant = assistantOptions.find(opt => opt.id === assistantId);
-    return assistant ? assistant.label : assistantId;
+  // 高亮搜尋關鍵字函數
+  const highlightSearchTerm = (text: string, searchTerm: string) => {
+    if (!searchTerm || !text) return text;
+    
+    const regex = new RegExp(`(${searchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
+    const parts = text.split(regex);
+    
+    return parts.map((part, index) => {
+      if (part.toLowerCase() === searchTerm.toLowerCase()) {
+        return <mark key={index} className={styles.highlight}>{part}</mark>;
+      }
+      return part;
+    });
   };
+
+  // 過濾記錄 - 全文檢索功能
+  const filteredRecords = records.filter(record => {
+    if (!searchTerm) return true;
+    
+    const searchLower = searchTerm.toLowerCase();
+    
+    // 獲取助手名稱用於搜尋
+    const assistantName = getAssistantName(record.assistantId).toLowerCase();
+    
+    // 搜尋所有相關欄位
+    const searchableFields = [
+      record.fileName || '',
+      record.fileId || '',
+      record.assistantId || '',
+      assistantName,
+      record.updatedAt || '',
+      record.summary || '',
+      record.fullText || '',
+      record.devotional || '',
+      record.bibleStudy || '',
+      record.userId || '',
+      record.vectorStoreId || ''
+    ];
+    
+    // 檢查是否有任何欄位包含搜尋關鍵字
+    return searchableFields.some(field => 
+      field.toLowerCase().includes(searchLower)
+    );
+  });
+  
+  // 計算分頁（先排序，後分頁）
+  // 先依 updatedAt 由新到舊排序
+  const sortedRecords = [...filteredRecords].sort((a, b) => {
+    const dateA = new Date(a.updatedAt).getTime();
+    const dateB = new Date(b.updatedAt).getTime();
+    return dateB - dateA;
+  });
+  const totalPages = Math.ceil(sortedRecords.length / recordsPerPage);
+  const indexOfLastRecord = currentPage * recordsPerPage;
+  const indexOfFirstRecord = indexOfLastRecord - recordsPerPage;
+  const currentRecords = sortedRecords.slice(indexOfFirstRecord, indexOfLastRecord);
 
   // 分頁控制
   const paginate = (pageNumber: number) => setCurrentPage(pageNumber);
@@ -272,6 +326,20 @@ export default function FileRecordsPage() {
     <div className={styles.container}>
       <BackToPortalLink />
       <h1 className={styles.title}>文件上傳記錄</h1>
+      
+      {/* 顯示文件總數 */}
+      <div className={styles.statsSection}>
+        <div className={styles.statItem}>
+          <span className={styles.statLabel}>總文件數：</span>
+          <span className={styles.statValue}>{records.length}</span>
+        </div>
+        {filteredRecords.length !== records.length && (
+          <div className={styles.statItem}>
+            <span className={styles.statLabel}>篩選結果：</span>
+            <span className={styles.statValue}>{filteredRecords.length}</span>
+          </div>
+        )}
+      </div>
 
       <div className={styles.section}>
         <div className={styles.headerActions}>
@@ -307,11 +375,19 @@ export default function FileRecordsPage() {
           <div>
             <input
               type="text"
-              placeholder="搜尋文件名稱或日期..."
+              placeholder="全文搜尋：文件名稱、內容摘要、助手類型、用戶ID、日期等..."
               className={styles.searchInput}
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
+            {searchTerm && (
+              <div className={styles.searchResults}>
+                找到 {filteredRecords.length} 筆符合的記錄
+                {filteredRecords.length !== records.length && (
+                  <span className={styles.searchTotal}> (共 {records.length} 筆)</span>
+                )}
+              </div>
+            )}
           </div>
         </div>
         
@@ -362,17 +438,25 @@ export default function FileRecordsPage() {
                         aria-label={`選取 ${record.fileName}`}
                       />
                     </td>
-                    <td>{record.fileName}</td>
-                    <td>{record.assistantId || '-'}</td>
-                    <td>{record.userId || '-'}</td>
-                    <td>{record.vectorStoreId || '-'}</td>
-                    <td>{getAssistantName(record.assistantId)}</td>
-                    <td>{formatDate(record.updatedAt)}</td>
+                    <td>{searchTerm ? highlightSearchTerm(record.fileName, searchTerm) : record.fileName}</td>
+                    <td>{searchTerm ? highlightSearchTerm(record.assistantId || '-', searchTerm) : (record.assistantId || '-')}</td>
+                    <td>{searchTerm ? highlightSearchTerm(record.userId || '-', searchTerm) : (record.userId || '-')}</td>
+                    <td>{searchTerm ? highlightSearchTerm(record.vectorStoreId || '-', searchTerm) : (record.vectorStoreId || '-')}</td>
+                    <td>{searchTerm ? highlightSearchTerm(getAssistantName(record.assistantId), searchTerm) : getAssistantName(record.assistantId)}</td>
+                    <td>{searchTerm ? highlightSearchTerm(formatDate(record.updatedAt), searchTerm) : formatDate(record.updatedAt)}</td>
                     <td>
-                      <div>摘要: <span className={record.summary === '已生成' ? styles.statusSuccess : styles.statusPending}>{record.summary}</span></div>
-                      <div>全文: <span className={record.fullText === '已生成' ? styles.statusSuccess : styles.statusPending}>{record.fullText}</span></div>
-                      <div>靈修: <span className={record.devotional === '已生成' ? styles.statusSuccess : styles.statusPending}>{record.devotional}</span></div>
-                      <div>查經: <span className={record.bibleStudy === '已生成' ? styles.statusSuccess : styles.statusPending}>{record.bibleStudy}</span></div>
+                      <div>摘要: <span className={record.summary === '已生成' ? styles.statusSuccess : styles.statusPending}>
+                        {searchTerm ? highlightSearchTerm(record.summary, searchTerm) : record.summary}
+                      </span></div>
+                      <div>全文: <span className={record.fullText === '已生成' ? styles.statusSuccess : styles.statusPending}>
+                        {searchTerm ? highlightSearchTerm(record.fullText, searchTerm) : record.fullText}
+                      </span></div>
+                      <div>靈修: <span className={record.devotional === '已生成' ? styles.statusSuccess : styles.statusPending}>
+                        {searchTerm ? highlightSearchTerm(record.devotional, searchTerm) : record.devotional}
+                      </span></div>
+                      <div>查經: <span className={record.bibleStudy === '已生成' ? styles.statusSuccess : styles.statusPending}>
+                        {searchTerm ? highlightSearchTerm(record.bibleStudy, searchTerm) : record.bibleStudy}
+                      </span></div>
                     </td>
                   </tr>
                 )) : (
@@ -381,7 +465,9 @@ export default function FileRecordsPage() {
                   </tr>
                 )}
               </tbody>
-            </table>            <button
+            </table>
+            
+            <button
               className={styles.dangerButton}
               style={{ marginTop: 8, marginBottom: 8 }}
               onClick={handleDeleteSelected}
@@ -392,31 +478,36 @@ export default function FileRecordsPage() {
             
             {totalPages > 1 && (
               <div className={styles.paginationControls}>
-                <button 
-                  className={styles.pageButton}
-                  onClick={() => paginate(currentPage - 1)}
-                  disabled={currentPage === 1}
-                >
-                  上一頁
-                </button>
-                
-                {Array.from({ length: totalPages }, (_, i) => (
-                  <button
-                    key={i + 1}
-                    onClick={() => paginate(i + 1)}
-                    className={`${styles.pageButton} ${currentPage === i + 1 ? styles.active : ''}`}
+                <div className={styles.paginationInfo}>
+                  第 {currentPage} 頁，共 {totalPages} 頁
+                </div>
+                <div className={styles.paginationButtons}>
+                  <button 
+                    className={styles.pageButton}
+                    onClick={() => paginate(currentPage - 1)}
+                    disabled={currentPage === 1}
                   >
-                    {i + 1}
+                    上一頁
                   </button>
-                ))}
-                
-                <button 
-                  className={styles.pageButton}
-                  onClick={() => paginate(currentPage + 1)}
-                  disabled={currentPage === totalPages}
-                >
-                  下一頁
-                </button>
+                  
+                  {Array.from({ length: totalPages }, (_, i) => (
+                    <button
+                      key={i + 1}
+                      onClick={() => paginate(i + 1)}
+                      className={`${styles.pageButton} ${currentPage === i + 1 ? styles.active : ''}`}
+                    >
+                      {i + 1}
+                    </button>
+                  ))}
+                  
+                  <button 
+                    className={styles.pageButton}
+                    onClick={() => paginate(currentPage + 1)}
+                    disabled={currentPage === totalPages}
+                  >
+                    下一頁
+                  </button>
+                </div>
               </div>
             )}
           </>

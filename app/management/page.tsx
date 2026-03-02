@@ -34,6 +34,12 @@ const managementTools: ManagementTool[] = [
     description: '查看和管理上傳的檔案',
     path: '/file-records',
     iconEmoji: '📁'
+  },
+  {
+    title: '用戶權限管理',
+    description: '管理用戶上傳權限，控制誰可以上傳文檔',
+    path: '/user-permissions',
+    iconEmoji: '👥'
   }
 ];
 

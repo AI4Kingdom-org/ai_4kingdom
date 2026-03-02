@@ -81,12 +81,14 @@ export default function PromptsEditor() {
     
     // 確保文本區域在下次渲染後調整高度
     setTimeout(() => {
-      const textarea = document.querySelector('textarea[value="' + item.content + '"]') as HTMLTextAreaElement;
-      if (textarea) {
-        textarea.style.height = 'auto';
-        textarea.style.height = textarea.scrollHeight + 'px';
+      // 使用更精確的方法選擇正在編輯的 textarea
+      // 由於只有一個 textarea 會處於編輯狀態，我們可以直接選擇表格中的 textarea
+      const editingTextarea = document.querySelector('tbody textarea') as HTMLTextAreaElement;
+      if (editingTextarea) {
+        editingTextarea.style.height = 'auto';
+        editingTextarea.style.height = editingTextarea.scrollHeight + 'px';
       }
-    }, 0);
+    }, 100); // 增加延遲確保 DOM 更新完成
   };
   const handleSaveEdit = async () => {
     if (!editingId) return;
