@@ -59,6 +59,7 @@ export default function SermonInputTabs({
   const [audioTranscription, setAudioTranscription] = useState<TranscriptionState>({ status: 'idle' });
   const [audioDragging, setAudioDragging] = useState(false);
   const audioInputRef = useRef<HTMLInputElement>(null);
+  const publicWorkerUrl = process.env.NEXT_PUBLIC_YOUTUBE_WORKER_URL;
 
   // Shared: transcript editor
   const [editedText, setEditedText] = useState('');
@@ -100,6 +101,62 @@ export default function SermonInputTabs({
   // =========================================================================
   // YouTube: fetch captions → fallback to audio extraction + Whisper
   // =========================================================================
+  const requestYouTubeAudioTranscription = async () => {
+    const payload = {
+      url: ytUrl.trim(),
+      startTime: ytStartTime.trim() || undefined,
+      endTime: ytEndTime.trim() || undefined,
+    };
+
+    const tryParseJson = async (res: Response): Promise<Record<string, any>> => {
+      try {
+        const rawText = await res.text();
+        if (!rawText.trim()) return {};
+        return JSON.parse(rawText);
+      } catch {
+        return {};
+      }
+    };
+
+    // First try via Next API route (keeps existing auth/infra path)
+    const apiRes = await fetch('/api/sunday-guide/youtube-audio', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const apiData = await tryParseJson(apiRes);
+
+    if (apiRes.ok && apiData.transcript) return apiData;
+
+    // If Amplify/API Gateway returns non-JSON 5xx/504, retry direct worker path.
+    const shouldTryDirectWorker =
+      !apiRes.ok &&
+      !apiData.message &&
+      !!publicWorkerUrl &&
+      apiRes.status >= 500;
+
+    if (!shouldTryDirectWorker) {
+      throw new Error(apiData.message || apiData.error || `音频转录失败（HTTP ${apiRes.status}）`);
+    }
+
+    const workerRes = await fetch(`${publicWorkerUrl}/api/youtube-audio`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const workerData = await tryParseJson(workerRes);
+
+    if (!workerRes.ok || !workerData.transcript) {
+      throw new Error(
+        workerData.message ||
+        workerData.error ||
+        `音频转录失败（直连 Worker HTTP ${workerRes.status}）`
+      );
+    }
+
+    return workerData;
+  };
+
   const handleYouTubeFetch = async () => {
     if (!ytUrl.trim()) return;
 
@@ -153,41 +210,15 @@ export default function SermonInputTabs({
         return;
       }
 
-      // Step 2: 若無字幕 (NO_CAPTIONS)，自動 fallback 到音源擷取 + Whisper 轉錄
-      if (data.error === 'NO_CAPTIONS') {
-        console.log('[SermonInputTabs] No captions available, falling back to audio extraction...');
-        setYtTranscription({
-          status: 'loading',
-          message: '此影片无字幕，正在下载音频并进行 AI 语音转录（约需 1-3 分钟）...',
-        });
+      // Step 2: 字幕失敗時，自動 fallback 到音源擷取 + Whisper 轉錄
+      console.log('[SermonInputTabs] Caption fetch failed, falling back to audio extraction...', data?.error || 'UNKNOWN');
+      setYtTranscription({
+        status: 'loading',
+        message: '字幕不可用，正在下载音频并进行 AI 语音转录（约需 1-3 分钟）...',
+      });
 
-        const audioRes = await fetch('/api/sunday-guide/youtube-audio', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            url: ytUrl.trim(),
-            startTime: ytStartTime.trim() || undefined,
-            endTime: ytEndTime.trim() || undefined,
-          }),
-        });
-
-        // 防禦：先讀 text 再 parse，避免空 body（Lambda 超時）crash
-        let audioData: Record<string, any> = {};
-        try {
-          const rawText = await audioRes.text();
-          if (rawText.trim()) audioData = JSON.parse(rawText);
-        } catch {
-          // empty or non-JSON response (e.g. Lambda/gateway timeout)
-        }
-
-        if (!audioRes.ok) {
-          setYtTranscription({
-            status: 'error',
-            message: audioData.message || '音频转录失败，请改用「音频文件」手动上传。',
-          });
-          return;
-        }
-
+      try {
+        const audioData = await requestYouTubeAudioTranscription();
         setYtTranscription({
           status: 'done',
           text: audioData.transcript,
@@ -197,13 +228,13 @@ export default function SermonInputTabs({
         setEditedText(audioData.transcript);
         setActiveTranscriptTab('youtube');
         return;
+      } catch (audioErr: any) {
+        setYtTranscription({
+          status: 'error',
+          message: audioErr?.message || '音频转录失败，请改用「音频文件」手动上传。',
+        });
+        return;
       }
-
-      // 其他錯誤
-      setYtTranscription({
-        status: 'error',
-        message: data.message || data.error || '获取字幕失败',
-      });
     } catch (err: any) {
       setYtTranscription({
         status: 'error',
