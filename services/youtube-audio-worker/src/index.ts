@@ -40,6 +40,27 @@ const PORT = parseInt(process.env.PORT || '8080', 10);
 
 // Auth
 const SHARED_SECRET = process.env.WORKER_SECRET || '';
+const PUBLIC_ALLOWED_ORIGINS = (process.env.PUBLIC_ALLOWED_ORIGINS || '*.amplifyapp.com,localhost,127.0.0.1')
+  .split(',')
+  .map((s) => s.trim().toLowerCase())
+  .filter(Boolean);
+
+function isOriginAllowed(originRaw?: string): boolean {
+  if (!originRaw) return false;
+  try {
+    const host = new URL(originRaw).hostname.toLowerCase();
+    return PUBLIC_ALLOWED_ORIGINS.some((rule) => {
+      if (rule === host) return true;
+      if (rule.startsWith('*.')) {
+        const suffix = rule.slice(1); // keep leading dot
+        return host.endsWith(suffix);
+      }
+      return false;
+    });
+  } catch {
+    return false;
+  }
+}
 
 function authMiddleware(
   req: express.Request,
@@ -48,6 +69,18 @@ function authMiddleware(
 ): void {
   if (!SHARED_SECRET) { next(); return; }
   const token = req.headers['x-worker-secret'] as string | undefined;
+  if (token === SHARED_SECRET) {
+    next();
+    return;
+  }
+
+  // Browser direct fallback: allow trusted origins without exposing worker secret.
+  const origin = req.headers.origin as string | undefined;
+  if (isOriginAllowed(origin)) {
+    next();
+    return;
+  }
+
   if (token !== SHARED_SECRET) {
     res.status(401).json({ error: 'Unauthorized' });
     return;
