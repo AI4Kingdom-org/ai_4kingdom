@@ -31,7 +31,8 @@ frontend:
           NEXT_PUBLIC_API_KEY=$NEXT_PUBLIC_API_KEY
           YOUTUBE_WORKER_URL=$YOUTUBE_WORKER_URL
           YOUTUBE_WORKER_SECRET=$YOUTUBE_WORKER_SECRET
-          NEXT_PUBLIC_HIDE_YOUTUBE_TAB=true
+          NEXT_PUBLIC_HIDE_YOUTUBE_TAB=false
+          NEXT_PUBLIC_ENABLE_PROMO=false
           EOF
         # 创建 aws-exports.js
         - |
