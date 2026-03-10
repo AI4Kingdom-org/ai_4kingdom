@@ -457,7 +457,7 @@ app.post('/api/youtube-audio', authMiddleware, async (req: express.Request, res:
     await mkdir(chunkDir, { recursive: true });
 
     const fakeUA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
-    const ytBase = `"${ytDlp}" --user-agent "${fakeUA}" --add-headers "Accept-Language:zh-TW,zh;q=0.9,en;q=0.8" ${cookiesArg()} ${proxyArg()}`.trim();
+    const ytBase = `"${ytDlp}" --js-runtimes node --user-agent "${fakeUA}" --add-headers "Accept-Language:zh-TW,zh;q=0.9,en;q=0.8" ${cookiesArg()} ${proxyArg()}`.trim();
     // tv_embedded often bypasses bot detection; web_creator is another good option
     const playerClients = ['tv_embedded', 'ios', 'web_creator', 'android', 'mweb', 'web'];
 
