@@ -24,6 +24,37 @@ interface ProcessedContent {
   bibleStudy: string;
 }
 
+interface PromoShot {
+  tStart: number;
+  tEnd: number;
+  visual: string;
+  overlayText: string;
+  camera: string;
+}
+
+interface PromoScript {
+  hook: string;
+  body: string;
+  cta: string;
+  voiceover: string;
+  shots: PromoShot[];
+}
+
+interface PromoVideoResult {
+  renderPrompt: string;
+  recommendedTools: string[];
+  videoUrl: string | null;
+  thumbnailUrl: string | null;
+  exportSpec: {
+    aspectRatio: string;
+    resolution: string;
+    width: number;
+    height: number;
+    durationSec: number;
+    fps: number;
+  };
+}
+
 type GuideMode = 'summary' | 'text' | 'devotional' | 'bible' | null;
 
 // ---------------------------------------------------------------------------
@@ -58,13 +89,40 @@ function SundayGuideContent() {
   const [contentLoading, setContentLoading] = useState(false);
   const [pdfLoading, setPdfLoading] = useState(false);
   const [pdfError, setPdfError] = useState<string | null>(null);
+  const [promoScriptLoading, setPromoScriptLoading] = useState(false);
+  const [promoScriptError, setPromoScriptError] = useState<string | null>(null);
+  const [promoScript, setPromoScript] = useState<PromoScript | null>(null);
+  const [promoVideoCreating, setPromoVideoCreating] = useState(false);
+  const [promoVideoPolling, setPromoVideoPolling] = useState(false);
+  const [promoVideoStatus, setPromoVideoStatus] = useState<string | null>(null);
+  const [promoVideoError, setPromoVideoError] = useState<string | null>(null);
+  const [promoVideoJobId, setPromoVideoJobId] = useState<string | null>(null);
+  const [promoVideoResult, setPromoVideoResult] = useState<PromoVideoResult | null>(null);
   const contentRef = useRef<HTMLDivElement>(null);
+  const promoPollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const devSkip = process.env.NEXT_PUBLIC_DEV_SKIP_AUTH === 'true';
+  const enablePromo = process.env.NEXT_PUBLIC_ENABLE_PROMO !== 'false';
+  const promoProvider = (process.env.NEXT_PUBLIC_PROMO_VIDEO_PROVIDER || 'runway') as 'mock' | 'runway' | 'luma';
   const hasUploadPermission = devSkip || canUploadFiles();
 
   // Whether any file is selected (controls guide section visibility)
   const hasFileSelected = !!selectedFileId;
+
+  const resetPromoState = () => {
+    if (promoPollTimerRef.current) {
+      clearInterval(promoPollTimerRef.current);
+      promoPollTimerRef.current = null;
+    }
+    setPromoScriptError(null);
+    setPromoScript(null);
+    setPromoVideoError(null);
+    setPromoVideoStatus(null);
+    setPromoVideoResult(null);
+    setPromoVideoJobId(null);
+    setPromoVideoCreating(false);
+    setPromoVideoPolling(false);
+  };
 
   // ---- Credit check ----
   useEffect(() => {
@@ -112,6 +170,15 @@ function SundayGuideContent() {
     fetchAllFileRecords(currentPage);
   }, [currentPage]);
 
+  useEffect(() => {
+    return () => {
+      if (promoPollTimerRef.current) {
+        clearInterval(promoPollTimerRef.current);
+        promoPollTimerRef.current = null;
+      }
+    };
+  }, []);
+
   // ---- Upload completed callback ----
   const handleFileProcessed = async (content: ProcessedContent) => {
     setProcessedContent(content);
@@ -156,11 +223,13 @@ function SundayGuideContent() {
     // Reset content when switching files
     setSermonContent(null);
     setSelectedMode(null);
+    resetPromoState();
   };
 
   // ---- Guide mode selection ----
   const handleModeSelect = async (mode: GuideMode) => {
     if (!selectedFileId) return;
+    if (mode !== 'summary') resetPromoState();
     setSelectedMode(mode);
     setContentLoading(true);
     try {
@@ -207,6 +276,138 @@ function SundayGuideContent() {
     }
   };
 
+  const handleGeneratePromoScript = async () => {
+    if (!sermonContent || selectedMode !== 'summary') return;
+
+    setPromoScriptLoading(true);
+    setPromoScriptError(null);
+    setPromoVideoError(null);
+    setPromoVideoResult(null);
+    setPromoVideoJobId(null);
+    setPromoVideoStatus(null);
+
+    try {
+      const res = await fetch('/api/sunday-guide/promo-script', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          summary: sermonContent,
+          tone: 'inspiring',
+          durationSec: 5,
+          aspectRatio: '16:9',
+          resolution: '720p',
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok || !data?.script) {
+        throw new Error(data?.message || data?.error || `生成脚本失败（${res.status}）`);
+      }
+
+      setPromoScript(data.script as PromoScript);
+    } catch (error) {
+      setPromoScriptError(error instanceof Error ? error.message : '生成脚本失败');
+    } finally {
+      setPromoScriptLoading(false);
+    }
+  };
+
+  const stopPromoPolling = () => {
+    if (promoPollTimerRef.current) {
+      clearInterval(promoPollTimerRef.current);
+      promoPollTimerRef.current = null;
+    }
+    setPromoVideoPolling(false);
+  };
+
+  const startPromoPolling = (jobId: string) => {
+    if (promoPollTimerRef.current) {
+      clearInterval(promoPollTimerRef.current);
+      promoPollTimerRef.current = null;
+    }
+
+    setPromoVideoPolling(true);
+    promoPollTimerRef.current = setInterval(async () => {
+      try {
+        const statusRes = await fetch(`/api/sunday-guide/promo-video?jobId=${encodeURIComponent(jobId)}`);
+        const statusData = await statusRes.json().catch(() => ({}));
+
+        if (!statusRes.ok) {
+          setPromoVideoError(statusData?.message || statusData?.error || '查询影片状态失败');
+          setPromoVideoStatus('error');
+          stopPromoPolling();
+          return;
+        }
+
+        const status = statusData?.status as string | undefined;
+        if (!status) {
+          setPromoVideoError('影片状态响应异常');
+          setPromoVideoStatus('error');
+          stopPromoPolling();
+          return;
+        }
+
+        setPromoVideoStatus(status);
+
+        if (status === 'done') {
+          setPromoVideoResult((statusData?.result || null) as PromoVideoResult | null);
+          stopPromoPolling();
+          return;
+        }
+
+        if (status === 'error') {
+          setPromoVideoError(statusData?.error || '影片生成失败');
+          stopPromoPolling();
+        }
+      } catch (error) {
+        setPromoVideoError(error instanceof Error ? error.message : '查询影片状态失败');
+        setPromoVideoStatus('error');
+        stopPromoPolling();
+      }
+    }, 2000);
+  };
+
+  const handleGeneratePromoVideo = async () => {
+    if (!sermonContent || selectedMode !== 'summary') return;
+
+    setPromoVideoCreating(true);
+    setPromoVideoError(null);
+    setPromoVideoResult(null);
+    setPromoVideoStatus('queued');
+    setPromoVideoJobId(null);
+
+    try {
+      const res = await fetch('/api/sunday-guide/promo-video', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          summary: sermonContent,
+          script: promoScript,
+          provider: promoProvider,
+          durationSec: 5,
+          aspectRatio: '16:9',
+          resolution: '720p',
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok || !data?.jobId) {
+        throw new Error(data?.message || data?.error || `建立影片任务失败（${res.status}）`);
+      }
+
+      const jobId = String(data.jobId);
+      setPromoVideoJobId(jobId);
+      setPromoVideoStatus(String(data.status || 'queued'));
+      startPromoPolling(jobId);
+    } catch (error) {
+      setPromoVideoError(error instanceof Error ? error.message : '建立影片任务失败');
+      setPromoVideoStatus('error');
+      stopPromoPolling();
+    } finally {
+      setPromoVideoCreating(false);
+    }
+  };
+
   // ---- Render guide content ----
   const renderContent = () => {
     if (contentLoading) return <div className={styles.loading}>載入中，請稍候...</div>;
@@ -229,6 +430,88 @@ function SundayGuideContent() {
         <div className={styles.markdownContent} ref={contentRef}>
           <ReactMarkdown>{sermonContent}</ReactMarkdown>
         </div>
+
+        {selectedMode === 'summary' && enablePromo && (
+          <div className={styles.promoPanel}>
+            <div className={styles.promoHeader}>
+              <h3 className={styles.promoTitle}>5 秒短影音 Promo（16:9 / 720p）</h3>
+              <p className={styles.promoHint}>先用「信息总结」生成脚本，再生成影片任务并自动轮询状态。</p>
+            </div>
+
+            <div className={styles.promoActions}>
+              <button
+                className={styles.promoPrimaryBtn}
+                onClick={handleGeneratePromoScript}
+                disabled={promoScriptLoading || contentLoading || !sermonContent}
+              >
+                {promoScriptLoading ? '生成脚本中...' : '生成 Promo 脚本'}
+              </button>
+              <button
+                className={styles.promoSecondaryBtn}
+                onClick={handleGeneratePromoVideo}
+                disabled={promoVideoCreating || promoVideoPolling || !sermonContent}
+              >
+                {promoVideoCreating ? '建立任务中...' : promoVideoPolling ? '生成中...' : '生成 Promo 影片'}
+              </button>
+            </div>
+
+            {promoScriptError && <div className={styles.errorMessage}>{promoScriptError}</div>}
+            {promoVideoError && <div className={styles.errorMessage}>{promoVideoError}</div>}
+
+            {(promoVideoStatus || promoVideoJobId) && (
+              <div className={styles.promoStatusBar}>
+                <span>任务状态：{promoVideoStatus || 'queued'}</span>
+                {promoVideoJobId && <span>Job ID：{promoVideoJobId}</span>}
+              </div>
+            )}
+
+            {promoScript && (
+              <div className={styles.promoCard}>
+                <h4 className={styles.promoCardTitle}>脚本预览</h4>
+                <div className={styles.promoScriptLine}><strong>Hook：</strong>{promoScript.hook}</div>
+                <div className={styles.promoScriptLine}><strong>Body：</strong>{promoScript.body}</div>
+                <div className={styles.promoScriptLine}><strong>CTA：</strong>{promoScript.cta}</div>
+                <div className={styles.promoScriptLine}><strong>旁白：</strong>{promoScript.voiceover}</div>
+
+                {promoScript.shots?.length > 0 && (
+                  <div className={styles.promoShotList}>
+                    {promoScript.shots.map((shot, idx) => (
+                      <div key={`${shot.tStart}-${shot.tEnd}-${idx}`} className={styles.promoShotItem}>
+                        <div className={styles.promoShotTime}>{shot.tStart}s - {shot.tEnd}s</div>
+                        <div className={styles.promoShotText}>{shot.visual}</div>
+                        <div className={styles.promoShotOverlay}>字幕：{shot.overlayText}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {promoVideoResult && (
+              <div className={styles.promoCard}>
+                <h4 className={styles.promoCardTitle}>影片任务结果</h4>
+                <div className={styles.promoScriptLine}>
+                  <strong>建议工具：</strong>{promoVideoResult.recommendedTools.join(' / ')}
+                </div>
+                <div className={styles.promoScriptLine}>
+                  <strong>输出规格：</strong>
+                  {promoVideoResult.exportSpec.aspectRatio}，
+                  {promoVideoResult.exportSpec.resolution}（{promoVideoResult.exportSpec.width}x{promoVideoResult.exportSpec.height}），
+                  {promoVideoResult.exportSpec.durationSec}s @ {promoVideoResult.exportSpec.fps}fps
+                </div>
+                <pre className={styles.promoPrompt}>{promoVideoResult.renderPrompt}</pre>
+                {!promoVideoResult.videoUrl && (
+                  <div className={styles.promoPlaceholder}>
+                    当前为 skeleton 模式（mock provider），已回传可直接用于 Runway/Luma 的 prompt。
+                  </div>
+                )}
+                {promoVideoResult.videoUrl && (
+                  <video className={styles.promoVideo} controls src={promoVideoResult.videoUrl} />
+                )}
+              </div>
+            )}
+          </div>
+        )}
       </div>
     );
   };
