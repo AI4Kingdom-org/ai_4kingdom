@@ -117,10 +117,14 @@ export async function POST(request: Request) {
       transcriptItems.length
     );
 
+    // 嘗試取得影片標題（oEmbed 公開端點，不需要 API Key）
+    const videoTitle = await fetchVideoTitle(videoId);
+
     return NextResponse.json({
       transcript,
       source: 'caption',
       videoId,
+      videoTitle: videoTitle ?? null,
       charCount: transcript.length,
     });
   } catch (error: any) {
@@ -142,6 +146,20 @@ function parseTimestamp(s?: string): number | null {
   if (parts.length === 2) return parts[0] * 60 + parts[1];
   if (parts.length === 1) return parts[0];
   return null;
+}
+
+async function fetchVideoTitle(videoId: string): Promise<string | null> {
+  try {
+    const res = await fetch(
+      `https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${videoId}&format=json`,
+      { signal: AbortSignal.timeout(5000) }
+    );
+    if (!res.ok) return null;
+    const data = await res.json();
+    return typeof data?.title === 'string' ? data.title : null;
+  } catch {
+    return null;
+  }
 }
 
 function extractVideoId(url: string): string | null {

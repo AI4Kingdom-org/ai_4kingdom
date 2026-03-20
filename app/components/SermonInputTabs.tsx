@@ -54,6 +54,7 @@ export default function SermonInputTabs({
   const [ytStartTime, setYtStartTime] = useState('');
   const [ytEndTime, setYtEndTime] = useState('');
   const [ytShowSegment, setYtShowSegment] = useState(false);
+  const [ytVideoTitle, setYtVideoTitle] = useState('');
 
   // Audio state
   const [audioTranscription, setAudioTranscription] = useState<TranscriptionState>({ status: 'idle' });
@@ -181,6 +182,7 @@ export default function SermonInputTabs({
         ? `（${startSec !== null ? formatSeconds(startSec) : '00:00:00'} → ${endSec !== null ? formatSeconds(endSec) : '結尾'}）`
         : '';
 
+    setYtVideoTitle('');
     setYtTranscription({ status: 'loading', message: `正在获取字幕${segmentLabel}...` });
 
     try {
@@ -207,6 +209,7 @@ export default function SermonInputTabs({
         });
         setEditedText(data.transcript);
         setActiveTranscriptTab('youtube');
+        if (data.videoTitle) setYtVideoTitle(data.videoTitle);
         return;
       }
 
@@ -401,9 +404,18 @@ export default function SermonInputTabs({
     // Build a .txt file name
     let baseName = 'transcript';
     if (source === 'youtube' && ytUrl) {
-      // Use video ID or sanitized URL
-      const match = ytUrl.match(/(?:v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
-      baseName = match ? `youtube_${match[1]}` : 'youtube_transcript';
+      if (ytVideoTitle) {
+        // 使用影片標題：去除檔名不合法字元，限制 50 字
+        const slug = ytVideoTitle
+          .slice(0, 50)
+          .replace(/[<>:"/\\|?*\x00-\x1f]/g, '_')
+          .replace(/_{2,}/g, '_')
+          .replace(/^_+|_+$/g, '');
+        baseName = slug || 'youtube_transcript';
+      } else {
+        const match = ytUrl.match(/(?:v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
+        baseName = match ? `youtube_${match[1]}` : 'youtube_transcript';
+      }
     } else if (source === 'audio' && state.status === 'done') {
       baseName = 'audio_transcript';
     }
