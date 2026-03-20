@@ -40,6 +40,12 @@ const managementTools: ManagementTool[] = [
     description: '管理用戶上傳權限，控制誰可以上傳文檔',
     path: '/user-permissions',
     iconEmoji: '👥'
+  },
+  {
+    title: '獨立創作助手',
+    description: '使用 3 張圖片與文字摘要建立 10 秒短影音草稿與影片任務',
+    path: '/creative-studio',
+    iconEmoji: '🎬'
   }
 ];
 

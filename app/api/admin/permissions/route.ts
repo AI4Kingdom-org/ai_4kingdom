@@ -1,57 +1,103 @@
 import { NextRequest, NextResponse } from 'next/server';
-import fs from 'fs';
-import path from 'path';
+import { PutCommand, QueryCommand } from '@aws-sdk/lib-dynamodb';
+import { createDynamoDBClient } from '@/app/utils/dynamodb';
+import { PERMISSION_GROUPS, UPLOAD_PERMITTED_USERS } from '@/app/config/userPermissions';
 
-const PERMISSIONS_FILE_PATH = path.join(process.cwd(), 'app', 'config', 'userPermissions.ts');
+const SUNDAY_GUIDE_TABLE = process.env.NEXT_PUBLIC_SUNDAY_GUIDE_TABLE || 'SundayGuide';
+const PERMISSIONS_CONFIG_ASSISTANT_ID = '__SYSTEM_PERMISSIONS__';
+const PERMISSIONS_CONFIG_TYPE = 'GLOBAL_UPLOAD_PERMISSIONS';
+
+type PermissionGroups = {
+  ADMINS: string[];
+  EDITORS: string[];
+  SPECIAL_USERS: string[];
+};
+
+function normalizeStringArray(list: unknown): string[] {
+  if (!Array.isArray(list)) return [];
+  const unique = new Set<string>();
+  for (const item of list) {
+    const value = String(item || '').trim();
+    if (value) unique.add(value);
+  }
+  return Array.from(unique);
+}
+
+function normalizePermissionGroups(input: unknown): PermissionGroups {
+  const groups = (input || {}) as Record<string, unknown>;
+  return {
+    ADMINS: normalizeStringArray(groups.ADMINS),
+    EDITORS: normalizeStringArray(groups.EDITORS),
+    SPECIAL_USERS: normalizeStringArray(groups.SPECIAL_USERS),
+  };
+}
+
+async function readPermissionsFromStore() {
+  const docClient = await createDynamoDBClient();
+  const result = await docClient.send(
+    new QueryCommand({
+      TableName: SUNDAY_GUIDE_TABLE,
+      KeyConditionExpression: 'assistantId = :assistantId',
+      ExpressionAttributeValues: {
+        ':assistantId': PERMISSIONS_CONFIG_ASSISTANT_ID,
+      },
+      ScanIndexForward: false,
+      Limit: 20,
+    })
+  );
+
+  const items = result.Items || [];
+  const matched = items.find((item) => item.recordType === PERMISSIONS_CONFIG_TYPE);
+  if (!matched) return null;
+
+  return {
+    uploadPermittedUsers: normalizeStringArray(matched.uploadPermittedUsers),
+    permissionGroups: normalizePermissionGroups(matched.permissionGroups),
+    updatedAt: matched.updatedAt,
+    updatedBy: matched.updatedBy,
+  };
+}
 
 export async function GET() {
   try {
-    // 讀取當前權限配置
-    const fileContent = fs.readFileSync(PERMISSIONS_FILE_PATH, 'utf8');
-    
-    // 解析當前配置
-    const uploadePermittedUsersMatch = fileContent.match(/UPLOAD_PERMITTED_USERS:\s*string\[\]\s*=\s*\[([\s\S]*?)\]/);
-    const permissionGroupsMatch = fileContent.match(/PERMISSION_GROUPS\s*=\s*\{([\s\S]*?)\}/);
-    
-    let uploadPermittedUsers: string[] = [];
-    let permissionGroups: any = {};
-    
-    if (uploadePermittedUsersMatch) {
-      // 提取用戶ID列表
-      const usersString = uploadePermittedUsersMatch[1];
-      const userMatches = usersString.match(/'([^']+)'/g);
-      if (userMatches) {
-        uploadPermittedUsers = userMatches.map(match => match.slice(1, -1));
-      }
-    }
-    
-    if (permissionGroupsMatch) {
-      // 簡單解析權限組（這裡可以用更複雜的解析器）
-      const groupsString = permissionGroupsMatch[1];
-      const adminMatch = groupsString.match(/ADMINS:\s*\[(.*?)\]/);
-      const editorsMatch = groupsString.match(/EDITORS:\s*\[(.*?)\]/);
-      const specialMatch = groupsString.match(/SPECIAL_USERS:\s*\[(.*?)\]/);
-      
-      permissionGroups = {
-        ADMINS: adminMatch ? adminMatch[1].match(/'([^']+)'/g)?.map(m => m.slice(1, -1)) || [] : [],
-        EDITORS: editorsMatch ? editorsMatch[1].match(/'([^']+)'/g)?.map(m => m.slice(1, -1)) || [] : [],
-        SPECIAL_USERS: specialMatch ? specialMatch[1].match(/'([^']+)'/g)?.map(m => m.slice(1, -1)) || [] : []
-      };
-    }
+    const stored = await readPermissionsFromStore();
+    const fallbackData = {
+      uploadPermittedUsers: [...UPLOAD_PERMITTED_USERS],
+      permissionGroups: {
+        ADMINS: [...PERMISSION_GROUPS.ADMINS],
+        EDITORS: [...PERMISSION_GROUPS.EDITORS],
+        SPECIAL_USERS: [...PERMISSION_GROUPS.SPECIAL_USERS],
+      },
+    };
+
+    const payload = stored || fallbackData;
     
     return NextResponse.json({
       success: true,
       data: {
-        uploadPermittedUsers,
-        permissionGroups
+        uploadPermittedUsers: payload.uploadPermittedUsers,
+        permissionGroups: payload.permissionGroups,
+        source: stored ? 'dynamodb' : 'fallback-static',
+        updatedAt: stored?.updatedAt || null,
+        updatedBy: stored?.updatedBy || null,
       }
     });
   } catch (error) {
-    console.error('獲取權限配置失敗:', error);
-    return NextResponse.json(
-      { success: false, error: '獲取權限配置失敗' },
-      { status: 500 }
-    );
+    console.error('獲取權限配置失敗，回退到靜態白名單:', error);
+    return NextResponse.json({
+      success: true,
+      data: {
+        uploadPermittedUsers: [...UPLOAD_PERMITTED_USERS],
+        permissionGroups: {
+          ADMINS: [...PERMISSION_GROUPS.ADMINS],
+          EDITORS: [...PERMISSION_GROUPS.EDITORS],
+          SPECIAL_USERS: [...PERMISSION_GROUPS.SPECIAL_USERS],
+        },
+        source: 'fallback-static',
+        updatedAt: null,
+        updatedBy: null,
+      }
+    });
   }
 }
 
@@ -67,55 +113,28 @@ export async function POST(request: NextRequest) {
       );
     }
     
-    // 生成新的配置文件內容
-    const newFileContent = `// 可以上傳文件的用戶 ID 列表
-export const UPLOAD_PERMITTED_USERS: string[] = [
-${uploadPermittedUsers.map((id: string) => `  '${id}'`).join(',\n')},
-  // 在這裡添加更多有權限的用戶 ID
-];
+    const normalizedUsers = normalizeStringArray(uploadPermittedUsers);
+    const normalizedGroups = normalizePermissionGroups(permissionGroups);
 
-// 檢查用戶是否有上傳權限
-export const canUserUpload = (userId: string | undefined): boolean => {
-  console.log('[DEBUG] canUserUpload called with:', {
-    userId,
-    type: typeof userId,
-    UPLOAD_PERMITTED_USERS,
-    includes: userId ? UPLOAD_PERMITTED_USERS.includes(userId) : false
-  });
-  
-  if (!userId) return false;
-  return UPLOAD_PERMITTED_USERS.includes(userId);
-};
-
-// 可選：添加權限組管理
-export const PERMISSION_GROUPS = {
-  ADMINS: [${permissionGroups.ADMINS.map((id: string) => `'${id}'`).join(', ')}],
-  EDITORS: [${permissionGroups.EDITORS.map((id: string) => `'${id}'`).join(', ')}],
-  SPECIAL_USERS: [${permissionGroups.SPECIAL_USERS.map((id: string) => `'${id}'`).join(', ')}]
-};
-
-// 檢查用戶是否在特定權限組
-export const isUserInGroup = (userId: string, groupName: keyof typeof PERMISSION_GROUPS): boolean => {
-  return PERMISSION_GROUPS[groupName].includes(userId);
-};
-
-// 獲取所有有權限的用戶列表
-export const getAllPermittedUsers = (): string[] => {
-  return [...UPLOAD_PERMITTED_USERS];
-};
-
-// 檢查權限組中的用戶總數
-export const getPermissionGroupSize = (groupName: keyof typeof PERMISSION_GROUPS): number => {
-  return PERMISSION_GROUPS[groupName].length;
-};
-`;
-
-    // 寫入文件
-    fs.writeFileSync(PERMISSIONS_FILE_PATH, newFileContent, 'utf8');
+    const docClient = await createDynamoDBClient();
+    await docClient.send(
+      new PutCommand({
+        TableName: SUNDAY_GUIDE_TABLE,
+        Item: {
+          assistantId: PERMISSIONS_CONFIG_ASSISTANT_ID,
+          Timestamp: new Date().toISOString(),
+          recordType: PERMISSIONS_CONFIG_TYPE,
+          uploadPermittedUsers: normalizedUsers,
+          permissionGroups: normalizedGroups,
+          updatedBy: String(userId),
+          updatedAt: new Date().toISOString(),
+        },
+      })
+    );
     
     return NextResponse.json({
       success: true,
-      message: '權限配置更新成功'
+      message: '權限配置更新成功（DynamoDB）'
     });
   } catch (error) {
     console.error('更新權限配置失敗:', error);
