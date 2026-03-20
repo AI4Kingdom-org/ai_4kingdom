@@ -114,6 +114,7 @@ export async function GET(request: Request) {
       vectorStoreId: item.vectorStoreId,
       fileId: item.fileId,
       fileName: item.fileName || '未命名文件',
+      sermonTitle: item.sermonTitle || null,
       updatedAt: item.updatedAt || item.Timestamp,
       userId: item.userId || item.UserId || '-',
       unitId: item.unitId || findUnitByAssistantId(item.assistantId),
