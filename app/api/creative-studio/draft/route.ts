@@ -201,30 +201,22 @@ export async function POST(request: Request) {
         {
           role: 'user',
           content: [
-            {
-              type: 'text',
-              text: [
-                `根據以下創作摘要與參考圖片，生成 ${durationSec} 秒獨立創作助手草稿。`,
-                `條件：`,
-                `- 影片規格 ${aspectRatio}, ${resolution}`,
-                `- 字幕請拆成 3 到 4 句，每句 8 到 18 字`,
-                `- visualPrompt 要可直接作為影片生成提示詞`,
-                `- voiceover 為自然中文旁白，總長控制在 10 秒可唸完`,
-                `- 預設語言：${language}，所有文案與字幕都用中文`,
-                `- 聲線偏好：${voiceGender === 'male' ? '男聲' : '女聲'}`,
-                `- tone：${tone}`,
-                '',
-                `創作摘要：${summary}`,
-              ].join('\n'),
-            },
-            ...referenceImages.map((image, index) => ({
-              type: 'image_url' as const,
-              image_url: {
-                url: image.dataUrl || '',
-                detail: index === 0 ? 'high' : 'low',
-              },
-            })),
-          ],
+            `根據以下創作摘要與參考圖片，生成 ${durationSec} 秒獨立創作助手草稿。`,
+            `條件：`,
+            `- 影片規格 ${aspectRatio}, ${resolution}`,
+            `- 字幕請拆成 3 到 4 句，每句 8 到 18 字`,
+            `- visualPrompt 要可直接作為影片生成提示詞`,
+            `- voiceover 為自然中文旁白，總長控制在 10 秒可唸完`,
+            `- 預設語言：${language}，所有文案與字幕都用中文`,
+            `- 聲線偏好：${voiceGender === 'male' ? '男聲' : '女聲'}`,
+            `- tone：${tone}`,
+            `- 參考圖片數量：${referenceImages.length}`,
+            referenceImages.length > 0
+              ? `- 參考圖片檔名：${referenceImages.map((image) => image.name || 'unnamed').join(', ')}`
+              : '- 參考圖片檔名：無',
+            '',
+            `創作摘要：${summary}`,
+          ].join('\n'),
         },
       ],
     });
