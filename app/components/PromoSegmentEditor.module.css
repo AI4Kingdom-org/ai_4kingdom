@@ -1,0 +1,219 @@
+.segmentEditorContainer {
+  width: 100%;
+  padding: 20px;
+  background: #f9fafb;
+  border-radius: 8px;
+  margin-top: 20px;
+}
+
+.segmentList {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.segmentCard {
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  overflow: hidden;
+  transition: all 0.2s ease;
+}
+
+.segmentCard:hover {
+  border-color: #3b82f6;
+  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.1);
+}
+
+.segmentCard.expanded {
+  border-color: #3b82f6;
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.15);
+}
+
+.segmentHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  background: #f3f4f6;
+  cursor: pointer;
+  user-select: none;
+}
+
+.segmentHeader:hover {
+  background: #e5e7eb;
+}
+
+.segmentIndex {
+  font-weight: 600;
+  color: #1f2937;
+  flex: 1;
+}
+
+.segmentStatus {
+  font-size: 12px;
+  font-weight: 500;
+  color: #6b7280;
+  margin-left: 12px;
+}
+
+.segmentContent {
+  padding: 20px;
+  animation: slideDown 0.2s ease;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    max-height: 0;
+  }
+  to {
+    opacity: 1;
+    max-height: 1000px;
+  }
+}
+
+.editSection {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-bottom: 20px;
+  padding: 16px;
+  background: #f9fafb;
+  border-radius: 6px;
+}
+
+.editField {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.editField label {
+  font-weight: 600;
+  color: #374151;
+  font-size: 13px;
+}
+
+.editField input,
+.editField textarea {
+  padding: 8px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  font-family: inherit;
+  font-size: 14px;
+  resize: vertical;
+  transition: border-color 0.2s;
+}
+
+.editField input:focus,
+.editField textarea:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.editField small {
+  font-size: 12px;
+  color: #9ca3af;
+  text-align: right;
+}
+
+.actionSection {
+  display: flex;
+  gap: 12px;
+  margin: 20px 0;
+}
+
+.generateBtn {
+  flex: 1;
+  padding: 10px 16px;
+  background: #3b82f6;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.generateBtn:hover:not(:disabled) {
+  background: #2563eb;
+}
+
+.generateBtn:disabled {
+  background: #9ca3af;
+  cursor: not-allowed;
+}
+
+.resultSection {
+  margin-top: 20px;
+  padding: 16px;
+  background: #f0fdf4;
+  border: 1px solid #86efac;
+  border-radius: 6px;
+}
+
+.resultSection h4 {
+  margin: 0 0 12px 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: #166534;
+}
+
+.videoPreview {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.videoPreview video {
+  width: 100%;
+  background: #000;
+  border-radius: 4px;
+  max-height: 400px;
+}
+
+.downloadBtn {
+  padding: 10px 16px;
+  background: #10b981;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.downloadBtn:hover {
+  background: #059669;
+}
+
+.processingStatus {
+  padding: 12px;
+  background: #fef3c7;
+  color: #92400e;
+  border-radius: 4px;
+  font-size: 13px;
+  text-align: center;
+}
+
+.audioPreview {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 16px;
+  padding: 12px;
+  background: #dbeafe;
+  border-radius: 4px;
+}
+
+.audioPreview label {
+  font-weight: 600;
+  color: #1e40af;
+  font-size: 13px;
+}
+
+.audioPreview audio {
+  width: 100%;
+}

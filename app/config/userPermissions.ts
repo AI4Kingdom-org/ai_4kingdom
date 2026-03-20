@@ -1,6 +1,11 @@
 // 可以上傳文件的用戶 ID 列表
 export const UPLOAD_PERMITTED_USERS: string[] = [
   '1',
+  '6',
+  '108',
+  '22',
+  '25',
+  '30',
   '24',
   // 在這裡添加更多有權限的用戶 ID
 ];
@@ -38,24 +43,4 @@ export const getAllPermittedUsers = (): string[] => {
 // 檢查權限組中的用戶總數
 export const getPermissionGroupSize = (groupName: keyof typeof PERMISSION_GROUPS): number => {
   return PERMISSION_GROUPS[groupName].length;
-};
-
-// 添加缺少的函數：檢查用戶是否有權限上傳到特定 Sunday Guide 單位
-export const canUploadToSundayGuideUnit = (unitId: string, userId?: string): boolean => {
-  if (!userId) return false;
-  
-  // 從 constants.ts 導入單位配置
-  try {
-    const { getSundayGuideUnitConfig } = require('./constants');
-    const unitConfig = getSundayGuideUnitConfig(unitId);
-    
-    if (!unitConfig || !unitConfig.allowedUploaders) {
-      return false;
-    }
-    
-    return unitConfig.allowedUploaders.includes(userId);
-  } catch (error) {
-    console.error('檢查單位上傳權限時發生錯誤:', error);
-    return false;
-  }
 };

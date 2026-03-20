@@ -6,6 +6,7 @@ import SermonInputTabs from '../components/SermonInputTabs';
 import WithChat from '../components/layouts/WithChat';
 import ChatkitEmbed from '../components/ChatkitEmbed';
 import UserIdDisplay from '../components/UserIdDisplay';
+import PromoSegmentEditor from '../components/PromoSegmentEditor';
 import { useCredit } from '../contexts/CreditContext';
 import { useAuth } from '../contexts/AuthContext';
 import { ASSISTANT_IDS, VECTOR_STORE_IDS } from '../config/constants';
@@ -44,6 +45,7 @@ interface PromoVideoResult {
   renderPrompt: string;
   recommendedTools: string[];
   videoUrl: string | null;
+  audioUrl?: string | null;
   thumbnailUrl: string | null;
   exportSpec: {
     aspectRatio: string;
@@ -52,6 +54,20 @@ interface PromoVideoResult {
     height: number;
     durationSec: number;
     fps: number;
+  };
+}
+
+interface PromoSegment {
+  segmentIndex: number;
+  durationSec: number;
+  aspectRatio: '16:9';
+  chineseCaption: string;
+  voiceoverText: string;
+  soraPrompt: string;
+  editableFields: {
+    caption?: string;
+    voiceover?: string;
+    soraPrompt?: string;
   };
 }
 
@@ -98,12 +114,21 @@ function SundayGuideContent() {
   const [promoVideoError, setPromoVideoError] = useState<string | null>(null);
   const [promoVideoJobId, setPromoVideoJobId] = useState<string | null>(null);
   const [promoVideoResult, setPromoVideoResult] = useState<PromoVideoResult | null>(null);
+
+  // ---- Promo segment states (新增) ----
+  const [promoSegments, setPromoSegments] = useState<PromoSegment[]>([]);
+  const [promoSegmentsLoading, setPromoSegmentsLoading] = useState(false);
+  const [segmentResults, setSegmentResults] = useState<Record<number, PromoVideoResult | null>>({});
+  const [segmentLoadings, setSegmentLoadings] = useState<Record<number, boolean>>({});
+  const [segmentGeneratingJobIds, setSegmentGeneratingJobIds] = useState<Record<number, string>>({});
+  const [segmentAudioUrls, setSegmentAudioUrls] = useState<Record<number, string | null>>({});
+  const segmentPollingTimersRef = useRef<Record<number, ReturnType<typeof setInterval>>>({});
   const contentRef = useRef<HTMLDivElement>(null);
   const promoPollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const devSkip = process.env.NEXT_PUBLIC_DEV_SKIP_AUTH === 'true';
-  const enablePromo = process.env.NEXT_PUBLIC_ENABLE_PROMO !== 'false';
-  const promoProvider = (process.env.NEXT_PUBLIC_PROMO_VIDEO_PROVIDER || 'runway') as 'mock' | 'runway' | 'luma';
+  const enablePromo = process.env.NEXT_PUBLIC_ENABLE_PROMO === 'true';
+  const promoProvider = (process.env.NEXT_PUBLIC_PROMO_VIDEO_PROVIDER || 'sora') as 'mock' | 'runway' | 'luma' | 'sora' | 'openai';
   const hasUploadPermission = devSkip || canUploadFiles();
 
   // Whether any file is selected (controls guide section visibility)
@@ -122,6 +147,140 @@ function SundayGuideContent() {
     setPromoVideoJobId(null);
     setPromoVideoCreating(false);
     setPromoVideoPolling(false);
+  };
+
+  // ---- Promo Segments (新增) ----
+  const handleGeneratePromoSegments = async () => {
+    if (!sermonContent || selectedMode !== 'summary') return;
+
+    setPromoSegmentsLoading(true);
+    setPromoSegments([]);
+    setSegmentResults({});
+    setSegmentLoadings({});
+    setSegmentGeneratingJobIds({});
+
+    try {
+      const res = await fetch('/api/sunday-guide/promo-video-segments', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          summary: sermonContent,
+          tone: 'inspiring',
+          durationSec: 60, // 5 segments × 12s each (minimum 8s per segment)
+        }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok || !data?.segments) {
+        throw new Error(data?.message || data?.error || `生成分段失败（${res.status}）`);
+      }
+
+      setPromoSegments(data.segments);
+    } catch (error) {
+      alert(error instanceof Error ? error.message : '生成分段失败');
+    } finally {
+      setPromoSegmentsLoading(false);
+    }
+  };
+
+  const handleSegmentChange = (index: number, field: string, value: string) => {
+    setPromoSegments((prev) =>
+      prev.map((segment, idx) =>
+        idx === index
+          ? {
+              ...segment,
+              editableFields: { ...segment.editableFields, [field]: value },
+            }
+          : segment
+      )
+    );
+  };
+
+  const startSegmentPolling = (segmentIndex: number, jobId: string) => {
+    if (segmentPollingTimersRef.current[segmentIndex]) {
+      clearInterval(segmentPollingTimersRef.current[segmentIndex]);
+    }
+
+    setSegmentLoadings((prev) => ({ ...prev, [segmentIndex]: true }));
+
+    segmentPollingTimersRef.current[segmentIndex] = setInterval(async () => {
+      try {
+        const statusRes = await fetch(`/api/sunday-guide/promo-video?jobId=${encodeURIComponent(jobId)}`);
+        const statusData = await statusRes.json().catch(() => ({}));
+
+        if (!statusRes.ok) {
+          clearInterval(segmentPollingTimersRef.current[segmentIndex]);
+          delete segmentPollingTimersRef.current[segmentIndex];
+          setSegmentLoadings((prev) => ({ ...prev, [segmentIndex]: false }));
+          return;
+        }
+
+        const status = statusData?.status as string | undefined;
+        if (status === 'done') {
+          setSegmentResults((prev) => ({
+            ...prev,
+            [segmentIndex]: statusData?.result || null,
+          }));
+          if (statusData?.result?.audioUrl) {
+            setSegmentAudioUrls((prev) => ({
+              ...prev,
+              [segmentIndex]: statusData.result.audioUrl,
+            }));
+          }
+          clearInterval(segmentPollingTimersRef.current[segmentIndex]);
+          delete segmentPollingTimersRef.current[segmentIndex];
+          setSegmentLoadings((prev) => ({ ...prev, [segmentIndex]: false }));
+        } else if (status === 'error') {
+          clearInterval(segmentPollingTimersRef.current[segmentIndex]);
+          delete segmentPollingTimersRef.current[segmentIndex];
+          setSegmentLoadings((prev) => ({ ...prev, [segmentIndex]: false }));
+        }
+      } catch (error) {
+        console.error(`[segment ${segmentIndex}] polling error:`, error);
+      }
+    }, 5000); // Poll every 5 seconds
+  };
+
+  const handleGenerateSegmentVideo = async (segmentIndex: number) => {
+    const segment = promoSegments[segmentIndex];
+    if (!segment) return;
+
+    setSegmentLoadings((prev) => ({ ...prev, [segmentIndex]: true }));
+
+    const segmentPrompt = (segment.editableFields.soraPrompt || segment.soraPrompt || '').trim();
+    const safeSegmentPrompt =
+      segmentPrompt ||
+      `Cinematic church promo segment, inspiring tone, 16:9, 1280x720, ${segment.durationSec}s, Chinese subtitle: ${(segment.editableFields.caption || segment.chineseCaption || '本週主日重點').slice(0, 20)}`;
+
+    try {
+      const res = await fetch('/api/sunday-guide/promo-video', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          provider: 'sora',
+          durationSec: segment.durationSec,
+          segmentIndex,
+          segmentPrompt: safeSegmentPrompt,
+          voiceoverText: segment.editableFields.voiceover || segment.voiceoverText,
+        }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok || !data?.jobId) {
+        throw new Error(data?.message || data?.error || `建立影片任務失敗（${res.status}）`);
+      }
+
+      setSegmentGeneratingJobIds((prev) => ({
+        ...prev,
+        [segmentIndex]: data.jobId,
+      }));
+      startSegmentPolling(segmentIndex, data.jobId);
+    } catch (error) {
+      alert(error instanceof Error ? error.message : '建立影片任務失敗');
+      setSegmentLoadings((prev) => ({ ...prev, [segmentIndex]: false }));
+    }
   };
 
   // ---- Credit check ----
@@ -176,6 +335,11 @@ function SundayGuideContent() {
         clearInterval(promoPollTimerRef.current);
         promoPollTimerRef.current = null;
       }
+      // Cleanup segment polling timers
+      Object.values(segmentPollingTimersRef.current).forEach((timer) => {
+        clearInterval(timer);
+      });
+      segmentPollingTimersRef.current = {};
     };
   }, []);
 
@@ -433,25 +597,18 @@ function SundayGuideContent() {
 
         {selectedMode === 'summary' && enablePromo && (
           <div className={styles.promoPanel}>
-            <div className={styles.promoHeader}>
-              <h3 className={styles.promoTitle}>5 秒短影音 Promo（16:9 / 720p）</h3>
-              <p className={styles.promoHint}>先用「信息总结」生成脚本，再生成影片任务并自动轮询状态。</p>
+          <div className={styles.promoHeader}>
+              <h3 className={styles.promoTitle}>短影音 Promo（16:9 / 720p）</h3>
+              <p className={styles.promoHint}>拆分為 5 段影片，預設各約 12 秒，且每一片段至少 8 秒。支援 Sora 生成、中文字幕與配音。</p>
             </div>
 
             <div className={styles.promoActions}>
               <button
                 className={styles.promoPrimaryBtn}
-                onClick={handleGeneratePromoScript}
-                disabled={promoScriptLoading || contentLoading || !sermonContent}
+                onClick={handleGeneratePromoSegments}
+                disabled={promoSegmentsLoading || contentLoading || !sermonContent}
               >
-                {promoScriptLoading ? '生成脚本中...' : '生成 Promo 脚本'}
-              </button>
-              <button
-                className={styles.promoSecondaryBtn}
-                onClick={handleGeneratePromoVideo}
-                disabled={promoVideoCreating || promoVideoPolling || !sermonContent}
-              >
-                {promoVideoCreating ? '建立任务中...' : promoVideoPolling ? '生成中...' : '生成 Promo 影片'}
+                {promoSegmentsLoading ? '拆分中...' : '📋 拆分成 5 段'}
               </button>
             </div>
 
@@ -508,6 +665,24 @@ function SundayGuideContent() {
                 {promoVideoResult.videoUrl && (
                   <video className={styles.promoVideo} controls src={promoVideoResult.videoUrl} />
                 )}
+              </div>
+            )}
+
+            {/* ---- 分段編輯器 ---- */}
+            {promoSegments.length > 0 && (
+              <div className={styles.promoCard}>
+                <h4 className={styles.promoCardTitle}>📺 5 段影片編輯器</h4>
+                <p style={{ fontSize: '12px', color: '#6b7280', marginBottom: '16px' }}>
+                  編輯每段的字幕、旁白和 Sora 提示符，然後逐段點擊「生成此段影片」
+                </p>
+                <PromoSegmentEditor
+                  segments={promoSegments}
+                  onSegmentChange={handleSegmentChange}
+                  onGenerateSegment={handleGenerateSegmentVideo}
+                  segmentResults={segmentResults}
+                  loadingSegments={segmentLoadings}
+                  audioUrls={segmentAudioUrls}
+                />
               </div>
             )}
           </div>
