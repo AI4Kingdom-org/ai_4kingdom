@@ -90,7 +90,7 @@ function SundayGuideContent() {
 
   // ---- Documents list states ----
   const [recentFiles, setRecentFiles] = useState<
-    Array<{ fileName: string; uploadDate: string; fileId: string; uploaderId?: string }>
+    Array<{ fileName: string; sermonTitle?: string | null; uploadDate: string; fileId: string; uploaderId?: string }>
   >([]);
   const [selectedFileId, setSelectedFileId] = useState<string | null>(null);
   const [selectedFileName, setSelectedFileName] = useState<string | null>(null);
@@ -129,7 +129,7 @@ function SundayGuideContent() {
   const devSkip = process.env.NEXT_PUBLIC_DEV_SKIP_AUTH === 'true';
   const enablePromo = process.env.NEXT_PUBLIC_ENABLE_PROMO === 'true';
   const promoProvider = (process.env.NEXT_PUBLIC_PROMO_VIDEO_PROVIDER || 'sora') as 'mock' | 'runway' | 'luma' | 'sora' | 'openai';
-  const hasUploadPermission = devSkip || canUploadFiles();
+  const hasUploadPermission = devSkip || !!user;
 
   // Whether any file is selected (controls guide section visibility)
   const hasFileSelected = !!selectedFileId;
@@ -303,6 +303,7 @@ function SundayGuideContent() {
         );
         const filesData = sortedFiles.map((rec: any) => ({
           fileName: rec.fileName || '未命名文件',
+          sermonTitle: rec.sermonTitle || null,
           uploadDate: new Date(rec.updatedAt).toLocaleDateString('zh-TW'),
           fileId: rec.fileId || '',
           uploaderId: rec.userId || '未知用戶',
@@ -757,13 +758,13 @@ function SundayGuideContent() {
                   <li
                     key={file.fileId || idx}
                     className={`${styles.docItem} ${selectedFileId === file.fileId ? styles.docItemSelected : ''}`}
-                    onClick={() => handleSelectFile(file.fileId, file.fileName)}
+                    onClick={() => handleSelectFile(file.fileId, file.sermonTitle || file.fileName)}
                     title="点击选择此文档"
                   >
                     <span className={styles.docIndex}>
                       {(currentPage - 1) * filesPerPage + idx + 1}.
                     </span>
-                    <span className={styles.docFileName}>{file.fileName}</span>
+                    <span className={styles.docFileName}>{file.sermonTitle || file.fileName}</span>
                     <span className={styles.docDate}>{file.uploadDate}</span>
 
                     {/* Delete button: only visible for own uploads */}

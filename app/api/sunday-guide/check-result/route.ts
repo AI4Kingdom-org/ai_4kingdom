@@ -47,6 +47,7 @@ export async function GET(request: Request) {
         fullText: latestItem.fullText,
         devotional: latestItem.devotional,
         bibleStudy: latestItem.bibleStudy,
+        sermonTitle: latestItem.sermonTitle || null,
         processingTime: latestItem.processingTime
       });
     }

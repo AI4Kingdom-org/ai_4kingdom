@@ -13,6 +13,33 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
 });
 
+// 從 AI 生成的 summary 中提取講章標題
+function extractSermonTitle(summary: string): string | null {
+  if (!summary) return null;
+  const lines = summary.split('\n');
+  // Pattern 1: 找到含「講道標題」/ 「講章標題」/ 「Sermon Title」的行，取其後第一個非空行（即實際標題）
+  for (let i = 0; i < lines.length - 1; i++) {
+    if (/講道標題|講章標題|Sermon Title/i.test(lines[i])) {
+      for (let j = i + 1; j < lines.length; j++) {
+        const candidate = lines[j].replace(/^[*_#\s]+|[*_#\s]+$/g, '').trim();
+        if (candidate.length > 2) {
+          return candidate.slice(0, 80);
+        }
+      }
+    }
+  }
+  // Pattern 2: "講道標題：XXX" 在同一行（備援）
+  const inlineMatch = summary.match(/(?:講道標題|講章標題|Sermon Title|Title)[：:]\s*\*?\*?(.+?)\*?\*?\s*$/m);
+  if (inlineMatch) return inlineMatch[1].trim().replace(/^[*_#]+|[*_#]+$/g, '').trim();
+  // Pattern 3: Markdown heading
+  const headingMatch = summary.match(/^#{1,3}\s+(.+)$/m);
+  if (headingMatch) return headingMatch[1].trim().replace(/^[*_]+|[*_]+$/g, '').trim();
+  // Pattern 4: First bold text
+  const boldMatch = summary.match(/\*\*([^*\n]{4,80})\*\*/);
+  if (boldMatch) return boldMatch[1].trim();
+  return null;
+}
+
 // 新增：等待特定檔案在向量庫中就緒
 async function waitForFileReady(openaiClient: OpenAI, vectorStoreId: string, fileId: string, timeoutMs = 60000) {
   const start = Date.now();
@@ -395,6 +422,9 @@ ${type === 'devotional' ?
       }
     });
     
+    const sermonTitle = extractSermonTitle(results.summary) || null;
+    console.log(`[DEBUG] 提取講章標題: ${sermonTitle}`);
+
     if (existingRecords.Items && existingRecords.Items.length > 0) {
       // 找到現有記錄，進行更新
       console.log(`[DEBUG] 找到 ${existingRecords.Items.length} 條既有記錄，更新處理結果`);
@@ -406,7 +436,7 @@ ${type === 'devotional' ?
           assistantId: existingItem.assistantId,
           Timestamp: existingItem.Timestamp
         },
-        UpdateExpression: "SET summary = :summary, devotional = :devotional, bibleStudy = :bibleStudy, processingTime = :processingTime, completed = :completed, generationStatus = :gs, updatedAt = :now",
+        UpdateExpression: "SET summary = :summary, devotional = :devotional, bibleStudy = :bibleStudy, processingTime = :processingTime, completed = :completed, generationStatus = :gs, updatedAt = :now, sermonTitle = :sermonTitle",
         ExpressionAttributeValues: {
           ":summary": results.summary,
           ":devotional": results.devotional,
@@ -414,7 +444,8 @@ ${type === 'devotional' ?
           ":processingTime": serverProcessingTime,
           ":completed": true,
           ":gs": 'completed',
-          ":now": new Date().toISOString()
+          ":now": new Date().toISOString(),
+          ":sermonTitle": sermonTitle
         }
       }));
       console.log(`[DEBUG] 成功更新現有記錄`);
@@ -433,6 +464,7 @@ ${type === 'devotional' ?
           // fullText: results.fullText, // Disabled fullText saving
           devotional: results.devotional,
           bibleStudy: results.bibleStudy,
+          sermonTitle,
           processingTime: serverProcessingTime,
           completed: true,
           generationStatus: 'completed',
