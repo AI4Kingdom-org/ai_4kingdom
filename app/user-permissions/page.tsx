@@ -285,6 +285,18 @@ export default function UserPermissionsPage() {
       if (!data.success) {
         throw new Error(data.error || '更新失敗');
       }
+
+      try {
+        const channel = new BroadcastChannel('permissions-updated');
+        channel.postMessage({
+          type: 'UPLOAD_PERMISSIONS_UPDATED',
+          updatedAt: Date.now(),
+          updatedBy: user?.user_id || 'unknown',
+        });
+        channel.close();
+      } catch (broadcastErr) {
+        console.warn('[WARN] 權限更新廣播失敗:', broadcastErr);
+      }
       
       return data;
     } catch (error) {

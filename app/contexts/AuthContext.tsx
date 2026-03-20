@@ -27,6 +27,7 @@ export function AuthProvider({ children, optional = false }: { children: React.R
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [dynamicUploadPermittedUsers, setDynamicUploadPermittedUsers] = useState<string[] | null>(null);
   const isOptional = optional || process.env.NEXT_PUBLIC_AUTH_OPTIONAL === 'true';
 
   /**
@@ -189,8 +190,30 @@ export function AuthProvider({ children, optional = false }: { children: React.R
     return userRoles.some((role) => requiredRoles.includes(role));
   };
 
+  const loadUploadPermissions = async () => {
+    try {
+      const res = await fetch('/api/admin/permissions', {
+        method: 'GET',
+        cache: 'no-store',
+      });
+      if (!res.ok) return;
+      const data = await res.json();
+      const users = Array.isArray(data?.data?.uploadPermittedUsers)
+        ? data.data.uploadPermittedUsers.map((id: unknown) => String(id).trim()).filter(Boolean)
+        : null;
+      if (users) {
+        setDynamicUploadPermittedUsers(users);
+      }
+    } catch (err) {
+      console.warn('[WARN] 無法取得動態上傳權限，改用靜態白名單：', err);
+    }
+  };
+
   const canUploadFiles = (): boolean => {
-    // 仍保留你的調用，以維持原有行為
+    if (dynamicUploadPermittedUsers && user?.user_id) {
+      return dynamicUploadPermittedUsers.includes(String(user.user_id));
+    }
+    // 動態權限尚未載入或 API 暫時失敗時，退回靜態白名單
     return canUserUpload(user?.user_id);
   };
 
@@ -199,6 +222,28 @@ export function AuthProvider({ children, optional = false }: { children: React.R
     checkAuth();
     // 若瀏覽器封鎖第三方 Cookie，可在此嘗試 Storage Access API 再重試
     // if ('hasStorageAccess' in document && 'requestStorageAccess' in document) { ... }
+  }, []);
+
+  useEffect(() => {
+    loadUploadPermissions();
+  }, [user?.user_id]);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      loadUploadPermissions();
+    }, 5 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const channel = new BroadcastChannel('permissions-updated');
+    channel.onmessage = (event) => {
+      if (event?.data?.type === 'UPLOAD_PERMISSIONS_UPDATED') {
+        loadUploadPermissions();
+      }
+    };
+    return () => channel.close();
   }, []);
 
   // 每 30 分鐘輪詢一次
