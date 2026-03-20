@@ -212,18 +212,27 @@
 }
 
 .deleteButton {
-  margin-left: 4px;
-  padding: 0.15rem 0.35rem;
+  margin-right: 4px;
+  padding: 0.1rem 0.3rem;
   background: none;
   border: none;
   color: #ef4444;
   cursor: pointer;
-  font-size: 0.8rem;
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1;
   border-radius: 4px;
   transition: all 0.15s ease;
   flex-shrink: 0;
-  min-width: 24px;
+  min-width: 20px;
   text-align: center;
+}
+
+.deleteButtonPlaceholder {
+  flex-shrink: 0;
+  min-width: 20px;
+  margin-right: 4px;
+  display: inline-block;
 }
 
 .deleteButton:hover {

@@ -761,16 +761,10 @@ function SundayGuideContent() {
                     onClick={() => handleSelectFile(file.fileId, file.sermonTitle || file.fileName)}
                     title="点击选择此文档"
                   >
-                    <span className={styles.docIndex}>
-                      {(currentPage - 1) * filesPerPage + idx + 1}.
-                    </span>
-                    <span className={styles.docFileName}>{file.sermonTitle || file.fileName}</span>
-                    <span className={styles.docDate}>{file.uploadDate}</span>
-
-                    {/* Delete button: only visible for own uploads */}
+                    {/* Delete button: only visible for own uploads, placed first */}
                     {file.uploaderId &&
                       user?.user_id &&
-                      file.uploaderId.toString() === user.user_id.toString() && (
+                      file.uploaderId.toString() === user.user_id.toString() ? (
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
@@ -780,9 +774,16 @@ function SundayGuideContent() {
                           className={styles.deleteButton}
                           title="删除此文档"
                         >
-                          {deletingId === file.fileId ? '...' : '🗑'}
+                          {deletingId === file.fileId ? '...' : '×'}
                         </button>
+                      ) : (
+                        <span className={styles.deleteButtonPlaceholder} />
                       )}
+                    <span className={styles.docIndex}>
+                      {(currentPage - 1) * filesPerPage + idx + 1}.
+                    </span>
+                    <span className={styles.docFileName}>{file.sermonTitle || file.fileName}</span>
+                    <span className={styles.docDate}>{file.uploadDate}</span>
                   </li>
                 ))}
               </ul>
