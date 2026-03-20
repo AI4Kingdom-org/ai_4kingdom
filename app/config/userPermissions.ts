@@ -1,3 +1,5 @@
+import { getSundayGuideUnitConfig } from './constants';
+
 // 可以上傳文件的用戶 ID 列表
 export const UPLOAD_PERMITTED_USERS: string[] = [
   '1',
@@ -43,4 +45,19 @@ export const getAllPermittedUsers = (): string[] => {
 // 檢查權限組中的用戶總數
 export const getPermissionGroupSize = (groupName: keyof typeof PERMISSION_GROUPS): number => {
   return PERMISSION_GROUPS[groupName].length;
+};
+
+// 檢查用戶是否可上傳到指定 Sunday Guide 單位
+export const canUploadToSundayGuideUnit = (unitId: string, userId?: string): boolean => {
+  if (!userId) return false;
+
+  const unitConfig = getSundayGuideUnitConfig(unitId);
+  const unitUploaders = unitConfig?.allowedUploaders || [];
+
+  // default 單位沿用全域白名單；其他單位以單位白名單為主
+  if (unitId === 'default') {
+    return canUserUpload(userId);
+  }
+
+  return unitUploaders.includes(userId);
 };
