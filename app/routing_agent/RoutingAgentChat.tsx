@@ -33,6 +33,7 @@ function renderWithLinks(text: string): React.ReactNode[] {
 export default function RoutingAgentChat({ userId }: RoutingAgentChatProps) {
   const [input, setInput] = useState('');
   const [hasStarted, setHasStarted] = useState(false);
+  const [inputVisible, setInputVisible] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [speechSupported, setSpeechSupported] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -127,8 +128,20 @@ export default function RoutingAgentChat({ userId }: RoutingAgentChatProps) {
   return (
     <div className={styles.routingAgentContainer}>
       {/* 歡迎詞區域 */}
-      <div className={styles.welcomeSection}>
+      <div
+        className={`${styles.welcomeSection} ${inputVisible ? styles.welcomeSectionCompact : styles.welcomeSectionCentered}`}
+        onClick={() => {
+          if (!inputVisible) {
+            setInputVisible(true);
+            setTimeout(() => textareaRef.current?.focus(), 300);
+          }
+        }}
+        style={{ cursor: inputVisible ? 'default' : 'pointer' }}
+      >
         <h1 className={styles.welcomeTitle}>平安！您想問些什麼?</h1>
+        {!inputVisible && (
+          <p className={styles.tapHint}>點擊開始提問</p>
+        )}
       </div>
 
       {/* 對話區域 - 開始後才顯示 */}
@@ -192,8 +205,8 @@ export default function RoutingAgentChat({ userId }: RoutingAgentChatProps) {
         </div>
       )}
 
-      {/* 輸入區域 */}
-      <div className={styles.inputSection}>
+      {/* 輸入區域 - 點擊歡迎區後才顯示 */}
+      <div className={`${styles.inputSection} ${inputVisible ? styles.inputSectionVisible : styles.inputSectionHidden}`}>
         <div className={styles.inputWrapper}>
           <div className={styles.inputField}>
             {speechSupported && (

@@ -15,6 +15,35 @@
   background: white;
   border-bottom: 1px solid #e5e7eb;
   animation: fadeIn 0.3s ease-in;
+  transition: padding 0.3s ease, flex 0.3s ease;
+}
+
+.welcomeSectionCentered {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border-bottom: none;
+  padding: 0 24px;
+}
+
+.welcomeSectionCompact {
+  flex: 0 0 auto;
+  padding: 24px 24px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.tapHint {
+  margin: 16px 0 0;
+  color: #9ca3af;
+  font-size: 14px;
+  animation: pulse 2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 1; }
 }
 
 .greeting {
@@ -150,6 +179,21 @@
   padding: 20px 24px;
   background: white;
   border-top: 1px solid #e5e7eb;
+  transition: max-height 0.35s ease, opacity 0.35s ease, padding 0.35s ease;
+  overflow: hidden;
+}
+
+.inputSectionVisible {
+  max-height: 200px;
+  opacity: 1;
+}
+
+.inputSectionHidden {
+  max-height: 0;
+  opacity: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+  border-top: none;
 }
 
 .inputWrapper {
