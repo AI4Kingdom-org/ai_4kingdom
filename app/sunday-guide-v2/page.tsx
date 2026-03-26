@@ -288,11 +288,12 @@ function SundayGuideContent() {
     setIsUploadDisabled(remainingCredits <= 0);
   }, [remainingCredits, hasInsufficientTokens]);
 
-  // ---- Fetch browsable documents (paginated, all users) ----
+  // ---- Fetch browsable documents (paginated, current user only) ----
   const fetchAllFileRecords = async (page: number = 1) => {
     try {
+      const userIdQS = user?.user_id ? `&userId=${encodeURIComponent(user.user_id)}` : '';
       const response = await fetch(
-        `/api/sunday-guide/documents?assistantId=${ASSISTANT_IDS.SUNDAY_GUIDE}&page=${page}&limit=${filesPerPage}&allUsers=true`
+        `/api/sunday-guide/documents?assistantId=${ASSISTANT_IDS.SUNDAY_GUIDE}&page=${page}&limit=${filesPerPage}${userIdQS}`
       );
       if (!response.ok) throw new Error('獲取文件記錄失敗');
       const data = await response.json();
@@ -758,7 +759,7 @@ function SundayGuideContent() {
                   <li
                     key={file.fileId || idx}
                     className={`${styles.docItem} ${selectedFileId === file.fileId ? styles.docItemSelected : ''}`}
-                    onClick={() => handleSelectFile(file.fileId, file.sermonTitle || file.fileName)}
+                    onClick={() => handleSelectFile(file.fileId, file.fileName.toLowerCase().endsWith('.pdf') ? file.fileName : (file.sermonTitle || file.fileName))}
                     title="点击选择此文档"
                   >
                     {/* Delete button: only visible for own uploads, placed first */}
@@ -782,7 +783,7 @@ function SundayGuideContent() {
                     <span className={styles.docIndex}>
                       {(currentPage - 1) * filesPerPage + idx + 1}.
                     </span>
-                    <span className={styles.docFileName}>{file.sermonTitle || file.fileName}</span>
+                    <span className={styles.docFileName}>{file.fileName.toLowerCase().endsWith('.pdf') ? file.fileName : (file.sermonTitle || file.fileName)}</span>
                     <span className={styles.docDate}>{file.uploadDate}</span>
                   </li>
                 ))}

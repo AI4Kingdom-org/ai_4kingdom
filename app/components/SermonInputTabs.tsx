@@ -59,6 +59,7 @@ export default function SermonInputTabs({
   // Audio state
   const [audioTranscription, setAudioTranscription] = useState<TranscriptionState>({ status: 'idle' });
   const [audioDragging, setAudioDragging] = useState(false);
+  const [audioFileName, setAudioFileName] = useState('');
   const audioInputRef = useRef<HTMLInputElement>(null);
   const publicWorkerUrl = process.env.NEXT_PUBLIC_YOUTUBE_WORKER_URL;
 
@@ -222,6 +223,7 @@ export default function SermonInputTabs({
 
       try {
         const audioData = await requestYouTubeAudioTranscription();
+        if (audioData.videoTitle) setYtVideoTitle(audioData.videoTitle);
         setYtTranscription({
           status: 'done',
           text: audioData.transcript,
@@ -357,6 +359,7 @@ export default function SermonInputTabs({
         source: 'whisper',
         charCount: data.charCount,
       });
+      setAudioFileName(file.name);
       setEditedText(data.transcript);
       setActiveTranscriptTab('audio');
     } catch (err: any) {
@@ -417,9 +420,39 @@ export default function SermonInputTabs({
         baseName = match ? `youtube_${match[1]}` : 'youtube_transcript';
       }
     } else if (source === 'audio' && state.status === 'done') {
-      baseName = 'audio_transcript';
+      if (audioFileName) {
+        baseName = audioFileName
+          .replace(/\.[^.]+$/, '')
+          .slice(0, 50)
+          .replace(/[<>:"/\\|?*\x00-\x1f]/g, '_')
+          .replace(/_{2,}/g, '_')
+          .replace(/^_+|_+$/g, '') || 'audio_transcript';
+      } else {
+        baseName = 'audio_transcript';
+      }
     }
-    const fileName = `${baseName}_${Date.now()}.txt`;
+    const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+
+    // 取得現有檔名清單，避免重複
+    let existingNames: Set<string> = new Set();
+    try {
+      const docsRes = await fetch(
+        `/api/sunday-guide/documents?assistantId=${ASSISTANT_IDS.SUNDAY_GUIDE}&allUsers=true&limit=500`
+      );
+      if (docsRes.ok) {
+        const docsData = await docsRes.json();
+        const items: { fileName?: string }[] = docsData.files || docsData.records || docsData || [];
+        items.forEach((item) => { if (item.fileName) existingNames.add(item.fileName); });
+      }
+    } catch { /* 查詢失敗不阻擋上傳 */ }
+
+    // 產生唯一檔名：若已存在則加 (1)、(2)…
+    let fileName = `${baseName}_${today}.txt`;
+    if (existingNames.has(fileName)) {
+      let idx = 1;
+      while (existingNames.has(`${baseName}_${today} (${idx}).txt`)) idx++;
+      fileName = `${baseName}_${today} (${idx}).txt`;
+    }
 
     setState({ status: 'uploading', message: '正在上传转录文本并生成讲章内容...' });
     setIsProcessing(true);
@@ -600,7 +633,7 @@ export default function SermonInputTabs({
               <span className={styles.panelHint}>
                 支持官方字幕与自动生成字幕；若影片无字幕，将自动下载音频并使用 AI 语音转录。
                 <br />
-                影片时长上限：100 分钟。超过时请使用「指定转录片段」功能选取部分内容。
+                影片时长上限：120 分钟。超过时请使用「指定转录片段」功能选取部分内容。
               </span>
             </p>
 
