@@ -12,8 +12,8 @@ import { formatTranscript } from '../../../lib/formatTranscript';
 const WHISPER_MAX_BYTES = 24 * 1024 * 1024; // 24 MB
 // 每個分片的目標時長（秒）— 20 分鐘，128kbps ≈ 18.3MB，安全範圍內
 const CHUNK_DURATION_SEC = 20 * 60;
-// Amplify 相容：YouTube 影片最長 100 分鐘
-const MAX_VIDEO_DURATION_SEC = 100 * 60; // 6000s
+// Amplify 相容：YouTube 影片最長 120 分鐘
+const MAX_VIDEO_DURATION_SEC = 120 * 60; // 7200s
 
 const execAsync = promisify(exec);
 
@@ -506,7 +506,7 @@ export async function POST(request: Request) {
             return NextResponse.json(
               {
                 error: 'VIDEO_TOO_LONG',
-                message: `影片時長約 ${Math.round(proxy.duration / 60)} 分鐘，超出上限（100 分鐘）。請使用「指定轉錄片段」功能擷取部分內容，或選擇較短的影片。`,
+                message: `影片時長約 ${Math.round(proxy.duration / 60)} 分鐘，超出上限（120 分鐘）。請使用「指定轉錄片段」功能擷取部分內容，或選擇較短的影片。`,
               },
               { status: 400 }
             );
@@ -550,7 +550,7 @@ export async function POST(request: Request) {
             return NextResponse.json(
               {
                 error: 'VIDEO_TOO_LONG',
-                message: `影片時長約 ${Math.round(dur / 60)} 分鐘，超出上限（100 分鐘）。`,
+                message: `影片時長約 ${Math.round(dur / 60)} 分鐘，超出上限（120 分鐘）。`,
               },
               { status: 400 }
             );
@@ -691,11 +691,14 @@ export async function POST(request: Request) {
     const formatted = await formatTranscript(final);
     console.log('[youtube-audio] Formatted. chars:', formatted.length);
 
+    const videoTitle = await fetchVideoTitle(videoId);
+
     return NextResponse.json({
       transcript: formatted,
       source: 'whisper',
       videoId,
       charCount: formatted.length,
+      videoTitle: videoTitle ?? null,
     });
   } catch (error: any) {
     console.error('[youtube-audio] Error:', error);
@@ -739,3 +742,17 @@ export async function POST(request: Request) {
 
 export const maxDuration = 900; // 15 分鐘（Lambda 最長執行時間）
 export const dynamic = 'force-dynamic';
+
+async function fetchVideoTitle(videoId: string): Promise<string | null> {
+  try {
+    const res = await fetch(
+      `https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${videoId}&format=json`,
+      { signal: AbortSignal.timeout(5000) }
+    );
+    if (!res.ok) return null;
+    const data = await res.json();
+    return typeof data?.title === 'string' ? data.title : null;
+  } catch {
+    return null;
+  }
+}
