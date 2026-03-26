@@ -288,12 +288,11 @@ function SundayGuideContent() {
     setIsUploadDisabled(remainingCredits <= 0);
   }, [remainingCredits, hasInsufficientTokens]);
 
-  // ---- Fetch browsable documents (paginated, current user only) ----
+  // ---- Fetch browsable documents (paginated, all users) ----
   const fetchAllFileRecords = async (page: number = 1) => {
     try {
-      const userIdQS = user?.user_id ? `&userId=${encodeURIComponent(user.user_id)}` : '';
       const response = await fetch(
-        `/api/sunday-guide/documents?assistantId=${ASSISTANT_IDS.SUNDAY_GUIDE}&page=${page}&limit=${filesPerPage}${userIdQS}`
+        `/api/sunday-guide/documents?assistantId=${ASSISTANT_IDS.SUNDAY_GUIDE}&page=${page}&limit=${filesPerPage}&allUsers=true`
       );
       if (!response.ok) throw new Error('獲取文件記錄失敗');
       const data = await response.json();
