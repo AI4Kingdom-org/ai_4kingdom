@@ -33,7 +33,6 @@ function renderWithLinks(text: string): React.ReactNode[] {
 export default function RoutingAgentChat({ userId }: RoutingAgentChatProps) {
   const [input, setInput] = useState('');
   const [hasStarted, setHasStarted] = useState(false);
-  const [inputVisible, setInputVisible] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [speechSupported, setSpeechSupported] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -41,6 +40,35 @@ export default function RoutingAgentChat({ userId }: RoutingAgentChatProps) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const recognitionRef = useRef<any>(null);
   const { messages, isLoading, error, sendMessage } = useRoutingAgent({ userId });
+
+  const guideSections = [
+    {
+      title: '① 三步上手',
+      content: [
+        '1. 进入首页，找到聊天框',
+        '2. 输入你想要找的内容',
+        '3. 点击AI助理提供的链接',
+      ],
+    },
+    {
+      title: '② 常用提问',
+      content: [
+        'AI4Kingdom 是什么？',
+        '我要奉献支持 AI4Kingdom',
+        '儿童主日学 AI 工具',
+        '主日教導：爱修教会',
+        '主日教導：东区基督之家',
+        '家庭灵魂辅导',
+      ],
+    },
+    {
+      title: '③ 温馨提醒',
+      content: [
+        '【各页面中的专属 AI 助手，需先注册对应账号后方可使用】',
+        '【首页助理仅提供「国度AI」平台内的相关资讯与正确页面链接】',
+      ],
+    },
+  ];
 
   // 初始化 SpeechRecognition
   useEffect(() => {
@@ -126,22 +154,16 @@ export default function RoutingAgentChat({ userId }: RoutingAgentChatProps) {
   };
 
   return (
-    <div className={styles.routingAgentContainer}>
+    <div
+      className={`${styles.routingAgentContainer} ${
+        hasStarted ? styles.routingAgentContainerFull : ''
+      }`}
+    >
       {/* 歡迎詞區域 */}
       <div
-        className={`${styles.welcomeSection} ${inputVisible ? styles.welcomeSectionCompact : styles.welcomeSectionCentered}`}
-        onClick={() => {
-          if (!inputVisible) {
-            setInputVisible(true);
-            setTimeout(() => textareaRef.current?.focus(), 300);
-          }
-        }}
-        style={{ cursor: inputVisible ? 'default' : 'pointer' }}
+        className={`${styles.welcomeSection} ${styles.welcomeSectionCompact}`}
       >
         <h1 className={styles.welcomeTitle}>平安！您想問些什麼?</h1>
-        {!inputVisible && (
-          <p className={styles.tapHint}>點擊開始提問</p>
-        )}
       </div>
 
       {/* 對話區域 - 開始後才顯示 */}
@@ -205,8 +227,8 @@ export default function RoutingAgentChat({ userId }: RoutingAgentChatProps) {
         </div>
       )}
 
-      {/* 輸入區域 - 點擊歡迎區後才顯示 */}
-      <div className={`${styles.inputSection} ${inputVisible ? styles.inputSectionVisible : styles.inputSectionHidden}`}>
+      {/* 輸入區域 - 預設顯示 */}
+      <div className={styles.inputSection}>
         <div className={styles.inputWrapper}>
           <div className={styles.inputField}>
             {speechSupported && (
@@ -240,6 +262,22 @@ export default function RoutingAgentChat({ userId }: RoutingAgentChatProps) {
           </button>
         </div>
       </div>
+
+      {/* 對話前引導說明 - 放在輸入框下方 */}
+      {!hasStarted && (
+        <div className={styles.guideSection}>
+          <div className={styles.guideCard}>
+            {guideSections.map((section) => (
+              <div key={section.title} className={styles.guideCardSection}>
+                <h3 className={styles.guideCardTitle}>{section.title}</h3>
+                {section.content.map((line) => (
+                  <p key={line} className={styles.guideCardLine}>{line}</p>
+                ))}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
