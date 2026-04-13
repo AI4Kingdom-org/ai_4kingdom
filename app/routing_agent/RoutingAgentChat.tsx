@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import Image from 'next/image';
 import { useRoutingAgent, type Message } from './hooks/useRoutingAgent';
 import styles from './RoutingAgentChat.module.css';
 
@@ -40,35 +41,6 @@ export default function RoutingAgentChat({ userId }: RoutingAgentChatProps) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const recognitionRef = useRef<any>(null);
   const { messages, isLoading, error, sendMessage } = useRoutingAgent({ userId });
-
-  const guideSections = [
-    {
-      title: '① 三步上手',
-      content: [
-        '1. 进入首页，找到聊天框',
-        '2. 输入你想要找的内容',
-        '3. 点击AI助理提供的链接',
-      ],
-    },
-    {
-      title: '② 常用提问',
-      content: [
-        'AI4Kingdom 是什么？',
-        '我要奉献支持 AI4Kingdom',
-        '儿童主日学 AI 工具',
-        '主日教導：爱修教会',
-        '主日教導：东区基督之家',
-        '家庭灵魂辅导',
-      ],
-    },
-    {
-      title: '③ 温馨提醒',
-      content: [
-        '【各页面中的专属 AI 助手，需先注册对应账号后方可使用】',
-        '【首页助理仅提供「国度AI」平台内的相关资讯与正确页面链接】',
-      ],
-    },
-  ];
 
   // 初始化 SpeechRecognition
   useEffect(() => {
@@ -163,7 +135,14 @@ export default function RoutingAgentChat({ userId }: RoutingAgentChatProps) {
       <div
         className={`${styles.welcomeSection} ${styles.welcomeSectionCompact}`}
       >
-        <h1 className={styles.welcomeTitle}>平安！您想問些什麼?</h1>
+        <Image
+          src="/ai4kingdom-logo.png"
+          alt="Ai4Kingdom"
+          width={320}
+          height={100}
+          style={{ objectFit: 'contain' }}
+          priority
+        />
       </div>
 
       {/* 對話區域 - 開始後才顯示 */}
@@ -247,7 +226,7 @@ export default function RoutingAgentChat({ userId }: RoutingAgentChatProps) {
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder={isListening ? '正在聆聽...' : '寫下您的問題...'}
+              placeholder={isListening ? '正在聆聽...' : '平安！您想問些什麼?'}
               disabled={isLoading}
               rows={1}
             />
@@ -263,20 +242,9 @@ export default function RoutingAgentChat({ userId }: RoutingAgentChatProps) {
         </div>
       </div>
 
-      {/* 對話前引導說明 - 放在輸入框下方 */}
+      {/* 對話前引導說明區域 */}
       {!hasStarted && (
-        <div className={styles.guideSection}>
-          <div className={styles.guideCard}>
-            {guideSections.map((section) => (
-              <div key={section.title} className={styles.guideCardSection}>
-                <h3 className={styles.guideCardTitle}>{section.title}</h3>
-                {section.content.map((line) => (
-                  <p key={line} className={styles.guideCardLine}>{line}</p>
-                ))}
-              </div>
-            ))}
-          </div>
-        </div>
+        <div className={styles.guideSection} />
       )}
     </div>
   );

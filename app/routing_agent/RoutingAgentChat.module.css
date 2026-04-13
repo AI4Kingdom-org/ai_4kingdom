@@ -3,7 +3,7 @@
   flex-direction: column;
   min-height: auto;
   width: 100%;
-  background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+  background: #ffffff;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   color: #333;
 }
@@ -33,9 +33,12 @@
 }
 
 .welcomeSectionCompact {
-  flex: 0 0 auto;
-  padding: 24px 24px;
-  border-bottom: 1px solid #e5e7eb;
+  flex: 1 1 auto;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 0 24px 8px;
+  border-bottom: none;
 }
 
 .tapHint {
@@ -74,6 +77,7 @@
   flex-direction: column;
   gap: 16px;
   animation: fadeIn 0.3s ease-in;
+  background: #BBBDC0;
 }
 
 .messagesContainer::-webkit-scrollbar {
@@ -180,17 +184,14 @@
 
 .inputSection {
   flex: 0 0 auto;
-  padding: 20px 24px;
+  padding: 8px 24px 20px;
   background: white;
-  border-top: 1px solid #e5e7eb;
 }
 
 .guideSection {
-  flex: 0 0 auto;
-  padding: 0 24px 20px;
+  flex: 1 1 auto;
   width: 100%;
-  max-width: 1200px;
-  margin: 0 auto;
+  background: #ffffff;
 }
 
 .guideCard {
@@ -244,7 +245,7 @@
   flex: 1;
   display: flex;
   align-items: center;
-  background: #f9fafb;
+  background: #C1D9E6;
   border: 1px solid #d1d5db;
   border-radius: 24px;
   padding: 10px 16px;
