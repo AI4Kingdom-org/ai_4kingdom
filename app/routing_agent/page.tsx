@@ -60,6 +60,11 @@ export default function RoutingAgentPage() {
         #__next {
           height: 100%;
         }
+
+        body > div,
+        body > div > main {
+          height: 100%;
+        }
       `}</style>
       <RoutingAgentChat userId={userId} />
     </>
