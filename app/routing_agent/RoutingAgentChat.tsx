@@ -138,8 +138,8 @@ export default function RoutingAgentChat({ userId }: RoutingAgentChatProps) {
         <Image
           src="/ai4kingdom-logo.png"
           alt="Ai4Kingdom"
-          width={320}
-          height={100}
+          width={294}
+          height={92}
           style={{ objectFit: 'contain' }}
           priority
         />
@@ -226,7 +226,7 @@ export default function RoutingAgentChat({ userId }: RoutingAgentChatProps) {
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder={isListening ? '正在聆聽...' : '平安！您想問些什麼?'}
+              placeholder={isListening ? '正在聆听...' : '常用提问: 儿童主日学AI工具, 爱修教会主日教导, 家庭属灵辅导, AI4Kingdom是什么? 我要支持奉献'}
               disabled={isLoading}
               rows={1}
             />

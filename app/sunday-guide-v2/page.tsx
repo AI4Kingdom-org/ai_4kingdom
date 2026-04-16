@@ -822,13 +822,6 @@ function SundayGuideContent() {
             当前讲章：{selectedFileName || '未知'}
           </p>
 
-          {/* ChatKit */}
-          {user && (
-            <div className={styles.chatSection}>
-              <ChatkitEmbed userId={user.user_id} />
-            </div>
-          )}
-
           {/* Mode buttons */}
           <div className={styles.buttonGroup}>
             <button
@@ -859,6 +852,13 @@ function SundayGuideContent() {
               </div>
             </div>
           ) : null}
+
+          {/* ChatKit */}
+          {user && (
+            <div className={styles.chatSection}>
+              <ChatkitEmbed userId={user.user_id} />
+            </div>
+          )}
         </section>
         ) : (
           <div className={styles.guidePlaceholder}>
