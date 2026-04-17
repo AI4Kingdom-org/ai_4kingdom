@@ -7,7 +7,7 @@ import { updateMonthlyTokenUsage } from '@/app/utils/monthlyTokenUsage';
  *
  * Body: {
  *   userId: string,
- *   type: 'upload' | 'process',
+ *   type: 'upload' | 'process' | 'transcribe',
  *   estimatedPages?: number
  * }
  */
@@ -32,6 +32,19 @@ const FILE_PROCESSING_TOKENS = {
     total_tokens: 370,
     retrieval_tokens: 200,
   },
+  // Whisper 音頻轉錄（AI 語音識別 + GPT 格式化）
+  TRANSCRIBE: {
+    prompt_tokens: 1000,
+    completion_tokens: 500,
+    total_tokens: 1500,
+    retrieval_tokens: 500,
+  },
+  PER_PAGE_TRANSCRIBE: {
+    prompt_tokens: 200,
+    completion_tokens: 100,
+    total_tokens: 300,
+    retrieval_tokens: 100,
+  },
 };
 
 export async function POST(request: Request) {
@@ -43,9 +56,9 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'userId is required' }, { status: 400 });
     }
 
-    if (type !== 'upload' && type !== 'process') {
+    if (type !== 'upload' && type !== 'process' && type !== 'transcribe') {
       return NextResponse.json(
-        { error: 'type must be "upload" or "process"' },
+        { error: 'type must be "upload", "process", or "transcribe"' },
         { status: 400 }
       );
     }
@@ -59,6 +72,23 @@ export async function POST(request: Request) {
         completion_tokens: FILE_PROCESSING_TOKENS.UPLOAD.completion_tokens * pages,
         total_tokens: FILE_PROCESSING_TOKENS.UPLOAD.total_tokens * pages,
         retrieval_tokens: 0,
+      };
+    } else if (type === 'transcribe') {
+      // Whisper 轉錄：estimatedPages 由 charCount / 2000 估算
+      const pages = Math.max(1, Number(estimatedPages) || 3);
+      usage = {
+        prompt_tokens:
+          FILE_PROCESSING_TOKENS.TRANSCRIBE.prompt_tokens +
+          FILE_PROCESSING_TOKENS.PER_PAGE_TRANSCRIBE.prompt_tokens * pages,
+        completion_tokens:
+          FILE_PROCESSING_TOKENS.TRANSCRIBE.completion_tokens +
+          FILE_PROCESSING_TOKENS.PER_PAGE_TRANSCRIBE.completion_tokens * pages,
+        total_tokens:
+          FILE_PROCESSING_TOKENS.TRANSCRIBE.total_tokens +
+          FILE_PROCESSING_TOKENS.PER_PAGE_TRANSCRIBE.total_tokens * pages,
+        retrieval_tokens:
+          FILE_PROCESSING_TOKENS.TRANSCRIBE.retrieval_tokens +
+          FILE_PROCESSING_TOKENS.PER_PAGE_TRANSCRIBE.retrieval_tokens * pages,
       };
     } else {
       // process

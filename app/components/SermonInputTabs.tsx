@@ -232,6 +232,15 @@ export default function SermonInputTabs({
         });
         setEditedText(audioData.transcript);
         setActiveTranscriptTab('youtube');
+        // 扣除 Whisper 音頻轉錄 credit
+        if (user?.user_id) {
+          const estimatedPages = Math.max(1, Math.ceil((audioData.charCount || 0) / 2000));
+          fetch('/api/usage/update-tokens', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userId: user.user_id, type: 'transcribe', estimatedPages }),
+          }).catch((e) => console.error('[SermonInputTabs] youtube transcribe token deduction error:', e));
+        }
         return;
       } catch (audioErr: any) {
         setYtTranscription({
@@ -362,6 +371,15 @@ export default function SermonInputTabs({
       setAudioFileName(file.name);
       setEditedText(data.transcript);
       setActiveTranscriptTab('audio');
+      // 扣除 Whisper 音頻轉錄 credit
+      if (user?.user_id) {
+        const estimatedPages = Math.max(1, Math.ceil((data.charCount || 0) / 2000));
+        fetch('/api/usage/update-tokens', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId: user.user_id, type: 'transcribe', estimatedPages }),
+        }).catch((e) => console.error('[SermonInputTabs] audio transcribe token deduction error:', e));
+      }
     } catch (err: any) {
       setAudioTranscription({
         status: 'error',
