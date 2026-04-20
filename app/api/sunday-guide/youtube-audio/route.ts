@@ -181,7 +181,7 @@ async function transcribeFile(filePath: string, ext: string): Promise<string> {
   const whisperFile = new File([ab], `audio.${ext}`, { type: mimeType });
   const result = await openai.audio.transcriptions.create({
     file: whisperFile,
-    model: 'whisper-1',
+    model: 'gpt-4o-transcribe',
     response_format: 'text',
     language: 'zh',
   });
