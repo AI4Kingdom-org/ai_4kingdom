@@ -83,7 +83,7 @@ export async function POST(request: Request) {
     console.log('[transcription] Sending to Whisper API...');
     const result = await openai.audio.transcriptions.create({
       file: whisperFile,
-      model: 'whisper-1',
+      model: 'gpt-4o-transcribe',
       response_format: 'text',
       language: 'zh',
     });
