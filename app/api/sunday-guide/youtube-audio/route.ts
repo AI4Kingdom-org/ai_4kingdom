@@ -10,7 +10,9 @@ import { formatTranscript } from '../../../lib/formatTranscript';
 
 // Whisper API 單次上限（保留 1MB buffer）
 const WHISPER_MAX_BYTES = 24 * 1024 * 1024; // 24 MB
-// 每個分片的目標時長（秒）— 20 分鐘，128kbps ≈ 18.3MB，安全範圍內
+// gpt-4o-transcribe 單次音頻時長上限
+const WHISPER_MAX_DURATION_SEC = 1400; // ~23 分鐘
+// 每個分片的目標時長（秒）— 20 分鐘，安全低於 1400s 限制
 const CHUNK_DURATION_SEC = 20 * 60;
 // Amplify 相容：YouTube 影片最長 120 分鐘
 const MAX_VIDEO_DURATION_SEC = 120 * 60; // 7200s
@@ -624,13 +626,17 @@ export async function POST(request: Request) {
 
     let transcript = '';
 
-    if (fileSizeBytes <= WHISPER_MAX_BYTES) {
-      // ── 情況 A：檔案夠小，直接送 Whisper ─────────────────────
-      console.log('[youtube-audio] Within 24MB, transcribing directly...');
+    // 檢查是否需要分片（檔案過大 OR 時長超過 gpt-4o-transcribe 1400s 限制）
+    const durationSec = ffmpegPath ? await getAudioDuration(ffmpegPath, audioFilePath) : 0;
+    const needsChunking = fileSizeBytes > WHISPER_MAX_BYTES || durationSec > WHISPER_MAX_DURATION_SEC;
+
+    if (!needsChunking) {
+      // ── 情況 A：檔案夠小且時長夠短，直接送 Whisper ─────────────────────
+      console.log(`[youtube-audio] Within limits (${fileSizeMB.toFixed(1)}MB, ${Math.round(durationSec / 60)}min), transcribing directly...`);
       transcript = await transcribeFile(audioFilePath, ext);
     } else {
-      // ── 情況 B：檔案過大，用 ffmpeg 分片後逐片轉錄 ────────────
-      console.log(`[youtube-audio] ${fileSizeMB.toFixed(1)}MB > 24MB, splitting...`);
+      // ── 情況 B：檔案過大或時長超限，用 ffmpeg 分片後逐片轉錄 ────────────
+      console.log(`[youtube-audio] Needs chunking: ${fileSizeMB.toFixed(1)}MB, ${Math.round(durationSec / 60)}min — splitting into ${CHUNK_DURATION_SEC / 60}min chunks...`);
 
       if (!ffmpegPath) {
         return NextResponse.json(
@@ -641,11 +647,6 @@ export async function POST(request: Request) {
           { status: 413 }
         );
       }
-
-      const durationSec = await getAudioDuration(ffmpegPath, audioFilePath);
-      console.log(
-        `[youtube-audio] Duration: ~${Math.round(durationSec / 60)}min, splitting into ${CHUNK_DURATION_SEC / 60}min chunks...`
-      );
 
       const chunkPaths = await splitAudio(ffmpegPath, audioFilePath, chunkDir, CHUNK_DURATION_SEC);
       console.log(`[youtube-audio] Split into ${chunkPaths.length} chunks.`);
