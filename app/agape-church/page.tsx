@@ -1,14 +1,13 @@
 "use client";
 
-// 參考 /sunday-guide/page.tsx 重新實作為 Agape 版
 import { useState, useEffect } from 'react';
-import AssistantManager from '../components/AssistantManager';
+import SermonInputTabs from '../components/SermonInputTabs';
 import WithChat from '../components/layouts/WithChat';
-import { useCredit } from '../contexts/CreditContext';
 import UserIdDisplay from '../components/UserIdDisplay';
-import styles from '../sunday-guide/SundayGuide.module.css';
-import { ASSISTANT_IDS, VECTOR_STORE_IDS } from '../config/constants';
+import { useCredit } from '../contexts/CreditContext';
 import { useAuth } from '../contexts/AuthContext';
+import styles from '../sunday-guide-v2/SundayGuide.module.css';
+import { ASSISTANT_IDS, VECTOR_STORE_IDS } from '../config/constants';
 import { canUploadToSundayGuideUnit } from '../config/userPermissions';
 
 interface ProcessedContent {
@@ -26,62 +25,44 @@ export default function AgapeChurchPage() {
   const [uploadProgress, setUploadProgress] = useState<number>(0);
   const [uploadTime, setUploadTime] = useState<string>('');
   const [isUploadDisabled, setIsUploadDisabled] = useState(false);
-  const [latestFile, setLatestFile] = useState<{ fileName: string, uploadDate: string } | null>(null);
-  const [showLatestFile, setShowLatestFile] = useState(true);
-  const [recentFiles, setRecentFiles] = useState<Array<{ fileName: string, uploadDate: string, fileId: string, uploaderId?: string }>>([]);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [recentFiles, setRecentFiles] = useState<Array<{ fileName: string; uploadDate: string; fileId: string; uploaderId?: string }>>([]);
   const [selectedFileId, setSelectedFileId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const filesPerPage = 10;
 
-  // 僅允許在常數中列出的使用者上傳（agape 單位）
   const hasUploadPermission = canUploadToSundayGuideUnit('agape', user?.user_id);
 
   useEffect(() => { setIsUploadDisabled(remainingCredits <= 0); }, [remainingCredits, hasInsufficientTokens]);
 
-  // 获取当前使用者最新文件（assistantId = SUNDAY_GUIDE）
-  const fetchLatestFileRecord = async () => {
-    if (!user?.user_id) { setLatestFile(null); return; }
-    try {
-  const res = await fetch(`/api/sunday-guide/documents?assistantId=${ASSISTANT_IDS.AGAPE_CHURCH}&userId=${user.user_id}&agapeFilter=true`);
-  if (!res.ok) throw new Error('获取文件记录失败');
-      const data = await res.json();
-      if (data.success && data.records?.length) {
-  const latestRecord = [...data.records].sort((a: any, b: any) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())[0];
-        const uploadDate = new Date(latestRecord.updatedAt);
-        const dateOnly = uploadDate.toLocaleDateString('en-US', { timeZone: 'America/Los_Angeles', year: 'numeric', month: '2-digit', day: '2-digit' });
-        setLatestFile({ fileName: latestRecord.fileName || '未命名文件', uploadDate: dateOnly });
-      } else setLatestFile(null);
-    } catch { setLatestFile(null); }
-  };
-
-  // 获取所有 agape 单位可公开浏览的文件（只显示 allowedUploaders 上传）
   const fetchAllFileRecords = async (page: number = 1) => {
     try {
-  const res = await fetch(`/api/sunday-guide/documents?assistantId=${ASSISTANT_IDS.AGAPE_CHURCH}&page=${page}&limit=${filesPerPage}&allUsers=true&agapeFilter=true`);
-  if (!res.ok) throw new Error('获取文件记录失败');
+      const res = await fetch(`/api/sunday-guide/documents?assistantId=${ASSISTANT_IDS.AGAPE_CHURCH}&page=${page}&limit=${filesPerPage}&allUsers=true&agapeFilter=true`);
+      if (!res.ok) throw new Error('獲取文件記錄失敗');
       const data = await res.json();
       if (data.success && data.records) {
         const sorted = data.records.sort((a: any, b: any) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
-        const mapped = sorted.map((rec: any) => ({
+        setRecentFiles(sorted.map((rec: any) => ({
           fileName: rec.fileName || '未命名文件',
-          uploadDate: new Date(rec.updatedAt).toLocaleDateString('zh-CN'),
+          uploadDate: new Date(rec.updatedAt).toLocaleDateString('zh-TW'),
           fileId: rec.fileId || '',
-          uploaderId: rec.userId || '未知'
-        }));
-        setRecentFiles(mapped);
-        setTotalPages(Math.ceil((data.totalCount || mapped.length) / filesPerPage));
-      } else { setRecentFiles([]); setTotalPages(1); }
+          uploaderId: rec.userId || '未知',
+        })));
+        setTotalPages(Math.ceil((data.totalCount || sorted.length) / filesPerPage));
+      } else {
+        setRecentFiles([]);
+        setTotalPages(1);
+      }
     } catch {
-      setRecentFiles([]); setTotalPages(1);
+      setRecentFiles([]);
+      setTotalPages(1);
     }
   };
 
   const handleDelete = async (fileId: string, uploaderId?: string) => {
-    if (!user?.user_id) return;
-    if (!fileId) return;
-    if (uploaderId?.toString() !== user.user_id.toString()) return; // 前端保護
+    if (!user?.user_id || !fileId) return;
+    if (uploaderId?.toString() !== user.user_id.toString()) return;
     if (!confirm('確定刪除此文件記錄？此操作不可回復。')) return;
     try {
       setDeletingId(fileId);
@@ -101,121 +82,154 @@ export default function AgapeChurchPage() {
     }
   };
 
-  useEffect(() => { fetchLatestFileRecord(); fetchAllFileRecords(currentPage); }, [user]);
+  useEffect(() => { fetchAllFileRecords(currentPage); }, [user]);
   useEffect(() => { fetchAllFileRecords(currentPage); }, [currentPage]);
-  useEffect(() => { setShowLatestFile(!processedContent); }, [processedContent]);
 
   const handleFileProcessed = async (content: ProcessedContent) => {
     setProcessedContent(content);
     setIsProcessing(false);
-    await fetchLatestFileRecord();
     await fetchAllFileRecords(currentPage);
     await refreshUsage();
   };
 
+  const handleSelectFile = (fileId: string) => {
+    setSelectedFileId(fileId);
+    try {
+      const file = recentFiles.find(f => f.fileId === fileId);
+      localStorage.setItem('selectedFileId', fileId);
+      if (file) localStorage.setItem('selectedFileName', file.fileName);
+      const channel = new BroadcastChannel('file-selection');
+      channel.postMessage({
+        type: 'FILE_SELECTED',
+        assistantId: ASSISTANT_IDS.AGAPE_CHURCH,
+        fileId,
+        fileName: file?.fileName || '',
+        ts: Date.now(),
+      });
+      channel.close();
+    } catch (err) {
+      console.warn('broadcast file selection failed', err);
+    }
+  };
+
   return (
-  <WithChat chatType="sunday-guide">
+    <WithChat chatType="sunday-guide">
       <div className={styles.container}>
         <UserIdDisplay />
-  {/* 移除頂部標題：Agape 教會牧者助手 */}
+
+        {/* =============== 1. Upload Section =============== */}
         {hasUploadPermission && (
-          <section className={styles.section}>
-            <h2 className={styles.sectionTitle}>文件上传与处理</h2>
+          <section className={styles.uploadHero}>
+            <h2 className={styles.uploadHeroTitle}>上传讲章</h2>
+            <p className={styles.uploadHeroDesc}>
+              上传愛加倍教會主日讲章文件，系统将自动生成<strong>信息总结</strong>、<strong>每日灵修</strong>与<strong>查经指引</strong>。
+              <br />
+              支持格式：<strong>PDF / 文件</strong>、<strong>YouTube 链接</strong>、<strong>音频文件</strong>
+            </p>
+
             {isUploadDisabled && (
-              <div className={styles.creditWarning}><p>Credits 不足，无法上传。</p></div>
+              <span className={styles.creditWarningInline}>额度不足，无法上传</span>
             )}
-            {!isUploadDisabled && remainingCredits < 20 && (
-              <div className={styles.creditWarning} style={{ backgroundColor: '#fff8e0', color: '#b7791f', borderLeft: '4px solid #ecc94b' }}>
-                <p>Credits 余额较低 (剩余 {remainingCredits})</p>
-              </div>
+            {!isUploadDisabled && remainingCredits > 0 && remainingCredits < 20 && (
+              <span className={styles.creditWarningInline} style={{ background: '#fef3c7', color: '#92400e' }}>
+                余额较低 ({remainingCredits})
+              </span>
             )}
-            <AssistantManager
-              onFileProcessed={handleFileProcessed}
-              setIsProcessing={setIsProcessing}
-              setUploadProgress={setUploadProgress}
-              setUploadTime={setUploadTime}
-              disabled={isUploadDisabled}
-              assistantId={ASSISTANT_IDS.AGAPE_CHURCH}
-              vectorStoreId={VECTOR_STORE_IDS.AGAPE_CHURCH}
-            />
+
+            <div className={styles.uploadArea}>
+              <SermonInputTabs
+                onFileProcessed={handleFileProcessed}
+                setIsProcessing={setIsProcessing}
+                setUploadProgress={setUploadProgress}
+                setUploadTime={setUploadTime}
+                disabled={isUploadDisabled}
+                assistantId={ASSISTANT_IDS.AGAPE_CHURCH}
+                vectorStoreId={VECTOR_STORE_IDS.AGAPE_CHURCH}
+              />
+            </div>
+
             {isProcessing && (
-              <div className={styles.processingAlert}><p>处理中 (约数分钟)，请勿关闭页面。</p></div>
+              <div className={styles.processingAlert}>
+                <p>处理中，约需 3-5 分钟，请勿关闭页面...</p>
+              </div>
             )}
             {uploadTime && (
-              <div className={styles.uploadTimeContainer}>
-                <p>处理完成时间: {uploadTime}</p>
-                <p className={styles.processingNote}>* 处理需要时间，请耐心等待</p>
-              </div>
+              <span className={styles.uploadTimeBadge}>✓ 完成于 {uploadTime}</span>
             )}
           </section>
         )}
-        <aside className={styles.recentFilesAside}>
-          <h4 className={styles.recentFilesTitle}>公开浏览文件</h4>
-          {recentFiles.length === 0 ? (
-            <div className={styles.noRecentFiles}>尚无可浏览文档</div>
-          ) : (
-            <>
-              <ul className={styles.recentFilesListScrollable}>
-                {recentFiles.map((file, idx) => (
-                  <li
-                    key={file.fileId || idx}
-                    className={styles.recentFileItem}
-                    style={{ cursor: 'pointer', backgroundColor: selectedFileId === file.fileId ? '#e3f2fd' : '#fff', border: selectedFileId === file.fileId ? '2px solid #0070f3' : '2px solid #ddd' }}
-                    onClick={() => { 
-                      setSelectedFileId(file.fileId); 
-                      try {
-                        localStorage.setItem('selectedFileId', file.fileId);
-                        localStorage.setItem('selectedFileName', file.fileName);
-                        const channel = new BroadcastChannel('file-selection');
-                        channel.postMessage({
-                          type: 'FILE_SELECTED',
-                          assistantId: ASSISTANT_IDS.AGAPE_CHURCH,
-                          fileId: file.fileId,
-                          fileName: file.fileName,
-                          ts: Date.now()
-                        });
-                        channel.close();
-                      } catch (err) {
-                        console.warn('broadcast file selection failed', err);
-                      }
-                    }}
-                  >
-                    <span className={styles.fileIndex}>{((currentPage - 1) * filesPerPage) + idx + 1}. </span>
-                    <span className={styles.fileName}>{file.fileName}</span>
-                    <span className={styles.uploadDate}>{file.uploadDate}</span>
-                    {/* 隱藏上傳者顯示：保留 uploaderId 供刪除權限判斷，但不渲染文字 */}
-                    {/* {file.uploaderId && (<span className={styles.uploaderInfo}>上传: {file.uploaderId}</span>)} */}
-                    {/* 刪除按鈕：僅原上傳者可見 */}
-                    {file.uploaderId && user?.user_id && file.uploaderId.toString() === user.user_id.toString() && (
-                      <button
-                        onClick={(e) => { e.stopPropagation(); handleDelete(file.fileId, file.uploaderId); }}
-                        disabled={deletingId === file.fileId}
-                        style={{
-                          marginLeft: 8,
-                          background: 'none',
-                          border: 'none',
-                          color: 'crimson',
-                          cursor: 'pointer',
-                          fontSize: '14px'
-                        }}
-                        title="刪除此文件"
-                      >
-                        {deletingId === file.fileId ? '刪除中...' : '🗑'}
-                      </button>
-                    )}
-                  </li>
-                ))}
-              </ul>
-              {totalPages > 1 && (
-                <div className={styles.pagination}>
-                  <button onClick={() => { const p = currentPage - 1; setCurrentPage(p); fetchAllFileRecords(p); }} disabled={currentPage === 1} className={styles.paginationButton}>上一页</button>
-                  <span className={styles.paginationInfo}>第 {currentPage} / {totalPages} 页</span>
-                  <button onClick={() => { const p = currentPage + 1; setCurrentPage(p); fetchAllFileRecords(p); }} disabled={currentPage === totalPages} className={styles.paginationButton}>下一页</button>
-                </div>
-              )}
-            </>
-          )}
-        </aside>
+
+        {/* =============== 2. Sidebar: 文檔列表 =============== */}
+        <div className={styles.mainLayout}>
+          <aside className={styles.docsSection}>
+            <h4 className={styles.docsSectionTitle}>
+              📚 文档列表
+              <span className={styles.docsSectionHint}>— 选择一份讲章</span>
+            </h4>
+
+            {recentFiles.length === 0 ? (
+              <div className={styles.noDocs}>暂无文档</div>
+            ) : (
+              <>
+                <ul className={styles.docsListScrollable}>
+                  {recentFiles.map((file, idx) => (
+                    <li
+                      key={file.fileId || idx}
+                      className={`${styles.docItem} ${selectedFileId === file.fileId ? styles.docItemSelected : ''}`}
+                      onClick={() => handleSelectFile(file.fileId)}
+                      title="点击选择此文档"
+                    >
+                      {file.uploaderId && user?.user_id && file.uploaderId.toString() === user.user_id.toString() ? (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleDelete(file.fileId, file.uploaderId); }}
+                          disabled={deletingId === file.fileId}
+                          className={styles.deleteButton}
+                          title="删除此文档"
+                        >
+                          {deletingId === file.fileId ? '...' : '×'}
+                        </button>
+                      ) : (
+                        <span className={styles.deleteButtonPlaceholder} />
+                      )}
+                      <span className={styles.docIndex}>{(currentPage - 1) * filesPerPage + idx + 1}.</span>
+                      <span className={styles.docFileName}>{file.fileName}</span>
+                      <span className={styles.docDate}>{file.uploadDate}</span>
+                    </li>
+                  ))}
+                </ul>
+
+                {totalPages > 1 && (
+                  <div className={styles.pagination}>
+                    <button
+                      onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                      disabled={currentPage === 1}
+                      className={styles.paginationButton}
+                    >
+                      ←
+                    </button>
+                    <span className={styles.paginationInfo}>{currentPage} / {totalPages}</span>
+                    <button
+                      onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                      disabled={currentPage === totalPages}
+                      className={styles.paginationButton}
+                    >
+                      →
+                    </button>
+                  </div>
+                )}
+              </>
+            )}
+          </aside>
+
+          <div className={styles.guidePlaceholder}>
+            <div className={styles.guidePlaceholderIcon}>👈</div>
+            <p className={styles.guidePlaceholderText}>
+              选择讲章后可前往<br />
+              <a href="/agape-church/navigator" style={{ color: '#0070f3', textDecoration: 'underline' }}>愛加倍信息導覽</a><br />
+              查看信息总结、灵修与查经
+            </p>
+          </div>
+        </div>
       </div>
     </WithChat>
   );

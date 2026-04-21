@@ -1,14 +1,13 @@
 "use client";
 
-// Jian Zhu 版本，沿用 Sunday Guide assistant/vector store，靠 unitId=jianZhu 分流
 import { useState, useEffect } from 'react';
-import AssistantManager from '../components/AssistantManager';
+import SermonInputTabs from '../components/SermonInputTabs';
 import WithChat from '../components/layouts/WithChat';
-import { useCredit } from '../contexts/CreditContext';
 import UserIdDisplay from '../components/UserIdDisplay';
-import styles from '../sunday-guide/SundayGuide.module.css';
-import { ASSISTANT_IDS, VECTOR_STORE_IDS } from '../config/constants';
+import { useCredit } from '../contexts/CreditContext';
 import { useAuth } from '../contexts/AuthContext';
+import styles from '../sunday-guide-v2/SundayGuide.module.css';
+import { ASSISTANT_IDS, VECTOR_STORE_IDS } from '../config/constants';
 import { canUploadToSundayGuideUnit } from '../config/userPermissions';
 
 interface ProcessedContent {
@@ -22,11 +21,10 @@ export default function JianZhuPage() {
   const { refreshUsage, hasInsufficientTokens, remainingCredits } = useCredit();
   const { user } = useAuth();
   const [isProcessing, setIsProcessing] = useState(false);
-  const [processedContent, setProcessedContent] = useState<ProcessedContent | null>(null);
   const [uploadProgress, setUploadProgress] = useState<number>(0);
   const [uploadTime, setUploadTime] = useState<string>('');
   const [isUploadDisabled, setIsUploadDisabled] = useState(false);
-  const [recentFiles, setRecentFiles] = useState<Array<{ fileName: string, uploadDate: string, fileId: string, uploaderId?: string }>>([]);
+  const [recentFiles, setRecentFiles] = useState<Array<{ fileName: string; uploadDate: string; fileId: string; uploaderId?: string }>>([]);
   const [selectedFileId, setSelectedFileId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
@@ -36,6 +34,7 @@ export default function JianZhuPage() {
   const hasUploadPermission = canUploadToSundayGuideUnit('jianZhu', user?.user_id);
 
   useEffect(() => { setIsUploadDisabled(remainingCredits <= 0); }, [remainingCredits, hasInsufficientTokens]);
+  useEffect(() => { localStorage.setItem('currentUnitId', 'jianZhu'); }, []);
 
   const fetchAllFileRecords = async (page: number = 1) => {
     try {
@@ -44,28 +43,26 @@ export default function JianZhuPage() {
       const data = await res.json();
       if (data.success && data.records) {
         const sorted = data.records.sort((a: any, b: any) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
-        const mapped = sorted.map((rec: any) => ({
+        setRecentFiles(sorted.map((rec: any) => ({
           fileName: rec.fileName || '未命名文件',
           uploadDate: new Date(rec.updatedAt).toLocaleDateString('zh-TW'),
           fileId: rec.fileId || '',
-          uploaderId: rec.userId || '未知'
-        }));
-        setRecentFiles(mapped);
-        setTotalPages(Math.ceil((data.totalCount || mapped.length) / filesPerPage));
-      } else { setRecentFiles([]); setTotalPages(1); }
+          uploaderId: rec.userId || '未知',
+        })));
+        setTotalPages(Math.ceil((data.totalCount || sorted.length) / filesPerPage));
+      } else {
+        setRecentFiles([]);
+        setTotalPages(1);
+      }
     } catch {
-      setRecentFiles([]); setTotalPages(1);
+      setRecentFiles([]);
+      setTotalPages(1);
     }
   };
 
-  useEffect(() => { fetchAllFileRecords(currentPage); }, [user]);
-  useEffect(() => { fetchAllFileRecords(currentPage); }, [currentPage]);
-  useEffect(() => { localStorage.setItem('currentUnitId', 'jianZhu'); }, []);
-
   const handleDelete = async (fileId: string, uploaderId?: string) => {
-    if (!user?.user_id) return;
-    if (!fileId) return;
-    if (uploaderId?.toString() !== user.user_id.toString()) return; // 前端保護：僅原上傳者可刪除
+    if (!user?.user_id || !fileId) return;
+    if (uploaderId?.toString() !== user.user_id.toString()) return;
     if (!confirm('確定刪除此文件記錄？此操作不可回復。')) return;
     try {
       setDeletingId(fileId);
@@ -85,88 +82,151 @@ export default function JianZhuPage() {
     }
   };
 
-  const handleFileProcessed = async (content: ProcessedContent) => {
-    setProcessedContent(content);
+  useEffect(() => { fetchAllFileRecords(currentPage); }, [user]);
+  useEffect(() => { fetchAllFileRecords(currentPage); }, [currentPage]);
+
+  const handleFileProcessed = async (_content: ProcessedContent) => {
     setIsProcessing(false);
     await fetchAllFileRecords(currentPage);
     await refreshUsage();
+  };
+
+  const handleSelectFile = (fileId: string, fileName: string) => {
+    setSelectedFileId(fileId);
+    try {
+      localStorage.setItem('selectedFileId', fileId);
+      localStorage.setItem('selectedFileName', fileName);
+      localStorage.setItem('currentUnitId', 'jianZhu');
+      const channel = new BroadcastChannel('file-selection');
+      channel.postMessage({
+        type: 'FILE_SELECTED',
+        assistantId: ASSISTANT_IDS.JIAN_ZHU,
+        fileId,
+        fileName,
+        ts: Date.now(),
+      });
+      channel.close();
+    } catch {}
   };
 
   return (
     <WithChat chatType="sunday-guide">
       <div className={styles.container}>
         <UserIdDisplay />
+
+        {/* =============== 1. Upload Section =============== */}
         {hasUploadPermission && (
-          <section className={styles.section}>
-            <h2 className={styles.sectionTitle}>文件上傳與處理</h2>
+          <section className={styles.uploadHero}>
+            <h2 className={styles.uploadHeroTitle}>上传讲章</h2>
+            <p className={styles.uploadHeroDesc}>
+              上传主日讲章文件，系统将自动生成<strong>信息总结</strong>、<strong>每日灵修</strong>与<strong>查经指引</strong>。
+              <br />
+              支持格式：<strong>PDF / 文件</strong>、<strong>YouTube 链接</strong>、<strong>音频文件</strong>
+            </p>
+
             {isUploadDisabled && (
-              <div className={styles.creditWarning}><p>Credits 不足，無法上傳。</p></div>
+              <span className={styles.creditWarningInline}>额度不足，无法上传</span>
             )}
-            <AssistantManager
-              onFileProcessed={handleFileProcessed}
-              setIsProcessing={setIsProcessing}
-              setUploadProgress={setUploadProgress}
-              setUploadTime={setUploadTime}
-              disabled={isUploadDisabled}
-              assistantId={ASSISTANT_IDS.JIAN_ZHU}
-              vectorStoreId={VECTOR_STORE_IDS.JIAN_ZHU}
-            />
+            {!isUploadDisabled && remainingCredits > 0 && remainingCredits < 20 && (
+              <span className={styles.creditWarningInline} style={{ background: '#fef3c7', color: '#92400e' }}>
+                余额较低 ({remainingCredits})
+              </span>
+            )}
+
+            <div className={styles.uploadArea}>
+              <SermonInputTabs
+                onFileProcessed={handleFileProcessed}
+                setIsProcessing={setIsProcessing}
+                setUploadProgress={setUploadProgress}
+                setUploadTime={setUploadTime}
+                disabled={isUploadDisabled}
+                assistantId={ASSISTANT_IDS.JIAN_ZHU}
+                vectorStoreId={VECTOR_STORE_IDS.JIAN_ZHU}
+              />
+            </div>
+
+            {isProcessing && (
+              <div className={styles.processingAlert}>
+                <p>处理中，约需 3-5 分钟，请勿关闭页面...</p>
+              </div>
+            )}
+            {uploadTime && (
+              <span className={styles.uploadTimeBadge}>✓ 完成于 {uploadTime}</span>
+            )}
           </section>
         )}
-        <aside className={styles.recentFilesAside}>
-          <h4 className={styles.recentFilesTitle}>公開瀏覽文件</h4>
-          {recentFiles.length === 0 ? (
-            <div className={styles.noRecentFiles}>尚無可瀏覽文檔</div>
-          ) : (
-            <ul className={styles.recentFilesListScrollable}>
-              {recentFiles.map((file, idx) => (
-                <li
-                  key={file.fileId || idx}
-                  className={styles.recentFileItem}
-                  style={{ cursor: 'pointer', backgroundColor: selectedFileId === file.fileId ? '#e3f2fd' : '#fff', border: selectedFileId === file.fileId ? '2px solid #0070f3' : '2px solid #ddd' }}
-                  onClick={() => {
-                    setSelectedFileId(file.fileId);
-                    try {
-                      localStorage.setItem('selectedFileId', file.fileId);
-                      localStorage.setItem('selectedFileName', file.fileName);
-                      localStorage.setItem('currentUnitId', 'jianZhu');
-                      const channel = new BroadcastChannel('file-selection');
-                      channel.postMessage({
-                        type: 'FILE_SELECTED',
-                        assistantId: ASSISTANT_IDS.JIAN_ZHU,
-                        fileId: file.fileId,
-                        fileName: file.fileName,
-                        ts: Date.now()
-                      });
-                      channel.close();
-                    } catch {}
-                  }}
-                >
-                  <span className={styles.fileIndex}>{((currentPage - 1) * filesPerPage) + idx + 1}. </span>
-                  <span className={styles.fileName}>{file.fileName}</span>
-                  <span className={styles.uploadDate}>{file.uploadDate}</span>
-                  {file.uploaderId && user?.user_id && file.uploaderId.toString() === user.user_id.toString() && (
-                    <button
-                      onClick={(e) => { e.stopPropagation(); handleDelete(file.fileId, file.uploaderId); }}
-                      disabled={deletingId === file.fileId}
-                      style={{
-                        marginLeft: 8,
-                        background: 'none',
-                        border: 'none',
-                        color: 'crimson',
-                        cursor: 'pointer',
-                        fontSize: '14px'
-                      }}
-                      title="刪除此文件"
+
+        {/* =============== 2. Sidebar + Placeholder =============== */}
+        <div className={styles.mainLayout}>
+          <aside className={styles.docsSection}>
+            <h4 className={styles.docsSectionTitle}>
+              📚 文档列表
+              <span className={styles.docsSectionHint}>— 选择一份讲章</span>
+            </h4>
+
+            {recentFiles.length === 0 ? (
+              <div className={styles.noDocs}>暂无文档</div>
+            ) : (
+              <>
+                <ul className={styles.docsListScrollable}>
+                  {recentFiles.map((file, idx) => (
+                    <li
+                      key={file.fileId || idx}
+                      className={`${styles.docItem} ${selectedFileId === file.fileId ? styles.docItemSelected : ''}`}
+                      onClick={() => handleSelectFile(file.fileId, file.fileName)}
+                      title="点击选择此文档"
                     >
-                      {deletingId === file.fileId ? '刪除中...' : '🗑'}
+                      {file.uploaderId && user?.user_id && file.uploaderId.toString() === user.user_id.toString() ? (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleDelete(file.fileId, file.uploaderId); }}
+                          disabled={deletingId === file.fileId}
+                          className={styles.deleteButton}
+                          title="删除此文档"
+                        >
+                          {deletingId === file.fileId ? '...' : '×'}
+                        </button>
+                      ) : (
+                        <span className={styles.deleteButtonPlaceholder} />
+                      )}
+                      <span className={styles.docIndex}>{(currentPage - 1) * filesPerPage + idx + 1}.</span>
+                      <span className={styles.docFileName}>{file.fileName}</span>
+                      <span className={styles.docDate}>{file.uploadDate}</span>
+                    </li>
+                  ))}
+                </ul>
+
+                {totalPages > 1 && (
+                  <div className={styles.pagination}>
+                    <button
+                      onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                      disabled={currentPage === 1}
+                      className={styles.paginationButton}
+                    >
+                      ←
                     </button>
-                  )}
-                </li>
-              ))}
-            </ul>
-          )}
-        </aside>
+                    <span className={styles.paginationInfo}>{currentPage} / {totalPages}</span>
+                    <button
+                      onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                      disabled={currentPage === totalPages}
+                      className={styles.paginationButton}
+                    >
+                      →
+                    </button>
+                  </div>
+                )}
+              </>
+            )}
+          </aside>
+
+          <div className={styles.guidePlaceholder}>
+            <div className={styles.guidePlaceholderIcon}>👈</div>
+            <p className={styles.guidePlaceholderText}>
+              选择讲章后可前往<br />
+              <a href="/jian-zhu/navigator" style={{ color: '#0070f3', textDecoration: 'underline' }}>建主信息導覽</a><br />
+              查看信息总结、灵修与查经
+            </p>
+          </div>
+        </div>
       </div>
     </WithChat>
   );

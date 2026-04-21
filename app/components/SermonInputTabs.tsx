@@ -30,6 +30,8 @@ interface SermonInputTabsProps {
   setUploadProgress: (progress: number) => void;
   setUploadTime: (time: string) => void;
   disabled?: boolean;
+  assistantId?: string;
+  vectorStoreId?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -42,7 +44,11 @@ export default function SermonInputTabs({
   setUploadProgress,
   setUploadTime,
   disabled = false,
+  assistantId: propAssistantId,
+  vectorStoreId: propVectorStoreId,
 }: SermonInputTabsProps) {
+  const effectiveAssistantId = propAssistantId || ASSISTANT_IDS.SUNDAY_GUIDE;
+  const effectiveVectorStoreId = propVectorStoreId || VECTOR_STORE_IDS.SUNDAY_GUIDE;
   const { user } = useAuth();
 
   // Tab state
@@ -455,7 +461,7 @@ export default function SermonInputTabs({
     let existingNames: Set<string> = new Set();
     try {
       const docsRes = await fetch(
-        `/api/sunday-guide/documents?assistantId=${ASSISTANT_IDS.SUNDAY_GUIDE}&allUsers=true&limit=500`
+        `/api/sunday-guide/documents?assistantId=${effectiveAssistantId}&allUsers=true&limit=500`
       );
       if (docsRes.ok) {
         const docsData = await docsRes.json();
@@ -485,7 +491,7 @@ export default function SermonInputTabs({
 
       // Step 1: Upload to vector store (same as PDF path)
       const uploadRes = await fetch(
-        `/api/vector-store/upload?vectorStoreId=${VECTOR_STORE_IDS.SUNDAY_GUIDE}&assistantId=${ASSISTANT_IDS.SUNDAY_GUIDE}`,
+        `/api/vector-store/upload?vectorStoreId=${effectiveVectorStoreId}&assistantId=${effectiveAssistantId}`,
         { method: 'POST', body: formData }
       );
 
@@ -511,8 +517,8 @@ export default function SermonInputTabs({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          assistantId: ASSISTANT_IDS.SUNDAY_GUIDE,
-          vectorStoreId: VECTOR_STORE_IDS.SUNDAY_GUIDE,
+          assistantId: effectiveAssistantId,
+          vectorStoreId: effectiveVectorStoreId,
           fileName,
           fileId: uploadData.fileId,
           userId: user?.user_id || '-',
@@ -530,7 +536,7 @@ export default function SermonInputTabs({
       const pollResult = async () => {
         try {
           const statusRes = await fetch(
-            `/api/sunday-guide/check-result?vectorStoreId=${VECTOR_STORE_IDS.SUNDAY_GUIDE}&fileName=${encodeURIComponent(fileName)}`
+            `/api/sunday-guide/check-result?vectorStoreId=${effectiveVectorStoreId}&fileName=${encodeURIComponent(fileName)}`
           );
           if (!statusRes.ok) {
             setTimeout(pollResult, 5000);
@@ -603,6 +609,8 @@ export default function SermonInputTabs({
     setIsProcessing,
     setUploadProgress,
     setUploadTime,
+    effectiveAssistantId,
+    effectiveVectorStoreId,
   ]);
 
   // =========================================================================
@@ -639,6 +647,8 @@ export default function SermonInputTabs({
             setUploadProgress={setUploadProgress}
             setUploadTime={setUploadTime}
             disabled={disabled}
+            assistantId={propAssistantId}
+            vectorStoreId={propVectorStoreId}
           />
         )}
 
