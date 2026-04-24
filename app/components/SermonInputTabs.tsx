@@ -520,8 +520,8 @@ export default function SermonInputTabs({
 
       setUploadProgress(20);
 
-      // Step 2: Trigger processing (same as PDF path)
-      const processRes = await fetch('/api/sunday-guide/process-document', {
+      // Step 2: Trigger processing（fire-and-forget：不 await，避免 CloudFront 30s 超時）
+      fetch('/api/sunday-guide/process-document', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -532,12 +532,7 @@ export default function SermonInputTabs({
           userId: user?.user_id || '-',
           unitId: propUnitId || undefined,
         }),
-      });
-
-      if (!processRes.ok) {
-        const errData = await processRes.json().catch(() => ({}));
-        throw new Error(errData.error || `处理请求失败 (${processRes.status})`);
-      }
+      }).catch(e => console.log('[SermonInputTabs] process-document kick:', e.message));
 
       setUploadProgress(30);
 
