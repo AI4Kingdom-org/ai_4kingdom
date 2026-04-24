@@ -352,8 +352,8 @@ export default function AssistantManager({
       // 记录处理开始时间
       const startProcessingTime = new Date();
       
-      // 启动处理流程
-      const processResponse = await fetch('/api/sunday-guide/process-document', {
+      // 啟動處理流程（fire-and-forget：不 await，避免 CloudFront 30s 超時）
+      fetch('/api/sunday-guide/process-document', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -363,26 +363,9 @@ export default function AssistantManager({
           fileId: uploadedFileId || undefined,
           userId: user?.user_id || '-'
         })
-      });
+      }).catch(e => console.log('[AssistantManager] process-document kick:', e.message));
       
-      if (!processResponse.ok) {
-        let errorText = "未知错误";
-        try { 
-          const errorResponse = await processResponse.json();
-          errorText = errorResponse.details || errorResponse.error || "处理过程中发生错误";
-        } catch (e) { 
-          console.error("无法解析错误响应:", e); 
-          try {
-            errorText = await processResponse.text();
-          } catch (e2) {
-            console.error("无法读取错误响应文本:", e2);
-          }
-        }
-        console.error("处理失败状态码:", processResponse.status, errorText);
-        throw new Error(`文件处理失败: ${processResponse.status} - ${errorText}`);
-      }
-      
-      // 处理已启动，设置轮询检查
+      // 立即開始輪詢檢查結果
       let pollAttempts = 0;
       const MAX_POLL_ATTEMPTS = 150; // ~7.5 分鐘
       const checkResult = async () => {

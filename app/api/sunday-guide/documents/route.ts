@@ -325,8 +325,9 @@ export async function POST(request: Request) {
       stepStartTime = Date.now();
       console.log(`[DEBUG] 步驟 4: 開始${currentStep}`);
       // 呼叫內部 API 處理內容（用 request.url 取得 origin，避免 serverless 相對路徑失效）
+      // 步驟 4: fire-and-forget 呼叫 process-document，不 await，避免 CloudFront 30s 超時
       const apiOrigin = new URL(request.url).origin;
-      const processRes = await fetch(`${apiOrigin}/api/sunday-guide/process-document`, {
+      fetch(`${apiOrigin}/api/sunday-guide/process-document`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -337,24 +338,19 @@ export async function POST(request: Request) {
           fileId: openaiFile.id,
           unitId: unitId || undefined
         })
-      });
-      const processJson = await processRes.json();
-      if (!processRes.ok) {
-        throw new Error(processJson.error || '文件內容處理失敗');
-      }
-      console.log(`[DEBUG] 步驟 4: ${currentStep}成功，響應:`, processJson);
-      // 回傳成功狀態，但不包含處理時間，因為實際的處理尚未完成
-      // 處理時間將由 process-document 計算並存入資料庫，通過 check-result API 獲取
+      }).catch(e => console.log(`[documents] process-document kick failed: ${e.message}`));
+      console.log(`[DEBUG] 步驟 4: process-document 已觸發（fire-and-forget）`);
+      // 立即回傳，Lambda 繼續在背景執行 process-document
       return NextResponse.json({
         success: true,
         vectorStoreId: vectorStore.id,
         fileId: openaiFile.id,
         fileName: file.name,
         userId: parsedUserId,
-        summary: processJson.summary || null,
-        devotional: processJson.devotional || null,
-        bibleStudy: processJson.bibleStudy || null,
-        processingStarted: true  // 改為標記處理已開始，而非返回處理時間
+        summary: null,
+        devotional: null,
+        bibleStudy: null,
+        processingStarted: true
       });
     } catch (processError) {
       // 詳細記錄處理過程中的錯誤
