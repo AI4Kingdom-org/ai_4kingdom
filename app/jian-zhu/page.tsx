@@ -61,10 +61,10 @@ export default function JianZhuPage() {
   };
 
   const handleDelete = async (fileId: string, uploaderId?: string) => {
-    if (!fileId || !uploaderId) return;
+    if (!fileId) return;
     
-    // 取得當前user_id，如果user=null則試著從uploaderId推斷
-    const currentUserId = user?.user_id || uploaderId?.toString();
+    // 必須是已登入的本人，不允許回退到 uploaderId（避免任意人偽造刪除）
+    const currentUserId = user?.user_id;
     
     if (!currentUserId) return;
     if (!confirm('確定刪除此文件記錄？此操作不可回復。')) return;
@@ -181,7 +181,7 @@ export default function JianZhuPage() {
                       onClick={() => handleSelectFile(file.fileId, file.fileName)}
                       title="点击选择此文档"
                     >
-                      {file.uploaderId ? (
+                      {(user?.user_id && (user.user_id === file.uploaderId || canUploadToSundayGuideUnit('jianZhu', user.user_id))) ? (
                         <button
                           onClick={(e) => { e.stopPropagation(); handleDelete(file.fileId, file.uploaderId); }}
                           disabled={deletingId === file.fileId}
