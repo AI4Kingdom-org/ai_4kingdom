@@ -38,7 +38,7 @@ export default function EastChristHomePage() {
 
   const fetchAllFileRecords = async (page: number = 1) => {
     try {
-      const res = await fetch(`/api/sunday-guide/documents?assistantId=${ASSISTANT_IDS.SUNDAY_GUIDE}&page=${page}&limit=${filesPerPage}&allUsers=true&unitId=eastChristHome`);
+      const res = await fetch(`/api/sunday-guide/documents?assistantId=${ASSISTANT_IDS.AGAPE_CHURCH}&page=${page}&limit=${filesPerPage}&allUsers=true&unitId=eastChristHome`);
       if (!res.ok) throw new Error('獲取文件記錄失敗');
       const data = await res.json();
       if (data.success && data.records) {
@@ -61,12 +61,16 @@ export default function EastChristHomePage() {
   };
 
   const handleDelete = async (fileId: string, uploaderId?: string) => {
-    if (!user?.user_id || !fileId) return;
-    if (uploaderId?.toString() !== user.user_id.toString()) return;
+    if (!fileId || !uploaderId) return;
+    
+    // 取得當前user_id，如果user=null則試著從uploaderId推斷
+    const currentUserId = user?.user_id || uploaderId?.toString();
+    
+    if (!currentUserId) return;
     if (!confirm('確定刪除此文件記錄？此操作不可回復。')) return;
     try {
       setDeletingId(fileId);
-      const qs = new URLSearchParams({ fileId, unitId: 'eastChristHome', userId: user.user_id });
+      const qs = new URLSearchParams({ fileId, unitId: 'eastChristHome', userId: currentUserId });
       const res = await fetch(`/api/sunday-guide/documents?${qs.toString()}`, { method: 'DELETE' });
       const data = await res.json();
       if (!res.ok || !data.success) {
@@ -142,8 +146,9 @@ export default function EastChristHomePage() {
                 setUploadProgress={setUploadProgress}
                 setUploadTime={setUploadTime}
                 disabled={isUploadDisabled}
-                assistantId={ASSISTANT_IDS.SUNDAY_GUIDE}
-                vectorStoreId={VECTOR_STORE_IDS.SUNDAY_GUIDE}
+                assistantId={ASSISTANT_IDS.AGAPE_CHURCH}
+                vectorStoreId={VECTOR_STORE_IDS.AGAPE_CHURCH}
+                unitId="eastChristHome"
               />
             </div>
 
@@ -178,7 +183,7 @@ export default function EastChristHomePage() {
                       onClick={() => handleSelectFile(file.fileId, file.fileName)}
                       title="点击选择此文档"
                     >
-                      {file.uploaderId && user?.user_id && file.uploaderId.toString() === user.user_id.toString() ? (
+                      {file.uploaderId ? (
                         <button
                           onClick={(e) => { e.stopPropagation(); handleDelete(file.fileId, file.uploaderId); }}
                           disabled={deletingId === file.fileId}

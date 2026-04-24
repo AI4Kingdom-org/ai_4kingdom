@@ -448,6 +448,36 @@ export async function GET(request: Request) {
 
     const job = jobs.get(jobId);
     if (!job) {
+      // Fallback for stateless/serverless instances where in-memory job map is not shared.
+      // In this case we treat incoming jobId as the Sora provider task id.
+      if (process.env.OPENAI_API_KEY) {
+        const sora = await getSoraVideoTask(jobId);
+        return NextResponse.json({
+          success: true,
+          jobId,
+          status: sora.status,
+          provider: 'sora',
+          createdAt: null,
+          updatedAt: Date.now(),
+          result: {
+            renderPrompt: '',
+            recommendedTools: ['Sora API'],
+            videoUrl: sora.videoUrl,
+            audioUrl: null,
+            thumbnailUrl: null,
+            exportSpec: {
+              aspectRatio: '16:9',
+              resolution: '720p',
+              width: 1280,
+              height: 720,
+              durationSec: 12,
+              fps: 24,
+            },
+          },
+          error: sora.status === 'error' ? (sora.error || 'Creative Studio Sora generation failed') : null,
+        });
+      }
+
       return NextResponse.json(
         { error: 'JOB_NOT_FOUND', message: '找不到 Creative Studio 對應的影片任務。' },
         { status: 404 },

@@ -32,6 +32,7 @@ interface SermonInputTabsProps {
   disabled?: boolean;
   assistantId?: string;
   vectorStoreId?: string;
+  unitId?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -46,6 +47,7 @@ export default function SermonInputTabs({
   disabled = false,
   assistantId: propAssistantId,
   vectorStoreId: propVectorStoreId,
+  unitId: propUnitId,
 }: SermonInputTabsProps) {
   const effectiveAssistantId = propAssistantId || ASSISTANT_IDS.SUNDAY_GUIDE;
   const effectiveVectorStoreId = propVectorStoreId || VECTOR_STORE_IDS.SUNDAY_GUIDE;
@@ -495,7 +497,13 @@ export default function SermonInputTabs({
         { method: 'POST', body: formData }
       );
 
-      const uploadData = await uploadRes.json();
+      let uploadData: Record<string, any> = {};
+      try {
+        uploadData = await uploadRes.json();
+      } catch {
+        // 空 body（Lambda timeout / CloudFront 504）
+        throw new Error(`文件上傳失敗 (HTTP ${uploadRes.status})，請稍後再試。`);
+      }
       if (!uploadRes.ok) {
         throw new Error(uploadData.error || `上传失败 (${uploadRes.status})`);
       }
@@ -522,6 +530,7 @@ export default function SermonInputTabs({
           fileName,
           fileId: uploadData.fileId,
           userId: user?.user_id || '-',
+          unitId: propUnitId || undefined,
         }),
       });
 
@@ -533,7 +542,15 @@ export default function SermonInputTabs({
       setUploadProgress(30);
 
       // Step 3: Poll for results
+      let pollCount = 0;
+      const MAX_POLLS = 150; // ~7.5 分鐘
       const pollResult = async () => {
+        pollCount++;
+        if (pollCount > MAX_POLLS) {
+          setIsProcessing(false);
+          setState({ status: 'error', message: '處理逾時，請重新上傳或稍後再試。' });
+          return;
+        }
         try {
           const statusRes = await fetch(
             `/api/sunday-guide/check-result?vectorStoreId=${effectiveVectorStoreId}&fileName=${encodeURIComponent(fileName)}`
@@ -543,7 +560,12 @@ export default function SermonInputTabs({
             return;
           }
           const result = await statusRes.json();
-          if (result.found && result.processingTime) {
+          if (result.status === 'failed') {
+            setIsProcessing(false);
+            setState({ status: 'error', message: result.error || '文件處理失敗，請重新嘗試。' });
+            return;
+          }
+          if (result.found) {
             setUploadProgress(100);
             setIsProcessing(false);
             const pdtTime = new Date().toLocaleString('zh-TW', {
@@ -559,7 +581,6 @@ export default function SermonInputTabs({
             setUploadTime(pdtTime);
             onFileProcessed(result);
 
-            // 扣除 token 使用量（透過 server-side API）
             if (user?.user_id) {
               const textLength = (result.summary?.length || 0) +
                 (result.fullText?.length || 0) +
@@ -579,8 +600,7 @@ export default function SermonInputTabs({
 
             setState({ status: 'idle' });
           } else {
-            // Update progress indicator
-            setUploadProgress(Math.min(50, 90));
+            setUploadProgress(Math.min(pollCount * 0.5 + 30, 90));
             setTimeout(pollResult, 3000);
           }
         } catch {

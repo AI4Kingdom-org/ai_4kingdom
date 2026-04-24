@@ -125,7 +125,6 @@ export default function SundayGuide() {
   const handleDelete = async (fileId: string, uploaderId?: string) => {
     if (!user?.user_id) return;
     if (!fileId) return;
-    if (uploaderId?.toString() !== user.user_id.toString()) return; // 前端保護：僅原上傳者可刪除
     if (!confirm('確定刪除此文件記錄？此操作不可回復。')) return;
     
     try {

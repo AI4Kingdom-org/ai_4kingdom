@@ -12,7 +12,7 @@ FROM node:20-slim
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
       python3 python3-pip ffmpeg curl ca-certificates && \
-    pip3 install --break-system-packages youtube-transcript-api && \
+    pip3 install --break-system-packages --upgrade youtube-transcript-api && \
     curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux \
       -o /usr/local/bin/yt-dlp && \
     chmod +x /usr/local/bin/yt-dlp && \

@@ -53,12 +53,14 @@ export default function AssistantManager({
   const [fileName, setFileName] = useState<string>('');
   const [uploadSuccess, setUploadSuccess] = useState<boolean>(false);
   const [uploadedFileName, setUploadedFileName] = useState<string>('');
+  const [uploadedFileId, setUploadedFileId] = useState<string>('');
   const [uploading, setUploading] = useState<boolean>(false);
   const [processing, setProcessing] = useState<boolean>(false);
   const [processingComplete, setProcessingComplete] = useState<boolean>(false);
   const [processingError, setProcessingError] = useState<string | null>(null);
   const [processingStatus, setProcessingStatus] = useState<string>('idle');
   const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const isPollingActiveRef = useRef<boolean>(false);
   const [fileExists, setFileExists] = useState<boolean>(false);  // 新增：檔案是否已存在的狀態
   // 新增：處理完成訊息顯示狀態
   const [showFinalResult, setShowFinalResult] = useState(false);
@@ -188,6 +190,7 @@ export default function AssistantManager({
       setTaskStatus(prev => ({ ...prev, upload: 'completed' }));
       setUploadSuccess(true);
       setUploadedFileName(file.name);
+      setUploadedFileId(responseData.fileId || '');
       setUploading(false);
       setUploadProgress(20);
       
@@ -340,6 +343,7 @@ export default function AssistantManager({
   const handleProcessDocument = async () => {
     setIsProcessing(true);
     setProcessing(true);
+    isPollingActiveRef.current = true;
     setTaskStatus(prev => ({ ...prev, summary: 'processing' }));
     setProcessingComplete(false);
     setProcessingError(null);
@@ -356,7 +360,8 @@ export default function AssistantManager({
           assistantId,
           vectorStoreId,
           fileName: uploadedFileName,
-          userId: user?.user_id || '-' // 添加用户 ID
+          fileId: uploadedFileId || undefined,
+          userId: user?.user_id || '-'
         })
       });
       
@@ -378,19 +383,40 @@ export default function AssistantManager({
       }
       
       // 处理已启动，设置轮询检查
+      let pollAttempts = 0;
+      const MAX_POLL_ATTEMPTS = 150; // ~7.5 分鐘
       const checkResult = async () => {
+        pollAttempts++;
+        if (pollAttempts > MAX_POLL_ATTEMPTS) {
+          isPollingActiveRef.current = false;
+          setProcessing(false);
+          setIsProcessing(false);
+          setProcessingError('處理逾時，請重新上傳或稍後再試。');
+          setProcessingStatus('failed');
+          setTaskStatus(prev => ({ ...prev, summary: 'idle', fullText: 'idle', devotional: 'idle', bibleStudy: 'idle' }));
+          return;
+        }
         try {
-          // 直接查询数据库结果
           const resultResponse = await fetch(`/api/sunday-guide/check-result?vectorStoreId=${vectorStoreId}&fileName=${encodeURIComponent(uploadedFileName)}`);
           if (!resultResponse.ok) {
             setTimeout(checkResult, 5000);
             return;
           }
           const result = await resultResponse.json();
-          if (result.found && result.processingTime) {
+          if (result.status === 'failed') {
+            isPollingActiveRef.current = false;
+            setProcessing(false);
+            setIsProcessing(false);
+            setProcessingError(result.error || '文件處理失敗，請重新嘗試。');
+            setProcessingStatus('failed');
+            setTaskStatus(prev => ({ ...prev, summary: 'idle', fullText: 'idle', devotional: 'idle', bibleStudy: 'idle' }));
+            return;
+          }
+          if (result.found) {
+            isPollingActiveRef.current = false;
             setProcessingComplete(true);
             setProcessing(false);
-            setShowFinalResult(true); // 只有這裡才顯示完成訊息
+            setShowFinalResult(true);
             const pdtTime = getPDTTime();
             setUploadTime(pdtTime);
             const processingTime = calculateTimeSpent(startProcessingTime, result.processingTime);
@@ -405,21 +431,20 @@ export default function AssistantManager({
             setUploadProgress(100);
             handleFileProcessed(result);
           } else {
-            setShowFinalResult(false); // 未完成時不顯示
+            setShowFinalResult(false);
             setTimeout(checkResult, 3000);
           }
         } catch (err) {
           setTimeout(checkResult, 5000);
         }
       };
-      
-      // 开始轮询检查结果，设置更短的初始间隔，以更快检测到处理完成
+
       setTimeout(checkResult, 2000);
       
       // 每 20 秒更新一次处理阶段，让用户看到进展（缩短更新间隔）
       let currentStage = 0;
       const stages = ['summary', 'fullText', 'devotional', 'bibleStudy'];          const updateStage = () => {
-        if (!processingComplete && processing) {
+        if (isPollingActiveRef.current) {
           currentStage = (currentStage + 1) % stages.length;
           setTaskStatus(prev => {
             const newStatus = { ...prev };
@@ -457,6 +482,7 @@ export default function AssistantManager({
       setProcessingError(err instanceof Error ? err.message : '未知错误');
       setProcessingStatus('failed');
       setTaskStatus(prev => ({ ...prev, summary: 'idle', fullText: 'idle', devotional: 'idle', bibleStudy: 'idle' }));
+      isPollingActiveRef.current = false;
       setProcessing(false);
     } finally {
       setIsProcessing(false);
@@ -466,6 +492,7 @@ export default function AssistantManager({
   // 清理輪詢間隔
   useEffect(() => {
     return () => {
+      isPollingActiveRef.current = false;
       if (pollingIntervalRef.current) {
         clearInterval(pollingIntervalRef.current);
       }

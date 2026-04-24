@@ -100,16 +100,20 @@ function getOpenAI(): OpenAI {
 
 // Constants
 const WHISPER_MAX_BYTES = 24 * 1024 * 1024;
+const WHISPER_MAX_DURATION_SEC = 1400; // gpt-4o-transcribe 單次時長上限 (~23min)
 const CHUNK_DURATION_SEC = 20 * 60;
-const MAX_VIDEO_DURATION_SEC = 100 * 60;
+const MAX_VIDEO_DURATION_SEC = 120 * 60;
+const WHISPER_CONCURRENCY = 3;
 const COOKIES_PATH = join(os.tmpdir(), 'yt-cookies.txt');
 
-// Write YouTube cookies from env var (set via: flyctl secrets set YOUTUBE_COOKIES="$(cat cookies.txt)")
+// Write YouTube cookies from env var (base64 encoded to avoid multiline issues)
 async function initCookies(): Promise<void> {
+  const b64 = process.env.YOUTUBE_COOKIES_B64;
   const raw = process.env.YOUTUBE_COOKIES;
-  if (!raw) { console.log('[worker] No YOUTUBE_COOKIES set, yt-dlp will run without cookies'); return; }
-  await writeFile(COOKIES_PATH, raw, 'utf8');
-  console.log(`[worker] Wrote YouTube cookies to ${COOKIES_PATH} (${raw.length} chars)`);
+  if (!b64 && !raw) { console.log('[worker] No YOUTUBE_COOKIES set, yt-dlp will run without cookies'); return; }
+  const content = b64 ? Buffer.from(b64, 'base64').toString('utf8') : raw!;
+  await writeFile(COOKIES_PATH, content, 'utf8');
+  console.log(`[worker] Wrote YouTube cookies to ${COOKIES_PATH} (${content.length} chars)`);
 }
 
 function cookiesArg(): string {
@@ -124,32 +128,38 @@ function proxyArg(): string {
 }
 
 // Python script for youtube_transcript_api (bypasses bot detection via timedtext API)
+// Compatible with youtube-transcript-api v1.x+ (new API) and falls back for older versions
 const TRANSCRIPT_SCRIPT = `
 import sys, json
-from youtube_transcript_api import YouTubeTranscriptApi, TranscriptsDisabled, NoTranscriptFound
 
 video_id = sys.argv[1]
 langs = sys.argv[2:] or ['zh-TW','zh-Hant','zh-Hans','zh','en']
+
 try:
-    transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
-    transcript = None
-    for lang in langs:
+    from youtube_transcript_api import YouTubeTranscriptApi
+
+    # v1.x+ API: instance-based
+    ytt = YouTubeTranscriptApi()
+    try:
+        # Try fetching with preferred languages
+        data = ytt.fetch(video_id, languages=langs)
+    except Exception:
+        # Fallback: fetch without language preference (auto-generated)
         try:
-            transcript = transcript_list.find_transcript([lang])
-            break
-        except: pass
-    if not transcript:
-        for t in transcript_list:
-            transcript = t
-            break
-    if not transcript:
+            data = ytt.fetch(video_id)
+        except Exception as e2:
+            print(f"ERROR: {e2}", file=sys.stderr)
+            sys.exit(1)
+
+    snippets = []
+    for item in data:
+        text = getattr(item, 'text', None) or (item.get('text') if isinstance(item, dict) else str(item))
+        if text:
+            snippets.append(text)
+    if not snippets:
         print("NO_TRANSCRIPT", file=sys.stderr); sys.exit(1)
-    data = transcript.fetch()
-    print(' '.join(item['text'] for item in data if item.get('text')))
-except TranscriptsDisabled:
-    print("TRANSCRIPTS_DISABLED", file=sys.stderr); sys.exit(1)
-except NoTranscriptFound:
-    print("NO_TRANSCRIPT", file=sys.stderr); sys.exit(1)
+    print(' '.join(snippets))
+
 except Exception as e:
     print(f"ERROR: {e}", file=sys.stderr); sys.exit(1)
 `;
@@ -197,6 +207,16 @@ async function ensureYtDlp(): Promise<string> {
     if (stdout.trim()) {
       console.log('[worker] system yt-dlp:', stdout.trim());
       ytDlpBin = 'yt-dlp';
+
+      // Self-update to latest version (runs once per process start)
+      try {
+        console.log('[worker] Updating yt-dlp to latest...');
+        const { stdout: upOut } = await execAsync('yt-dlp -U', { timeout: 60_000 });
+        console.log('[worker] yt-dlp update:', (upOut || '').trim().split('\n')[0] || 'already up to date');
+      } catch (upErr: any) {
+        console.log('[worker] yt-dlp -U skipped:', upErr?.message?.slice(0, 100));
+      }
+
       return ytDlpBin;
     }
   } catch { /* not in PATH */ }
@@ -217,6 +237,16 @@ async function ensureYtDlp(): Promise<string> {
   chmodSync(binaryPath, 0o755);
   console.log('[worker] yt-dlp ready:', binaryPath);
   ytDlpBin = binaryPath;
+
+  // Self-update to latest version (runs once per process start)
+  try {
+    console.log('[worker] Updating yt-dlp to latest...');
+    const { stdout: upOut } = await execAsync(`"${ytDlpBin}" -U`, { timeout: 60_000 });
+    console.log('[worker] yt-dlp update:', (upOut || '').trim().split('\n')[0] || 'already up to date');
+  } catch (upErr: any) {
+    console.log('[worker] yt-dlp -U skipped:', upErr?.message?.slice(0, 100));
+  }
+
   return ytDlpBin;
 }
 
@@ -278,9 +308,27 @@ async function transcribeFile(filePath: string, ext: string): Promise<string> {
   const buf = await readFile(filePath);
   const whisperFile = new File([buf], `audio.${ext}`, { type: mimeType });
   const result = await getOpenAI().audio.transcriptions.create({
-    file: whisperFile, model: 'whisper-1', response_format: 'text', language: 'zh',
+    file: whisperFile, model: 'gpt-4o-transcribe', response_format: 'text', language: 'zh',
   });
   return typeof result === 'string' ? result : (result as any).text || String(result);
+}
+
+// Parallel Whisper transcription with concurrency limit
+async function transcribeChunksParallel(
+  chunks: string[], defaultExt: string,
+): Promise<string[]> {
+  const parts: string[] = [];
+  for (let i = 0; i < chunks.length; i += WHISPER_CONCURRENCY) {
+    const batch = chunks.slice(i, i + WHISPER_CONCURRENCY)
+      .filter((c) => statSync(c).size <= WHISPER_MAX_BYTES);
+    if (!batch.length) continue;
+    console.log(`[worker] Transcribing chunks ${i + 1}–${Math.min(i + WHISPER_CONCURRENCY, chunks.length)}/${chunks.length} (parallel)...`);
+    const results = await Promise.all(
+      batch.map((c) => transcribeFile(c, c.split('.').pop()?.toLowerCase() || defaultExt)),
+    );
+    parts.push(...results.filter((r) => r.trim()));
+  }
+  return parts;
 }
 
 // GPT formatting
@@ -308,7 +356,7 @@ async function formatTranscript(rawText: string): Promise<string> {
           },
           { role: 'user', content: chunk },
         ],
-        max_tokens: 4096,
+        max_tokens: 8192,
       });
       parts.push(completion.choices[0]?.message?.content?.trim() ?? chunk);
     }
@@ -363,6 +411,7 @@ app.post('/api/audio-transcribe',
     let fileName = rawFileName;
     try { fileName = decodeURIComponent(rawFileName); } catch { /* already plain ASCII */ }
     const ext = (fileName.split('.').pop() || 'mp3').toLowerCase();
+    const skipFormat = req.query.format === 'false';
     const tmpDir = join(os.tmpdir(), `audio-upload-${Date.now()}`);
     const chunkDir = join(tmpDir, 'chunks');
     try {
@@ -373,26 +422,17 @@ app.post('/api/audio-transcribe',
       const fileSizeBytes = statSync(audioPath).size;
       const fileSizeMB = fileSizeBytes / (1024 * 1024);
       console.log(`[worker] Audio upload: ${fileName} (${fileSizeMB.toFixed(1)}MB)`);
-      const WHISPER_MAX_BYTES = 24 * 1024 * 1024;
-      const CHUNK_DURATION_SEC = 20 * 60;
       let transcript = '';
-      if (fileSizeBytes <= WHISPER_MAX_BYTES) {
+      const ffmpegForDur = await ensureFfmpeg().catch(() => null);
+      const durSec = ffmpegForDur ? await getAudioDuration(ffmpegForDur, audioPath) : 0;
+      if (fileSizeBytes <= WHISPER_MAX_BYTES && durSec <= WHISPER_MAX_DURATION_SEC) {
         console.log('[worker] Transcribing directly...');
         transcript = await transcribeFile(audioPath, ext);
       } else {
-        const ffmpeg = await ensureFfmpeg();
+        const ffmpeg = ffmpegForDur || await ensureFfmpeg();
         const chunks = await splitAudio(ffmpeg, audioPath, chunkDir, CHUNK_DURATION_SEC);
         console.log(`[worker] Split into ${chunks.length} chunks`);
-        const parts: string[] = [];
-        for (let i = 0; i < chunks.length; i++) {
-          const chunkPath = chunks[i];
-          const chunkExt = chunkPath.split('.').pop()?.toLowerCase() || ext;
-          const chunkBytes = statSync(chunkPath).size;
-          if (chunkBytes > WHISPER_MAX_BYTES) { console.warn(`[worker] Chunk ${i + 1} too large, skipping`); continue; }
-          console.log(`[worker] Transcribing chunk ${i + 1}/${chunks.length}...`);
-          const part = await transcribeFile(chunkPath, chunkExt);
-          if (part.trim()) parts.push(part.trim());
-        }
+        const parts = await transcribeChunksParallel(chunks, ext);
         transcript = parts.join(' ');
       }
       if (!transcript || !transcript.trim()) {
@@ -400,7 +440,7 @@ app.post('/api/audio-transcribe',
         return;
       }
       console.log(`[worker] Whisper done: ${transcript.length} chars, formatting...`);
-      const formatted = await formatTranscript(transcript.trim());
+      const formatted = skipFormat ? transcript.trim() : await formatTranscript(transcript.trim());
       console.log(`[worker] Done: ${formatted.length} chars`);
       res.json({ transcript: formatted, source: 'whisper', fileName, charCount: formatted.length });
     } catch (error: any) {
@@ -416,7 +456,7 @@ app.post('/api/youtube-audio', authMiddleware, async (req: express.Request, res:
   const chunkDir = join(tmpDir, 'chunks');
 
   try {
-    const { url, startTime, endTime } = req.body;
+    const { url, startTime, endTime, format = true } = req.body;
     if (!url || typeof url !== 'string') {
       res.status(400).json({ error: 'INVALID_URL', message: 'Please provide a valid YouTube URL' });
       return;
@@ -437,7 +477,7 @@ app.post('/api/youtube-audio', authMiddleware, async (req: express.Request, res:
       const transcriptText = await getYouTubeTranscript(videoId);
       if (transcriptText && transcriptText.length > 50) {
         console.log('[worker] Transcript available, skipping audio download');
-        const formatted = await formatTranscript(transcriptText);
+        const formatted = format ? await formatTranscript(transcriptText) : transcriptText.trim();
         res.json({
           transcript: formatted,
           source: 'youtube_transcript',
@@ -554,22 +594,16 @@ app.post('/api/youtube-audio', authMiddleware, async (req: express.Request, res:
 
     // Transcribe with Whisper
     let transcript = '';
-    if (fileBytes <= WHISPER_MAX_BYTES) {
-      console.log('[worker] Transcribing directly...');
+    const durSec = await getAudioDuration(ffmpeg, audioPath);
+    const needsChunking = fileBytes > WHISPER_MAX_BYTES || durSec > WHISPER_MAX_DURATION_SEC;
+    if (!needsChunking) {
+      console.log(`[worker] Transcribing directly (${fileMB.toFixed(1)}MB, ${Math.round(durSec / 60)}min)...`);
       transcript = await transcribeFile(audioPath, ext);
     } else {
-      console.log(`[worker] ${fileMB.toFixed(1)}MB > 24MB, splitting...`);
-      const dur = await getAudioDuration(ffmpeg, audioPath);
+      console.log(`[worker] Needs chunking: ${fileMB.toFixed(1)}MB, ${Math.round(durSec / 60)}min — splitting...`);
       const chunks = await splitAudio(ffmpeg, audioPath, chunkDir, CHUNK_DURATION_SEC);
-      console.log(`[worker] ${chunks.length} chunks (dur ~${Math.round(dur / 60)}min)`);
-      const parts: string[] = [];
-      for (let i = 0; i < chunks.length; i++) {
-        const chunkBytes = statSync(chunks[i]).size;
-        if (chunkBytes > WHISPER_MAX_BYTES) { console.warn(`[worker] Chunk ${i + 1} too large, skip`); continue; }
-        const chunkExt = chunks[i].split('.').pop()?.toLowerCase() || ext;
-        const part = await transcribeFile(chunks[i], chunkExt);
-        if (part.trim()) parts.push(part.trim());
-      }
+      console.log(`[worker] ${chunks.length} chunks`);
+      const parts = await transcribeChunksParallel(chunks, ext);
       transcript = parts.join(' ');
     }
 
@@ -579,7 +613,7 @@ app.post('/api/youtube-audio', authMiddleware, async (req: express.Request, res:
     }
 
     console.log(`[worker] Whisper done: ${transcript.length} chars, formatting...`);
-    const formatted = await formatTranscript(transcript.trim());
+    const formatted = format ? await formatTranscript(transcript.trim()) : transcript.trim();
     console.log(`[worker] Done: ${formatted.length} chars`);
 
     res.json({
@@ -618,7 +652,9 @@ app.get('/health', (_req: express.Request, res: express.Response) => {
 });
 
 // Start server
-Promise.all([initCookies(), ensureTranscriptScript()]).then(() => {
+Promise.all([initCookies(), ensureTranscriptScript(), ensureYtDlp().catch((e) => {
+  console.warn('[worker] yt-dlp pre-warm failed (will retry on first request):', e?.message?.slice(0, 100));
+})]).then(() => {
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`[worker] YouTube Audio Worker running on port ${PORT}`);
   });

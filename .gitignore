@@ -100,3 +100,17 @@ app/temp/*
 # 忽略所有.env文件
 .env
 .venv
+
+# 機密/敏感操作工具（不應進入版本控制）
+cookies.txt
+chrome_cookies_copy
+chrome_cookies_copy_p1
+export-cookies-script.js
+extract_cookies.ps1
+extract_cookies.py
+extract_cookies_admin.bat
+extract_via_cdp.py
+run_cdp_extractor.bat
+
+# Claude 本地設定
+.claude/

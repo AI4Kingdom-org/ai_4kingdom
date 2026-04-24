@@ -38,7 +38,8 @@ export async function POST(req: Request) {
     const kicked: any[] = [];
     for (const t of targets) {
       try {
-        await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL || ''}/api/sunday-guide/process-document`, {
+        const apiOrigin = new URL(req.url).origin;
+        await fetch(`${apiOrigin}/api/sunday-guide/process-document`, {
           method: 'POST',
           headers: { 'Content-Type':'application/json' },
           body: JSON.stringify({

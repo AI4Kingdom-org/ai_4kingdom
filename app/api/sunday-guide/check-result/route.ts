@@ -4,6 +4,28 @@ import { ScanCommand } from '@aws-sdk/lib-dynamodb';
 
 const SUNDAY_GUIDE_TABLE = process.env.NEXT_PUBLIC_SUNDAY_GUIDE_TABLE || 'SundayGuide';
 
+async function scanAllPages(
+  docClient: any,
+  params: { TableName: string; FilterExpression: string; ExpressionAttributeValues: Record<string, any> },
+  maxPages = 60
+) {
+  let items: any[] = [];
+  let lastEvaluatedKey: any = undefined;
+  let pages = 0;
+
+  do {
+    const res = await docClient.send(new ScanCommand({
+      ...params,
+      ExclusiveStartKey: lastEvaluatedKey
+    }));
+    items = items.concat(res.Items || []);
+    lastEvaluatedKey = (res as any).LastEvaluatedKey;
+    pages += 1;
+  } while (lastEvaluatedKey && pages < maxPages);
+
+  return items;
+}
+
 export async function GET(request: Request) {
   try {
     const url = new URL(request.url);
@@ -22,7 +44,8 @@ export async function GET(request: Request) {
     const docClient = await createDynamoDBClient();
     
     // 查詢處理結果 - 修改為使用 generationStatus 或 completed
-    const params = {
+    // Check for completed records
+    const completedParams = {
       TableName: SUNDAY_GUIDE_TABLE,
       FilterExpression: "vectorStoreId = :vectorStoreId AND fileName = :fileName AND (generationStatus = :completed OR (attribute_not_exists(generationStatus) AND completed = :completedFlag))",
       ExpressionAttributeValues: {
@@ -33,14 +56,13 @@ export async function GET(request: Request) {
       }
     };
 
-    const result = await docClient.send(new ScanCommand(params));
-    
-    if (result.Items && result.Items.length > 0) {
-      // 找到已完成的記錄
-      const latestItem = result.Items.sort((a, b) => 
+    const completedItems = await scanAllPages(docClient, completedParams);
+
+    if (completedItems.length > 0) {
+      const latestItem = completedItems.sort((a, b) =>
         new Date(b.Timestamp || "").getTime() - new Date(a.Timestamp || "").getTime()
       )[0];
-      
+
       return NextResponse.json({
         found: true,
         summary: latestItem.summary,
@@ -51,10 +73,32 @@ export async function GET(request: Request) {
         processingTime: latestItem.processingTime
       });
     }
-    
-    // 沒有找到結果
+
+    // Check for failed records
+    const failedParams = {
+      TableName: SUNDAY_GUIDE_TABLE,
+      FilterExpression: "vectorStoreId = :vectorStoreId AND fileName = :fileName AND generationStatus = :failed",
+      ExpressionAttributeValues: {
+        ":vectorStoreId": vectorStoreId,
+        ":fileName": fileName,
+        ":failed": "failed"
+      }
+    };
+    const failedItems = await scanAllPages(docClient, failedParams);
+    if (failedItems.length > 0) {
+      const latestFailed = failedItems.sort((a, b) =>
+        new Date(b.Timestamp || "").getTime() - new Date(a.Timestamp || "").getTime()
+      )[0];
+      return NextResponse.json({
+        found: false,
+        status: 'failed',
+        error: latestFailed.lastError || '處理失敗'
+      });
+    }
+
     return NextResponse.json({
       found: false,
+      status: 'processing',
       message: '處理尚未完成'
     });
 
