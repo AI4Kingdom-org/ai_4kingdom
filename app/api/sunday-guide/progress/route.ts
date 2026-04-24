@@ -5,6 +5,28 @@ import { GetCommand, ScanCommand } from '@aws-sdk/lib-dynamodb';
 const PROGRESS_TABLE = process.env.NEXT_PUBLIC_SUNDAY_GUIDE_PROGRESS || 'SundayGuideProgress';
 const SUNDAY_GUIDE_TABLE = process.env.NEXT_PUBLIC_SUNDAY_GUIDE_TABLE || 'SundayGuide';
 
+async function scanAllPages(
+  docClient: any,
+  params: { TableName: string; FilterExpression: string; ExpressionAttributeValues: Record<string, any> },
+  maxPages = 60
+) {
+  let items: any[] = [];
+  let lastEvaluatedKey: any = undefined;
+  let pages = 0;
+
+  do {
+    const res = await docClient.send(new ScanCommand({
+      ...params,
+      ExclusiveStartKey: lastEvaluatedKey
+    }));
+    items = items.concat(res.Items || []);
+    lastEvaluatedKey = (res as any).LastEvaluatedKey;
+    pages += 1;
+  } while (lastEvaluatedKey && pages < maxPages);
+
+  return items;
+}
+
 export async function GET(request: Request) {
   try {
     const url = new URL(request.url);
@@ -34,11 +56,11 @@ export async function GET(request: Request) {
       }
     };
 
-    const completedResult = await docClient.send(new ScanCommand(completedParams));
+    const completedItems = await scanAllPages(docClient, completedParams);
     
-    if (completedResult.Items && completedResult.Items.length > 0) {
+    if (completedItems.length > 0) {
       // 找到已完成的記錄，表示處理已完成
-      const latestItem = completedResult.Items.sort((a, b) => 
+      const latestItem = completedItems.sort((a, b) => 
         new Date(b.Timestamp || "").getTime() - new Date(a.Timestamp || "").getTime()
       )[0];
       
@@ -82,11 +104,11 @@ export async function GET(request: Request) {
       }
     };
     
-    const progressResult = await docClient.send(new ScanCommand(progressParams));
+    const progressItems = await scanAllPages(docClient, progressParams);
     
-    if (progressResult.Items && progressResult.Items.length > 0) {
+    if (progressItems.length > 0) {
       // 找到進度記錄
-      const latestProgress = progressResult.Items.sort((a, b) => 
+      const latestProgress = progressItems.sort((a, b) => 
         new Date(b.updatedAt || "").getTime() - new Date(a.updatedAt || "").getTime()
       )[0];
       

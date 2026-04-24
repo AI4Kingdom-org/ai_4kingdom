@@ -54,7 +54,7 @@ async function formatChunk(text: string): Promise<string> {
         content: text,
       },
     ],
-    max_tokens: 4096,
+    max_tokens: 8192,
   });
 
   return completion.choices[0]?.message?.content?.trim() ?? text;

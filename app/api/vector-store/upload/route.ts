@@ -173,6 +173,22 @@ export async function POST(request: Request) {
     });
 
     try {
+      const fileExt = file.name.match(/\.[^.]+$/)?.[0]?.toLowerCase() ?? '';
+
+      // .doc → 以 .docx MIME 型別送給 OpenAI
+      // 現代 Word 存成 .doc 實際上是 OOXML，改 Content-Type 讓 OpenAI 正確索引
+      // DynamoDB 仍保存原始檔名（.doc），前端 polling 不受影響
+      let fileToUpload: File = file;
+      if (fileExt === '.doc') {
+        const docxName = file.name.replace(/\.doc$/i, '.docx');
+        fileToUpload = new File(
+          [await file.arrayBuffer()],
+          docxName,
+          { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' }
+        );
+        console.log(`[DEBUG] .doc 轉為 .docx 上傳至 OpenAI: ${docxName}`);
+      }
+
       // 檢查文件名稱是否已存在
       const fileNameExists = await checkFileNameExists(file.name, assistantId);
       if (fileNameExists) {
@@ -189,9 +205,9 @@ export async function POST(request: Request) {
       }
 
       // 1. 上傳文件到 OpenAI
-      console.log(`[DEBUG] 上傳文件到 OpenAI: ${file.name}`);
+      console.log(`[DEBUG] 上傳文件到 OpenAI: ${fileToUpload.name}`);
       const uploadedFile = await openai.files.create({
-        file,
+        file: fileToUpload,
         purpose: 'assistants'
       });
       console.log(`[DEBUG] 文件上傳成功: ${uploadedFile.id}`);      // 2. 添加到 Vector Store
@@ -253,14 +269,9 @@ export async function POST(request: Request) {
         // 即使 DynamoDB 寫入失敗，仍然繼續流程，只記錄錯誤
       }
 
-      try {
-        // 等待文件處理完成 - 即使超時也不會導致錯誤
-        await waitForFileProcessing(vectorStoreId);
-        console.log(`[DEBUG] 文件已上傳並處理完成，文件ID: ${uploadedFile.id}`);
-      } catch (processingErr) {
-        // 捕獲任何可能的錯誤，但仍視為上傳成功
-        console.error('[ERROR] 文件處理檢查出錯，但視為上傳成功:', processingErr);
-      }
+      // 等待文件索引由 process-document 端的 waitForFileReady() 負責，
+      // upload 端不再輪詢，避免超過 CloudFront origin timeout (504)
+      console.log(`[DEBUG] 文件已上傳，文件ID: ${uploadedFile.id}`);
 
       // 注意：OpenAI Vector Store API 不支持添加自定義元數據，改為使用 DynamoDB 保存檔案資訊
       console.log(`[DEBUG] 文件可被所有用戶訪問 (系統資源)`);

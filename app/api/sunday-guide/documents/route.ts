@@ -44,13 +44,12 @@ export async function GET(request: Request) {
     
     // Agape 公開瀏覽特殊處理：
     // 現在 Agape 與 Sunday Guide 共用 assistantId；若 agapeFilter=true 則忽略傳入的 assistantId 過濾，稍後用 unitId / 舊 assistantId 二次篩選。
-  // 若指定 unitId 或 agapeFilter，先不以 assistantId 篩選（改以二次過濾）
-  if (!agapeFilter && !unitIdParam) {
+    // 未指定 assistantId 且非 agapeFilter → 排除舊 Agape 專用助手資料 (且不排除其他單位)
+    if (!agapeFilter && !unitIdParam) {
       if (assistantId) {
         filterExpressions.push("assistantId = :assistantId");
         expressionAttributeValues[":assistantId"] = assistantId;
       } else {
-        // 未指定 assistantId 且非 agapeFilter → 排除舊 Agape 專用助手資料
         filterExpressions.push("assistantId <> :agapeAid");
         expressionAttributeValues[":agapeAid"] = ASSISTANT_IDS.AGAPE_CHURCH;
       }
@@ -84,28 +83,60 @@ export async function GET(request: Request) {
       ExpressionAttributeValues: params.ExpressionAttributeValues
     });
     
-    // 查詢文件記錄
-    const result = await docClient.send(new ScanCommand(params));
-    
-    console.log('[DEBUG] 查詢結果:', {
-      itemCount: result.Items?.length || 0,
-      firstItem: result.Items && result.Items.length > 0 ? JSON.stringify(result.Items[0]).substring(0, 200) : '無記錄'
-    });
+    // 查詢文件記錄（分頁掃描，避免只拿到 DynamoDB 首頁 1MB 資料）
+    let recordsRaw: any[] = [];
+    let lastEvaluatedKey: any = undefined;
+    let scanPages = 0;
+    const MAX_SCAN_PAGES = 50;
 
-    // 處理查詢結果
-    let recordsRaw = result.Items || [];
+    do {
+      const scanParams = {
+        ...params,
+        ExclusiveStartKey: lastEvaluatedKey
+      };
+      const result = await docClient.send(new ScanCommand(scanParams));
+      recordsRaw = recordsRaw.concat(result.Items || []);
+      lastEvaluatedKey = result.LastEvaluatedKey;
+      scanPages += 1;
+    } while (lastEvaluatedKey && scanPages < MAX_SCAN_PAGES);
+
+    console.log('[DEBUG] 查詢結果:', {
+      pageCount: scanPages,
+      itemCount: recordsRaw.length,
+      firstItem: recordsRaw.length > 0 ? JSON.stringify(recordsRaw[0]).substring(0, 200) : '無記錄',
+      truncated: !!lastEvaluatedKey
+    });
 
     // 單位過濾：
     // - 若有 unitIdParam：僅顯示該單位，並依該單位 allowedUploaders 篩選（公開瀏覽頁面 allUsers=true 場景）
     // - 若 agapeFilter=true（相容舊參數）：行為等同 unitIdParam='agape'
     const effectiveUnit = unitIdParam || (agapeFilter ? 'agape' : undefined);
     if (effectiveUnit) {
-      const unitCfg = getSundayGuideUnitConfig(effectiveUnit);
-      const allowed = unitCfg.allowedUploaders.map((u: string) => u.toString());
+      // 取得該單位對應的 assistantId 與設定
+      const targetConfig = getSundayGuideUnitConfig(effectiveUnit);
+      const targetAssistantId = targetConfig?.assistantId;
+
+      // allUsers=true（公開瀏覽）時不再依 allowedUploaders 限制顯示
       recordsRaw = recordsRaw.filter(item => {
-        const uploader = (item.uploadedBy || item.userId || item.UserId || '').toString();
-        const itemUnit = (item.unitId || '').toString();
-        return itemUnit === effectiveUnit && (allowed.length === 0 || allowed.includes(uploader));
+        // 優先使用明確 unitId，避免共用 assistantId 時互相混入
+        const hasExplicitUnit = item.unitId !== undefined && item.unitId !== null && `${item.unitId}`.trim() !== '';
+        if (hasExplicitUnit) {
+          return `${item.unitId}` === effectiveUnit;
+        }
+
+        // 舊資料缺 unitId 時，才回退用 assistantId 判斷
+        // 若 assistantId 對應的主單位不是目前單位，代表共享助手場景（如 east/agape），避免混入
+        if (targetAssistantId) {
+          const fallbackUnit = findUnitByAssistantId(targetAssistantId);
+          if (fallbackUnit !== effectiveUnit) {
+            return false;
+          }
+          return item.assistantId === targetAssistantId;
+        }
+
+        // 否則退回嚴格比對 unitId
+        const itemUnit = (item.unitId || findUnitByAssistantId(item.assistantId)).toString();
+        return itemUnit === effectiveUnit;
       });
     }
 
@@ -129,6 +160,15 @@ export async function GET(request: Request) {
       const dateA = new Date(a.updatedAt).getTime();
       const dateB = new Date(b.updatedAt).getTime();
       return dateB - dateA;
+    });
+
+    // 去重：同一個 fileId 可能因重試產生多筆 DynamoDB 記錄，排序後只保留最新一筆
+    const seenFileIds = new Set<string>();
+    records = records.filter(r => {
+      if (!r.fileId) return true; // 無 fileId 的紀錄保留
+      if (seenFileIds.has(r.fileId)) return false;
+      seenFileIds.add(r.fileId);
+      return true;
     });
 
     // 如果是分頁請求，進行分頁處理
@@ -190,6 +230,7 @@ export async function POST(request: Request) {
     const file = formData.get('files') as File;
     const assistantId = formData.get('assistantId') as string;
     const userId = formData.get('userId') as string; // 獲取 userId
+    const unitId = (formData.get('unitId') as string) || undefined; // 上傳時帶入的單位
 
     // 標準化用戶 ID 的處理
     let parsedUserId = userId;
@@ -283,8 +324,9 @@ export async function POST(request: Request) {
       currentStep = '產生 summary/devotional/bibleStudy';
       stepStartTime = Date.now();
       console.log(`[DEBUG] 步驟 4: 開始${currentStep}`);
-      // 呼叫內部 API 處理內容
-      const processRes = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL || ''}/api/sunday-guide/process-document`, {
+      // 呼叫內部 API 處理內容（用 request.url 取得 origin，避免 serverless 相對路徑失效）
+      const apiOrigin = new URL(request.url).origin;
+      const processRes = await fetch(`${apiOrigin}/api/sunday-guide/process-document`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -292,7 +334,8 @@ export async function POST(request: Request) {
           vectorStoreId: vectorStore.id,
           fileName: file.name,
           userId: parsedUserId,
-          fileId: openaiFile.id
+          fileId: openaiFile.id,
+          unitId: unitId || undefined
         })
       });
       const processJson = await processRes.json();
@@ -329,7 +372,7 @@ export async function POST(request: Request) {
         environment: {
           nodeEnv: process.env.NODE_ENV,
           region: process.env.NEXT_PUBLIC_REGION,
-          apiBaseUrl: process.env.NEXT_PUBLIC_API_BASE_URL,
+          apiBaseUrl: new URL(request.url).origin,
         }
       };
       
@@ -375,13 +418,24 @@ export async function DELETE(request: Request) {
     }    const docClient = await createDynamoDBClient();
     const tableName = process.env.NEXT_PUBLIC_SUNDAY_GUIDE_TABLE || 'SundayGuide';
 
-    // 以 fileId 掃描定位紀錄（後續可用 GSI 優化）
-    const scanRes = await docClient.send(new ScanCommand({
-      TableName: tableName,
-      FilterExpression: 'fileId = :fid',
-      ExpressionAttributeValues: { ':fid': fileId }
-    }));
-    const items = scanRes.Items || [];
+    // 以 fileId 分頁掃描定位紀錄（避免 DynamoDB 1MB 單次 Scan 限制導致找不到）
+    // 注意：必須掃描完整張表，因為同一 fileId 可能有多筆紀錄（重傳/重試產生）
+    let items: any[] = [];
+    let lastKey: any = undefined;
+    let scanPages = 0;
+    const MAX_DELETE_SCAN_PAGES = 50;
+    do {
+      const scanRes = await docClient.send(new ScanCommand({
+        TableName: tableName,
+        FilterExpression: 'fileId = :fid',
+        ExpressionAttributeValues: { ':fid': fileId },
+        ExclusiveStartKey: lastKey
+      }));
+      items = items.concat(scanRes.Items || []);
+      lastKey = scanRes.LastEvaluatedKey;
+      scanPages++;
+    } while (lastKey && scanPages < MAX_DELETE_SCAN_PAGES);
+
     if (items.length === 0) {
       return NextResponse.json({ success: false, error: '找不到檔案紀錄' }, { status: 404 });
     }
@@ -389,16 +443,28 @@ export async function DELETE(request: Request) {
     // 若有多筆同 fileId，取最新
     const target = items.sort((a: any, b: any) => new Date(b.Timestamp).getTime() - new Date(a.Timestamp).getTime())[0];
     const uploader = (target.uploadedBy || target.userId || target.UserId || '').toString();
-    const recordUnit = (target.unitId || '').toString();
+    // 舊資料可能沒有 unitId 欄位，fallback 用 assistantId 推斷（同 GET 列表邏輯）
+    const recordUnit = (target.unitId || findUnitByAssistantId(target.assistantId) || '').toString();
 
-    if (uploader !== userId.toString()) {
+    // 允許刪除條件：本人上傳者，或該單位的管理員（allowedUploaders 成員）
+    const unitConfig = getSundayGuideUnitConfig(unitId);
+    const allowedUploaders: string[] = (unitConfig as any)?.allowedUploaders || [];
+    const isAdmin = allowedUploaders.length > 0 && allowedUploaders.includes(userId.toString());
+    if (uploader !== userId.toString() && !isAdmin) {
       return NextResponse.json({ success: false, error: '無刪除權限 (非上傳者)' }, { status: 403 });
     }
     
     // 對於 default 單位，接受沒有 unitId 或 unitId 為空的記錄
-    const recordUnitMatches = (unitId === 'default') 
+    // 若記錄無明確 unitId，且請求單位的 assistantId 與記錄的 assistantId 一致，管理員可刪除
+    // （解決 agape/eastChristHome 共用同一 assistantId 導致 findUnitByAssistantId 只回傳第一個單位的問題）
+    const recordHasExplicitUnit = target.unitId !== undefined && target.unitId !== null && `${target.unitId}`.trim() !== '';
+    const requestedUnitConfig = getSundayGuideUnitConfig(unitId);
+    const requestedAssistantId = (requestedUnitConfig as any)?.assistantId;
+    const assistantIdMatches = !!requestedAssistantId && target.assistantId === requestedAssistantId;
+
+    const recordUnitMatches = (unitId === 'default')
       ? (!recordUnit || recordUnit === '' || recordUnit === 'default')
-      : (recordUnit === unitId);
+      : (recordUnit === unitId || (!recordHasExplicitUnit && assistantIdMatches));
       
     if (!recordUnitMatches) {
       return NextResponse.json({ success: false, error: '紀錄單位與請求單位不一致' }, { status: 400 });
@@ -410,10 +476,17 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ success: false, error: '紀錄缺少主鍵 (assistantId / Timestamp)' }, { status: 500 });
     }
 
-    await docClient.send(new DeleteCommand({
-      TableName: tableName,
-      Key: { assistantId, Timestamp: timestamp }
-    }));
+    // 刪除所有同 fileId 的紀錄（可能因重傳/重試產生多筆，一次清乾淨）
+    await Promise.all(
+      items
+        .filter((item: any) => item.assistantId && item.Timestamp)
+        .map((item: any) =>
+          docClient.send(new DeleteCommand({
+            TableName: tableName,
+            Key: { assistantId: item.assistantId, Timestamp: item.Timestamp }
+          }))
+        )
+    );
 
     // TODO: 若需連動刪除 OpenAI vector store 或文件，於此擴充（需要保存 vectorStoreId / openai file id）
 

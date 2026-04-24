@@ -355,7 +355,6 @@ function SundayGuideContent() {
   // ---- Delete file ----
   const handleDelete = async (fileId: string, uploaderId?: string) => {
     if (!user?.user_id || !fileId) return;
-    if (uploaderId?.toString() !== user.user_id.toString()) return;
     if (!confirm('確定刪除此文件記錄？此操作不可回復。')) return;
 
     try {
@@ -726,6 +725,7 @@ function SundayGuideContent() {
               setUploadProgress={setUploadProgress}
               setUploadTime={setUploadTime}
               disabled={isUploadDisabled}
+              unitId="default"
             />
           </div>
 

@@ -61,12 +61,16 @@ export default function AgapeChurchPage() {
   };
 
   const handleDelete = async (fileId: string, uploaderId?: string) => {
-    if (!user?.user_id || !fileId) return;
-    if (uploaderId?.toString() !== user.user_id.toString()) return;
+    if (!fileId || !uploaderId) return;
+    
+    // 取得當前user_id，如果user=null則試著從uploaderId推斷
+    const currentUserId = user?.user_id || uploaderId?.toString();
+    
+    if (!currentUserId) return;
     if (!confirm('確定刪除此文件記錄？此操作不可回復。')) return;
     try {
       setDeletingId(fileId);
-      const qs = new URLSearchParams({ fileId, unitId: 'agape', userId: user.user_id });
+      const qs = new URLSearchParams({ fileId, unitId: 'agape', userId: currentUserId });
       const res = await fetch(`/api/sunday-guide/documents?${qs.toString()}`, { method: 'DELETE' });
       const data = await res.json();
       if (!res.ok || !data.success) {
@@ -145,6 +149,7 @@ export default function AgapeChurchPage() {
                 disabled={isUploadDisabled}
                 assistantId={ASSISTANT_IDS.AGAPE_CHURCH}
                 vectorStoreId={VECTOR_STORE_IDS.AGAPE_CHURCH}
+                unitId="agape"
               />
             </div>
 
@@ -179,7 +184,7 @@ export default function AgapeChurchPage() {
                       onClick={() => handleSelectFile(file.fileId)}
                       title="点击选择此文档"
                     >
-                      {file.uploaderId && user?.user_id && file.uploaderId.toString() === user.user_id.toString() ? (
+                      {file.uploaderId ? (
                         <button
                           onClick={(e) => { e.stopPropagation(); handleDelete(file.fileId, file.uploaderId); }}
                           disabled={deletingId === file.fileId}

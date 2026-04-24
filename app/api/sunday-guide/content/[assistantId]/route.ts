@@ -53,47 +53,56 @@ export async function GET(
     
     const docClient = await createDynamoDBClient();
     
-    let command;
+    let scanFilterExpression: string;
+    let scanExpressionAttributeValues: Record<string, any>;
+
     if (fileId) {
       // 如果提供了 fileId，根據 fileId 查詢特定檔案
-      command = new ScanCommand({
-        TableName: SUNDAY_GUIDE_TABLE,
-        FilterExpression: 'assistantId = :assistantId AND fileId = :fileId',
-        ExpressionAttributeValues: {
-          ':assistantId': assistantId,
-          ':fileId': fileId
-        }
-      });
+      scanFilterExpression = 'assistantId = :assistantId AND fileId = :fileId';
+      scanExpressionAttributeValues = {
+        ':assistantId': assistantId,
+        ':fileId': fileId
+      };
     } else if (userId) {
       // 如果只提供了 userId，查詢該用戶最新的檔案
-      command = new ScanCommand({
-        TableName: SUNDAY_GUIDE_TABLE,
-        FilterExpression: 'assistantId = :assistantId AND (userId = :userId OR UserId = :userId)',
-        ExpressionAttributeValues: {
-          ':assistantId': assistantId,
-          ':userId': userId
-        }
-      });
+      scanFilterExpression = 'assistantId = :assistantId AND (userId = :userId OR UserId = :userId)';
+      scanExpressionAttributeValues = {
+        ':assistantId': assistantId,
+        ':userId': userId
+      };
     } else {
       // 沒有特定條件，查詢所有檔案
-      command = new ScanCommand({
-        TableName: SUNDAY_GUIDE_TABLE,
-        FilterExpression: 'assistantId = :assistantId',
-        ExpressionAttributeValues: {
-          ':assistantId': assistantId
-        }
-      });
+      scanFilterExpression = 'assistantId = :assistantId';
+      scanExpressionAttributeValues = {
+        ':assistantId': assistantId
+      };
     }
 
-    const response = await docClient.send(command);
-    const items = response.Items;
+    // 分頁掃描，避免只拿到 DynamoDB 首頁 1MB 資料導致找不到記錄
+    let items: any[] = [];
+    let lastEvaluatedKey: any = undefined;
+    let scanPages = 0;
+    const MAX_SCAN_PAGES = 50;
+    do {
+      const result = await docClient.send(new ScanCommand({
+        TableName: SUNDAY_GUIDE_TABLE,
+        FilterExpression: scanFilterExpression,
+        ExpressionAttributeValues: scanExpressionAttributeValues,
+        ExclusiveStartKey: lastEvaluatedKey
+      }));
+      items = items.concat(result.Items || []);
+      lastEvaluatedKey = result.LastEvaluatedKey;
+      scanPages++;
+      // 找到目標就提前結束（只在有 fileId 精確查詢時適用）
+      if (fileId && items.length > 0) break;
+    } while (lastEvaluatedKey && scanPages < MAX_SCAN_PAGES);
 
-    console.log('[DEBUG] 查詢結果:', { itemCount: items?.length || 0, hasItems: !!items });
-    if (items && items.length > 0) {
+    console.log('[DEBUG] 查詢結果:', { itemCount: items.length, scanPages });
+    if (items.length > 0) {
       console.log('[DEBUG] 第一筆記錄:', JSON.stringify(items[0]).substring(0, 300));
     }
 
-    if (!items || items.length === 0) {
+    if (items.length === 0) {
       return NextResponse.json({ error: '未找到內容' }, { status: 404 });
     }
 
