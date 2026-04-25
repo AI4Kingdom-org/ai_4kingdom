@@ -8,7 +8,6 @@ import { useCredit } from '../contexts/CreditContext';
 import { useAuth } from '../contexts/AuthContext';
 import styles from '../sunday-guide-v2/SundayGuide.module.css';
 import { ASSISTANT_IDS, VECTOR_STORE_IDS } from '../config/constants';
-import { canUploadToSundayGuideUnit } from '../config/userPermissions';
 
 interface ProcessedContent {
   summary: string;
@@ -31,7 +30,17 @@ export default function EastChristHomePage() {
   const [totalPages, setTotalPages] = useState(1);
   const filesPerPage = 10;
 
-  const hasUploadPermission = canUploadToSundayGuideUnit('eastChristHome', user?.user_id);
+  const [allowedUploaders, setAllowedUploaders] = useState<string[]>([]);
+  const hasUploadPermission = !!user?.user_id && allowedUploaders.includes(user.user_id);
+
+  useEffect(() => {
+    fetch('/api/admin/sunday-guide-units')
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.success) setAllowedUploaders(data.data.units.eastChristHome.allowedUploaders ?? []);
+      })
+      .catch(() => {});
+  }, []);
 
   useEffect(() => { setIsUploadDisabled(remainingCredits <= 0); }, [remainingCredits, hasInsufficientTokens]);
   useEffect(() => { localStorage.setItem('currentUnitId', 'eastChristHome'); }, []);
@@ -183,7 +192,7 @@ export default function EastChristHomePage() {
                       onClick={() => handleSelectFile(file.fileId, file.fileName)}
                       title="点击选择此文档"
                     >
-                      {(user?.user_id && (user.user_id === file.uploaderId || canUploadToSundayGuideUnit('eastChristHome', user.user_id))) ? (
+                      {(user?.user_id && (user.user_id === file.uploaderId || allowedUploaders.includes(user.user_id))) ? (
                         <button
                           onClick={(e) => { e.stopPropagation(); handleDelete(file.fileId, file.uploaderId); }}
                           disabled={deletingId === file.fileId}

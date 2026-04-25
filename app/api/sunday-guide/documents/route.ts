@@ -3,7 +3,7 @@ import OpenAI from 'openai';
 import { createDynamoDBClient } from '../../../utils/dynamodb';
 import { PutCommand, ScanCommand, DeleteCommand } from "@aws-sdk/lib-dynamodb";
 import { ASSISTANT_IDS, findUnitByAssistantId, getSundayGuideUnitConfig } from '@/app/config/constants';
-import { canUploadToSundayGuideUnit } from '@/app/config/userPermissions';
+import { getUnitAllowedUploaders } from '@/app/utils/getUnitAllowedUploaders';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
@@ -443,8 +443,7 @@ export async function DELETE(request: Request) {
     const recordUnit = (target.unitId || findUnitByAssistantId(target.assistantId) || '').toString();
 
     // 允許刪除條件：本人上傳者，或該單位的管理員（allowedUploaders 成員）
-    const unitConfig = getSundayGuideUnitConfig(unitId);
-    const allowedUploaders: string[] = (unitConfig as any)?.allowedUploaders || [];
+    const allowedUploaders = await getUnitAllowedUploaders(unitId);
     const isAdmin = allowedUploaders.length > 0 && allowedUploaders.includes(userId.toString());
     if (uploader !== userId.toString() && !isAdmin) {
       return NextResponse.json({ success: false, error: '無刪除權限 (非上傳者)' }, { status: 403 });
