@@ -31,6 +31,7 @@ export async function GET(request: Request) {
     const url = new URL(request.url);
     const vectorStoreId = url.searchParams.get('vectorStoreId');
     const fileName = url.searchParams.get('fileName');
+    const unitId = url.searchParams.get('unitId');
 
     if (!vectorStoreId || !fileName) {
       return NextResponse.json(
@@ -39,15 +40,19 @@ export async function GET(request: Request) {
       );
     }
 
-    console.log('[DEBUG] 檢查文件處理結果:', { vectorStoreId, fileName });
+    console.log('[DEBUG] 檢查文件處理結果:', { vectorStoreId, fileName, unitId });
     
     const docClient = await createDynamoDBClient();
     
     // 查詢處理結果 - 修改為使用 generationStatus 或 completed
     // Check for completed records
-    const completedParams = {
+    const filterExpr = unitId 
+      ? "vectorStoreId = :vectorStoreId AND fileName = :fileName AND unitId = :unitId AND (generationStatus = :completed OR (attribute_not_exists(generationStatus) AND completed = :completedFlag))"
+      : "vectorStoreId = :vectorStoreId AND fileName = :fileName AND (generationStatus = :completed OR (attribute_not_exists(generationStatus) AND completed = :completedFlag))";
+    
+    const completedParams: any = {
       TableName: SUNDAY_GUIDE_TABLE,
-      FilterExpression: "vectorStoreId = :vectorStoreId AND fileName = :fileName AND (generationStatus = :completed OR (attribute_not_exists(generationStatus) AND completed = :completedFlag))",
+      FilterExpression: filterExpr,
       ExpressionAttributeValues: {
         ":vectorStoreId": vectorStoreId,
         ":fileName": fileName,
@@ -55,6 +60,10 @@ export async function GET(request: Request) {
         ":completedFlag": true
       }
     };
+    
+    if (unitId) {
+      completedParams.ExpressionAttributeValues[":unitId"] = unitId;
+    }
 
     const completedItems = await scanAllPages(docClient, completedParams);
 

@@ -494,7 +494,7 @@ export default function SermonInputTabs({
 
       // Step 1: Upload to vector store (same as PDF path)
       const uploadRes = await fetch(
-        `/api/vector-store/upload?vectorStoreId=${effectiveVectorStoreId}&assistantId=${effectiveAssistantId}`,
+        `/api/vector-store/upload?vectorStoreId=${effectiveVectorStoreId}&assistantId=${effectiveAssistantId}&unitId=${propUnitId || ''}`,
         { method: 'POST', body: formData }
       );
 

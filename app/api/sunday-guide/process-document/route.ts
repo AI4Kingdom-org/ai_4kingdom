@@ -168,11 +168,16 @@ async function processDocumentAsync(params: {
 
   // 先標記為 processing，避免前端長時間停在 pending
   try {
+    const filterExpr = unitId
+      ? 'fileId = :fid AND unitId = :unitId'
+      : 'fileId = :fid';
     const existing = await optimizedQuery({
       tableName: SUNDAY_GUIDE_TABLE,
       keyCondition: {},
-      filterExpression: 'fileId = :fid',
-      expressionAttributeValues: { ':fid': fileId || vectorStoreId }
+      filterExpression: filterExpr,
+      expressionAttributeValues: unitId
+        ? { ':fid': fileId || vectorStoreId, ':unitId': unitId }
+        : { ':fid': fileId || vectorStoreId }
     });
     if (existing.Items && existing.Items.length) {
       const latest = existing.Items.sort((a,b)=> new Date(b.Timestamp||'').getTime()-new Date(a.Timestamp||'').getTime())[0];
@@ -401,15 +406,35 @@ ${type === 'devotional' ?
     console.log('[DEBUG] 查詢是否已存在檔案記錄');
   // docClient 已於函數頂部建立
     
-    // 使用優化的查詢
-    const existingRecords = await optimizedQuery({
-      tableName: SUNDAY_GUIDE_TABLE,
-      keyCondition: {},
-      filterExpression: "fileId = :fileId",
-      expressionAttributeValues: {
-        ":fileId": fileId || vectorStoreId
+    // 使用完整掃描來可靠地查找記錄
+    const scanParams: any = {
+      TableName: SUNDAY_GUIDE_TABLE,
+      FilterExpression: unitId 
+        ? "fileId = :fileId AND unitId = :unitId"
+        : "fileId = :fileId",
+      ExpressionAttributeValues: {
+        ":fileId": fileId || vectorStoreId,
+        ...(unitId ? { ":unitId": unitId } : {})
       }
-    });
+    };
+    
+    const docClient = await createDynamoDBClient();
+    let existingRecords: any = { Items: [] };
+    let lastEvaluatedKey = undefined;
+    let pageCount = 0;
+    const maxPages = 50; // 防止無限循環
+    
+    do {
+      if (lastEvaluatedKey) {
+        scanParams.ExclusiveStartKey = lastEvaluatedKey;
+      }
+      const res = await docClient.send(new ScanCommand(scanParams));
+      existingRecords.Items = existingRecords.Items.concat(res.Items || []);
+      lastEvaluatedKey = (res as any).LastEvaluatedKey;
+      pageCount += 1;
+    } while (lastEvaluatedKey && pageCount < maxPages);
+    
+    console.log(`[DEBUG] 完整掃描找到 ${existingRecords.Items.length} 條fileId${unitId ? '+unitId' : ''}匹配記錄（共${pageCount}頁）`);
     
     const sermonTitle = extractSermonTitle(results.summary) || null;
     console.log(`[DEBUG] 提取講章標題: ${sermonTitle}`);
@@ -544,14 +569,16 @@ export async function POST(request: Request) {
     console.log('[DEBUG] 查詢數據庫獲取fileId（若請求未提供）');
     try {
       // 用 vectorStoreId + fileName 精確查詢，避免取到其他檔案的舊記錄
+      const filterExpr = unitId
+        ? "vectorStoreId = :vectorStoreId AND fileName = :fileName AND unitId = :unitId"
+        : "vectorStoreId = :vectorStoreId AND fileName = :fileName";
       const result = await optimizedQuery({
         tableName: SUNDAY_GUIDE_TABLE,
         keyCondition: {},
-        filterExpression: "vectorStoreId = :vectorStoreId AND fileName = :fileName",
-        expressionAttributeValues: {
-          ":vectorStoreId": vectorStoreId,
-          ":fileName": fileName
-        }
+        filterExpression: filterExpr,
+        expressionAttributeValues: unitId
+          ? { ":vectorStoreId": vectorStoreId, ":fileName": fileName, ":unitId": unitId }
+          : { ":vectorStoreId": vectorStoreId, ":fileName": fileName }
       });
       
       if (!fileId && result.Items && result.Items.length > 0) {
