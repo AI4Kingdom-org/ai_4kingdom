@@ -141,11 +141,13 @@ export async function POST(request: Request) {
     const userId = formData.get('userId') as string | null;
 
     // 單位辨識：優先使用顯式傳入，其次 assistantId 反查
-    let unitId = findUnitByAssistantId(assistantId);
+    let unitId: any;
     let unitIdOverride = false;
     if (unitIdParam) {
       unitId = unitIdParam as any;
       unitIdOverride = true;
+    } else {
+      unitId = findUnitByAssistantId(assistantId);
     }
     const unitCfg = getSundayGuideUnitConfig(unitId);
     const isAgape = unitId === 'agape';
