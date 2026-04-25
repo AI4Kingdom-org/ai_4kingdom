@@ -1,37 +1,27 @@
 import { NextRequest, NextResponse } from 'next/server';
-import fs from 'fs';
-import path from 'path';
+import { PutCommand } from '@aws-sdk/lib-dynamodb';
+import { createDynamoDBClient } from '@/app/utils/dynamodb';
+import { getUnitConfigsFromDB } from '@/app/utils/getUnitAllowedUploaders';
 
-// 目標檔案：常數設定（含 SUNDAY_GUIDE_UNITS.agape.allowedUploaders）
-const CONSTANTS_FILE_PATH = path.join(process.cwd(), 'app', 'config', 'constants.ts');
-
-// 解析任意單位 allowedUploaders
-function parseUnitAllowedUploaders(fileContent: string, unitKey: string): string[] {
-  const match = fileContent.match(new RegExp(`${unitKey}:\\s*\\{[\\s\\S]*?allowedUploaders:\\s*\\[([\\s\\S]*?)\\]\\s*as\\s*string\\[]`));
-  if (!match) return [];
-  const inner = match[1];
-  const ids = inner.match(/'([^']+)'/g) || [];
-  return ids.map(s => s.slice(1, -1));
-}
+const TABLE = process.env.NEXT_PUBLIC_SUNDAY_GUIDE_TABLE || 'SundayGuide';
+const UNIT_CONFIG_KEY = '__SYSTEM_UNIT_CONFIGS__';
+const UNIT_CONFIG_TYPE = 'SUNDAY_GUIDE_UNIT_CONFIGS';
 
 export async function GET() {
   try {
-  const fileContent = fs.readFileSync(CONSTANTS_FILE_PATH, 'utf8');
-  const agapeUploaders = parseUnitAllowedUploaders(fileContent, 'agape');
-  const eastUploaders = parseUnitAllowedUploaders(fileContent, 'eastChristHome');
-  const jianZhuUploaders = parseUnitAllowedUploaders(fileContent, 'jianZhu');
+    const configs = await getUnitConfigsFromDB();
     return NextResponse.json({
       success: true,
       data: {
         units: {
-      agape: { allowedUploaders: agapeUploaders },
-      eastChristHome: { allowedUploaders: eastUploaders },
-      jianZhu: { allowedUploaders: jianZhuUploaders }
-        }
-      }
+          agape: { allowedUploaders: configs.agape },
+          eastChristHome: { allowedUploaders: configs.eastChristHome },
+          jianZhu: { allowedUploaders: configs.jianZhu },
+        },
+      },
     });
   } catch (error) {
-    console.error('讀取 SUNDAY_GUIDE_UNITS 失敗:', error);
+    console.error('讀取單位配置失敗:', error);
     return NextResponse.json({ success: false, error: '讀取單位配置失敗' }, { status: 500 });
   }
 }
@@ -46,32 +36,40 @@ export async function POST(req: NextRequest) {
   try {
     const { unitId, allowedUploaders, userId } = (await req.json()) as PostBody;
 
-    // 僅允許管理員（目前條件：userId === '1'）
     if (userId !== '1') {
       return NextResponse.json({ success: false, error: '沒有權限執行此操作' }, { status: 403 });
     }
 
-  if (!['agape', 'eastChristHome', 'jianZhu'].includes(unitId)) {
+    if (!['agape', 'eastChristHome', 'jianZhu'].includes(unitId)) {
       return NextResponse.json({ success: false, error: '不支援的單位' }, { status: 400 });
     }
 
-    const fileContent = fs.readFileSync(CONSTANTS_FILE_PATH, 'utf8');
-    const escapedList = allowedUploaders.map(id => ` '${id}'`).join(',');
+    const normalizedUploaders = [...new Set(allowedUploaders.map((id) => String(id).trim()).filter(Boolean))];
 
-    const newContent = fileContent.replace(
-      new RegExp(`(${unitId}:\\s*\\{[\\s\\S]*?allowedUploaders:\\s*\\[)([\\s\\S]*?)(\\]\\s*as\\s*string\\[]\\s*,)`),
-      (_m, p1, _p2, p3) => `${p1}${escapedList}${p3}`
+    // Read current configs so we only overwrite the target unit
+    const current = await getUnitConfigsFromDB();
+    const updated = { ...current, [unitId]: normalizedUploaders };
+
+    const client = await createDynamoDBClient();
+    await client.send(
+      new PutCommand({
+        TableName: TABLE,
+        Item: {
+          assistantId: UNIT_CONFIG_KEY,
+          Timestamp: new Date().toISOString(),
+          recordType: UNIT_CONFIG_TYPE,
+          agapeUploaders: updated.agape,
+          eastChristHomeUploaders: updated.eastChristHome,
+          jianZhuUploaders: updated.jianZhu,
+          updatedBy: String(userId),
+          updatedAt: new Date().toISOString(),
+        },
+      })
     );
 
-    if (newContent === fileContent) {
-      return NextResponse.json({ success: false, error: '未能更新（可能未匹配到 agape 設定）' }, { status: 500 });
-    }
-
-    fs.writeFileSync(CONSTANTS_FILE_PATH, newContent, 'utf8');
-
-  return NextResponse.json({ success: true, message: `${unitId} 單位上傳權限已更新` });
+    return NextResponse.json({ success: true, message: `${unitId} 單位上傳權限已更新` });
   } catch (error) {
-  console.error('更新 allowedUploaders 失敗:', error);
+    console.error('更新 allowedUploaders 失敗:', error);
     return NextResponse.json({ success: false, error: '更新失敗' }, { status: 500 });
   }
 }

@@ -3,7 +3,7 @@ import OpenAI from 'openai';
 import { createDynamoDBClient } from '@/app/utils/dynamodb';
 import { PutCommand, ScanCommand } from "@aws-sdk/lib-dynamodb";
 import { findUnitByAssistantId, getSundayGuideUnitConfig, VECTOR_STORE_IDS } from '@/app/config/constants';
-import { canUploadToSundayGuideUnit } from '@/app/config/userPermissions';
+import { getUnitAllowedUploaders } from '@/app/utils/getUnitAllowedUploaders';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
@@ -152,8 +152,8 @@ export async function POST(request: Request) {
 
     // 權限：若是非 default 單位，需檢查 allowedUploaders
     if (unitId !== 'default') {
-      const allowed = canUploadToSundayGuideUnit(unitId, userId || undefined);
-      if (!allowed) {
+      const uploaders = await getUnitAllowedUploaders(unitId);
+      if (!userId || !uploaders.includes(String(userId))) {
         return NextResponse.json({ error: '無權在此單位上傳' }, { status: 403 });
       }
     }
