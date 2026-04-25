@@ -7,7 +7,7 @@ import UserIdDisplay from '../components/UserIdDisplay';
 import { useCredit } from '../contexts/CreditContext';
 import { useAuth } from '../contexts/AuthContext';
 import styles from '../sunday-guide-v2/SundayGuide.module.css';
-import { ASSISTANT_IDS, VECTOR_STORE_IDS } from '../config/constants';
+import { getSundayGuideUnitConfig } from '../config/constants';
 
 interface ProcessedContent {
   summary: string;
@@ -17,13 +17,14 @@ interface ProcessedContent {
 }
 
 export default function EastChristHomePage() {
+  const eastUnit = getSundayGuideUnitConfig('eastChristHome');
   const { refreshUsage, hasInsufficientTokens, remainingCredits } = useCredit();
   const { user } = useAuth();
   const [isProcessing, setIsProcessing] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<number>(0);
   const [uploadTime, setUploadTime] = useState<string>('');
   const [isUploadDisabled, setIsUploadDisabled] = useState(false);
-  const [recentFiles, setRecentFiles] = useState<Array<{ fileName: string; uploadDate: string; fileId: string; uploaderId?: string }>>([]);
+  const [recentFiles, setRecentFiles] = useState<Array<{ fileName: string; sermonTitle?: string | null; uploadDate: string; fileId: string; uploaderId?: string }>>([]);
   const [selectedFileId, setSelectedFileId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
@@ -47,13 +48,14 @@ export default function EastChristHomePage() {
 
   const fetchAllFileRecords = async (page: number = 1) => {
     try {
-      const res = await fetch(`/api/sunday-guide/documents?assistantId=${ASSISTANT_IDS.AGAPE_CHURCH}&page=${page}&limit=${filesPerPage}&allUsers=true&unitId=eastChristHome`);
+      const res = await fetch(`/api/sunday-guide/documents?assistantId=${eastUnit.assistantId}&page=${page}&limit=${filesPerPage}&allUsers=true&unitId=eastChristHome`);
       if (!res.ok) throw new Error('獲取文件記錄失敗');
       const data = await res.json();
       if (data.success && data.records) {
         const sorted = data.records.sort((a: any, b: any) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
         setRecentFiles(sorted.map((rec: any) => ({
           fileName: rec.fileName || '未命名文件',
+          sermonTitle: rec.sermonTitle || null,
           uploadDate: new Date(rec.updatedAt).toLocaleDateString('zh-TW'),
           fileId: rec.fileId || '',
           uploaderId: rec.userId || '未知',
@@ -113,7 +115,7 @@ export default function EastChristHomePage() {
       const channel = new BroadcastChannel('file-selection');
       channel.postMessage({
         type: 'FILE_SELECTED',
-        assistantId: ASSISTANT_IDS.SUNDAY_GUIDE,
+        assistantId: eastUnit.assistantId,
         fileId,
         fileName,
         ts: Date.now(),
@@ -155,8 +157,8 @@ export default function EastChristHomePage() {
                 setUploadProgress={setUploadProgress}
                 setUploadTime={setUploadTime}
                 disabled={isUploadDisabled}
-                assistantId={ASSISTANT_IDS.AGAPE_CHURCH}
-                vectorStoreId={VECTOR_STORE_IDS.AGAPE_CHURCH}
+                assistantId={eastUnit.assistantId}
+                vectorStoreId={eastUnit.vectorStoreId}
                 unitId="eastChristHome"
               />
             </div>
@@ -189,7 +191,7 @@ export default function EastChristHomePage() {
                     <li
                       key={file.fileId || idx}
                       className={`${styles.docItem} ${selectedFileId === file.fileId ? styles.docItemSelected : ''}`}
-                      onClick={() => handleSelectFile(file.fileId, file.fileName)}
+                      onClick={() => handleSelectFile(file.fileId, file.fileName.toLowerCase().endsWith('.pdf') ? file.fileName : (file.sermonTitle || file.fileName))}
                       title="点击选择此文档"
                     >
                       {(user?.user_id && (user.user_id === file.uploaderId || allowedUploaders.includes(user.user_id))) ? (
@@ -205,7 +207,7 @@ export default function EastChristHomePage() {
                         <span className={styles.deleteButtonPlaceholder} />
                       )}
                       <span className={styles.docIndex}>{(currentPage - 1) * filesPerPage + idx + 1}.</span>
-                      <span className={styles.docFileName}>{file.fileName}</span>
+                      <span className={styles.docFileName}>{file.fileName.toLowerCase().endsWith('.pdf') ? file.fileName : (file.sermonTitle || file.fileName)}</span>
                       <span className={styles.docDate}>{file.uploadDate}</span>
                     </li>
                   ))}

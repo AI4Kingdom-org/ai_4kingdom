@@ -116,6 +116,7 @@ export default function SermonInputTabs({
       url: ytUrl.trim(),
       startTime: ytStartTime.trim() || undefined,
       endTime: ytEndTime.trim() || undefined,
+      forceAudioTranscription: true,
     };
 
     const tryParseJson = async (res: Response): Promise<Record<string, any>> => {
@@ -235,7 +236,7 @@ export default function SermonInputTabs({
         setYtTranscription({
           status: 'done',
           text: audioData.transcript,
-          source: 'whisper',
+          source: audioData.source === 'youtube_transcript' ? 'caption' : 'whisper',
           charCount: audioData.charCount,
         });
         setEditedText(audioData.transcript);
