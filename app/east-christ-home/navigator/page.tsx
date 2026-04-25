@@ -6,7 +6,7 @@ import { useCredit } from '../../contexts/CreditContext';
 import WithChat from '../../components/layouts/WithChat';
 import styles from '../../user-sunday-guide/page.module.css';
 import { CHAT_TYPES } from '../../config/chatTypes';
-import { ASSISTANT_IDS } from '../../config/constants';
+import { getSundayGuideUnitConfig } from '../../config/constants';
 import ReactMarkdown from 'react-markdown';
 import ChatkitEmbed from '../../components/ChatkitEmbed';
 import Script from 'next/script';
@@ -22,6 +22,7 @@ interface EastRecord {
 }
 
 function EastNavigatorContent() {
+  const eastUnit = getSundayGuideUnitConfig('eastChristHome');
   const [fileList, setFileList] = useState<EastRecord[]>([]);
   const [selectedFileUniqueId, setSelectedFileUniqueId] = useState<string | null>(null);
   const { user } = useAuth();
@@ -86,7 +87,7 @@ function EastNavigatorContent() {
       const channel = new BroadcastChannel('file-selection');
       channel.postMessage({
         type: 'FILE_SELECTED',
-        assistantId: ASSISTANT_IDS.SUNDAY_GUIDE,
+        assistantId: eastUnit.assistantId,
         fileId,
         fileName: name,
         ts: Date.now()
@@ -101,7 +102,7 @@ function EastNavigatorContent() {
     const channel = new BroadcastChannel('file-selection');
     const handler = (e: MessageEvent) => {
       const data = e.data;
-      if (data?.type === 'FILE_SELECTED' && data.assistantId === ASSISTANT_IDS.SUNDAY_GUIDE) {
+      if (data?.type === 'FILE_SELECTED' && data.assistantId === eastUnit.assistantId) {
         setSelectedFileUniqueId(data.fileId);
         setFileName(data.fileName);
         setUploadTime('');
@@ -111,7 +112,7 @@ function EastNavigatorContent() {
     };
     channel.addEventListener('message', handler);
     return () => { channel.removeEventListener('message', handler); channel.close(); };
-  }, []);
+  }, [eastUnit.assistantId]);
 
   const handleModeSelect = async (mode: GuideMode) => {
     if (!selectedFileUniqueId) return;
@@ -119,7 +120,7 @@ function EastNavigatorContent() {
     setLoading(true);
     try {
       const userId = user?.user_id || '';
-      const apiUrl = `/api/sunday-guide/content/${ASSISTANT_IDS.SUNDAY_GUIDE}?type=${mode}&userId=${encodeURIComponent(userId)}&fileId=${encodeURIComponent(selectedFileUniqueId)}`;
+      const apiUrl = `/api/sunday-guide/content/${eastUnit.assistantId}?type=${mode}&userId=${encodeURIComponent(userId)}&fileId=${encodeURIComponent(selectedFileUniqueId)}`;
       const response = await fetch(apiUrl);
       if (!response.ok) {
         const errData = await response.json().catch(()=>({error:'未知錯誤'}));
@@ -170,7 +171,7 @@ function EastNavigatorContent() {
       const userId = user?.user_id || '';
       const base = '/api/sunday-guide/download-pdf';
       const params = new URLSearchParams();
-      params.set('assistantId', ASSISTANT_IDS.SUNDAY_GUIDE);
+      params.set('assistantId', eastUnit.assistantId);
       params.set('userId', userId);
       params.set('includeAll', 'true');
       const url = `${base}?${params.toString()}`;

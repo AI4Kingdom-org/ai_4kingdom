@@ -703,20 +703,20 @@ export default function UserPermissionsPage() {
         <h2 className={styles.sectionTitle}>權限說明</h2>
         <div className={styles.permissionInfo}>
           <div className={styles.infoItem}>
-            <strong>文檔上傳權限：</strong>
-            <p>控制哪些用戶可以在Sunday Guide等頁面看到並使用文檔上傳功能</p>
+            <strong>文檔上傳權限（全域）：</strong>
+            <p>控制哪些用戶可以在 Sunday Guide（/sunday-guide-v2）看到並使用文檔上傳功能。此名單儲存於資料庫，修改後立即生效，無需重新部署。</p>
+          </div>
+          <div className={styles.infoItem}>
+            <strong>單位專屬上傳權限（Agape／East Christ Home／Jian Zhu）：</strong>
+            <p>分別控制各單位頁面的上傳與刪除管理員資格。名單中的用戶可以看到所有人的文件刪除按鈕，並有權上傳至該單位。修改後重新整理頁面即可生效，無需重新部署。</p>
           </div>
           <div className={styles.infoItem}>
             <strong>管理員組：</strong>
-            <p>具有完全管理權限，可以管理其他用戶的權限</p>
+            <p>可進入本頁面管理所有權限設定。目前僅限 user ID 為 1 的帳號使用。</p>
           </div>
           <div className={styles.infoItem}>
-            <strong>編輯者組：</strong>
-            <p>具有編輯權限的用戶組</p>
-          </div>
-          <div className={styles.infoItem}>
-            <strong>特殊用戶組：</strong>
-            <p>需要特殊權限的用戶組</p>
+            <strong>編輯者組 / 特殊用戶組：</strong>
+            <p>保留供日後擴充使用，目前尚未綁定特定功能。</p>
           </div>
         </div>
       </div>
