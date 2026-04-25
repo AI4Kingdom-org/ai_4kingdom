@@ -543,48 +543,48 @@ export async function POST(request: Request) {
     }
     console.log('[DEBUG] 查詢數據庫獲取fileId（若請求未提供）');
     try {
-      // 使用優化的查詢
+      // 用 vectorStoreId + fileName 精確查詢，避免取到其他檔案的舊記錄
       const result = await optimizedQuery({
         tableName: SUNDAY_GUIDE_TABLE,
         keyCondition: {},
-        filterExpression: "vectorStoreId = :vectorStoreId",
+        filterExpression: "vectorStoreId = :vectorStoreId AND fileName = :fileName",
         expressionAttributeValues: {
-          ":vectorStoreId": vectorStoreId
+          ":vectorStoreId": vectorStoreId,
+          ":fileName": fileName
         }
       });
       
       if (!fileId && result.Items && result.Items.length > 0) {
-        // 找到最新的記錄
-        const latestItem = result.Items.sort((a, b) => 
+        // 優先取有 fileId 欄位且最新的記錄
+        const withFileId = result.Items.filter((item: any) => item.fileId);
+        const pool = withFileId.length > 0 ? withFileId : result.Items;
+        const latestItem = pool.sort((a: any, b: any) => 
           new Date(b.Timestamp || "").getTime() - new Date(a.Timestamp || "").getTime()
         )[0];
-        fileId = latestItem.fileId;
+        fileId = latestItem.fileId || null;
         console.log(`[DEBUG] 從數據庫找到文件 ID: ${fileId}`);
       }
     } catch (dbError) {
       console.error('[ERROR] 數據庫查詢失敗:', dbError);
     }
 
-    // 检查 Vector Store 中的文件
-    try {
-      const filesInVectorStore = await openai.beta.vectorStores.files.list(vectorStoreId);
-      console.log(`[DEBUG] Vector Store 中的文件:`, 
-        filesInVectorStore.data.map(f => ({ id: f.id, status: f.status })));
-      
-      // 若多檔且未指定 fileId，拒絕處理，避免跨檔干擾
-      if (!fileId && filesInVectorStore.data.length > 1) {
-        return NextResponse.json(
-          { error: 'Multiple files found in vector store. Please specify fileId to avoid cross-file retrieval.' },
-          { status: 400 }
-        );
+    // 檢查 Vector Store 中的文件（僅在 fileId 仍未解析時才呼叫，節省 API 往返）
+    if (!fileId) {
+      try {
+        const filesInVectorStore = await openai.beta.vectorStores.files.list(vectorStoreId);
+        console.log(`[DEBUG] Vector Store 中的文件:`, 
+          filesInVectorStore.data.map(f => ({ id: f.id, status: f.status, created_at: f.created_at })));
+        
+        if (filesInVectorStore.data.length >= 1) {
+          // 取最新加入向量庫的檔案（created_at 最大），即剛上傳的那個
+          const sortedFiles = [...filesInVectorStore.data]
+            .sort((a: any, b: any) => (b.created_at || 0) - (a.created_at || 0));
+          fileId = sortedFiles[0].id;
+          console.log(`[DEBUG] 從向量庫取最新加入的檔案 ID: ${fileId}（共 ${filesInVectorStore.data.length} 個檔案）`);
+        }
+      } catch (vectorStoreError) {
+        console.error('[ERROR] 获取 Vector Store 文件失败:', vectorStoreError);
       }
-      // 若僅一檔且未指定 fileId，自動採用該檔案
-      if (!fileId && filesInVectorStore.data.length === 1) {
-        fileId = filesInVectorStore.data[0].id;
-        console.log(`[DEBUG] 从 Vector Store 获取文件 ID: ${fileId}`);
-      }
-    } catch (vectorStoreError) {
-      console.error('[ERROR] 获取 Vector Store 文件失败:', vectorStoreError);
     }
     
     // Await synchronously — Next.js dev mode kills background Promises after the response is sent.
