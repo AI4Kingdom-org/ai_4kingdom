@@ -418,7 +418,6 @@ ${type === 'devotional' ?
       }
     };
     
-    const docClient = await createDynamoDBClient();
     let existingRecords: any = { Items: [] };
     let lastEvaluatedKey = undefined;
     let pageCount = 0;
