@@ -16,7 +16,7 @@ frontend:
     preBuild:
       commands:
         # Whisper 現已由 OpenAI API 處理，不需要安裝 Python 套件
-        - npm ci
+        - npm ci --legacy-peer-deps
     build:
       commands:
         # 创建环境变量文件
