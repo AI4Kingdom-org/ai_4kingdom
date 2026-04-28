@@ -14,6 +14,7 @@
 
 .routingAgentContainerFull {
   height: 100vh;
+  justify-content: flex-start;
 }
 
 .welcomeSection {
