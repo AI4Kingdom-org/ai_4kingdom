@@ -47,6 +47,8 @@ export async function POST(req: Request) {
             vectorStoreId: t.vectorStoreId || VECTOR_STORE_IDS.AGAPE_CHURCH,
             fileName: t.fileName,
             userId: t.userId,
+            fileId: t.fileId,
+            unitId: t.unitId || 'agape',
           })
         });
         kicked.push({ fileId: t.fileId, fileName: t.fileName });

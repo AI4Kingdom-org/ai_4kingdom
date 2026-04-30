@@ -8,6 +8,7 @@ export const ASSISTANT_IDS = {
   TEEN_CONSOLE: 'asst_FYGpQuorHCcdFuTJCMT4vHde',  //儿童貼心属灵辅导
   HOME_CONSOLE: 'asst_0p6WP3BaiYidMkfcsyM8EPyM',  //家庭辅导
   AGAPE_CHURCH: 'asst_Vm0kpSHh7snqF5SAJ32SmAMN', // 愛加倍教會專用牧者助手（獨立）
+  EAST_CHRIST_HOME: 'asst_XMyPwcJsH7TiTcAsGEu1GuY2', // 東基家專用牧者助手（獨立）
   JIAN_ZHU: 'asst_bGYjfmBTbjuF0tCGbJ0yEa8I' // 祝建牧師助手（獨立）
   // ... 其他类型的助手
 
@@ -22,6 +23,7 @@ export const VECTOR_STORE_IDS = {
   TEEN_CONSOLE: 'vs_67b28ec53da48191863817002d79222b',  // 使用與 CHILDREN_MENTAL 相同的向量存儲 ID
   HOME_CONSOLE: 'vs_67b28ec53da48191863817002d79222b',  // 使用與 CHILDREN_MENTAL 相同的向量存儲 ID
   AGAPE_CHURCH: 'vs_68a9ee54724c8191b6a7d574a59ca91a', // 愛加倍教會專用向量庫
+  EAST_CHRIST_HOME: 'vs_69f204caa1f88191ab85505bcd04f09f', // 東基家專用向量庫
   JIAN_ZHU: 'vs_6853c96fdfb88191a8421097e5bea232' // 祝建牧師助手向量庫
   // ... 其他类型的向量存储
 };
@@ -50,10 +52,9 @@ export const SUNDAY_GUIDE_UNITS = {
   allowedUploaders: [ '1', '24', '6', '108'] as string[],
   accessType: 'public' as const
   },
-  // East Christ Home：改為共用 Agape Church 專屬助手/向量庫
   eastChristHome: {
-    assistantId: ASSISTANT_IDS.AGAPE_CHURCH,
-    vectorStoreId: VECTOR_STORE_IDS.AGAPE_CHURCH,
+    assistantId: ASSISTANT_IDS.EAST_CHRIST_HOME,
+    vectorStoreId: VECTOR_STORE_IDS.EAST_CHRIST_HOME,
     allowedUploaders: [ '1', '24', '22'] as string[],
     accessType: 'public' as const
   },
