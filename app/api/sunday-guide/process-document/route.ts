@@ -31,15 +31,17 @@ function extractSermonTitle(summary: string): string | null {
       }
     }
   }
+  // 過濾掉標籤本身（避免把「講章標題」當成標題回傳）
+  const isLabel = (s: string) => /^(講道標題|講章標題|Sermon Title|Title|標題)$/i.test(s.trim());
   // Pattern 2: "講道標題：XXX" 在同一行（備援）
   const inlineMatch = summary.match(/(?:講道標題|講章標題|Sermon Title|Title)[：:]\s*\*?\*?(.+?)\*?\*?\s*$/m);
-  if (inlineMatch) return inlineMatch[1].trim().replace(/^[*_#]+|[*_#]+$/g, '').trim();
+  if (inlineMatch) { const t = inlineMatch[1].trim().replace(/^[*_#]+|[*_#]+$/g, '').trim(); if (!isLabel(t) && t.length > 2) return t; }
   // Pattern 3: Markdown heading
   const headingMatch = summary.match(/^#{1,3}\s+(.+)$/m);
-  if (headingMatch) return headingMatch[1].trim().replace(/^[*_]+|[*_]+$/g, '').trim();
-  // Pattern 4: First bold text
-  const boldMatch = summary.match(/\*\*([^*\n]{4,80})\*\*/);
-  if (boldMatch) return boldMatch[1].trim();
+  if (headingMatch) { const t = headingMatch[1].trim().replace(/^[*_]+|[*_]+$/g, '').trim(); if (!isLabel(t) && t.length > 2) return t; }
+  // Pattern 4: First bold text（排除標籤本身）
+  const boldMatches = [...summary.matchAll(/\*\*([^*\n]{4,80})\*\*/g)];
+  for (const m of boldMatches) { const t = m[1].trim(); if (!isLabel(t)) return t; }
   return null;
 }
 

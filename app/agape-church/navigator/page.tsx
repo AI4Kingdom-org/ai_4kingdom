@@ -16,6 +16,7 @@ type GuideMode = 'summary' | 'devotional' | 'bible' | null;
 
 interface AgapeRecord {
   fileName: string;
+  sermonTitle?: string | null;
   uploadTime: string;
   fileUniqueId: string; // reuse fileId
   fileId?: string;
@@ -52,6 +53,7 @@ function AgapeNavigatorContent() {
         const sorted = [...data.records].sort((a: any, b: any) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
         const mapped: AgapeRecord[] = sorted.map((r: any) => ({
           fileName: r.fileName || '未命名文件',
+            sermonTitle: r.sermonTitle || null,
             uploadTime: r.updatedAt,
             fileUniqueId: r.fileId,
             fileId: r.fileId
@@ -63,7 +65,8 @@ function AgapeNavigatorContent() {
         const storedItem = storedId ? mapped.find(m => m.fileUniqueId === storedId) : null;
         const target = storedItem || mapped[0];
         setSelectedFileUniqueId(target.fileUniqueId);
-        setFileName(storedItem ? (storedName || storedItem.fileName) : target.fileName);
+        const displayName = (f: AgapeRecord) => (!f.fileName.toLowerCase().endsWith('.pdf') && f.sermonTitle) ? f.sermonTitle : f.fileName;
+        setFileName(storedItem ? (storedName || displayName(storedItem)) : displayName(target));
         setUploadTime(new Date(target.uploadTime).toLocaleDateString('zh-TW'));
       } else {
         setFileList([]);
