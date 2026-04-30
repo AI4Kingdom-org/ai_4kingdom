@@ -24,7 +24,7 @@ export default function AgapeChurchPage() {
   const [uploadProgress, setUploadProgress] = useState<number>(0);
   const [uploadTime, setUploadTime] = useState<string>('');
   const [isUploadDisabled, setIsUploadDisabled] = useState(false);
-  const [recentFiles, setRecentFiles] = useState<Array<{ fileName: string; uploadDate: string; fileId: string; uploaderId?: string }>>([]);
+  const [recentFiles, setRecentFiles] = useState<Array<{ fileName: string; sermonTitle?: string | null; uploadDate: string; fileId: string; uploaderId?: string }>>([]);
   const [selectedFileId, setSelectedFileId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
@@ -54,6 +54,7 @@ export default function AgapeChurchPage() {
         const sorted = data.records.sort((a: any, b: any) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
         setRecentFiles(sorted.map((rec: any) => ({
           fileName: rec.fileName || '未命名文件',
+          sermonTitle: rec.sermonTitle || null,
           uploadDate: new Date(rec.updatedAt).toLocaleDateString('zh-TW'),
           fileId: rec.fileId || '',
           uploaderId: rec.userId || '未知',
@@ -206,7 +207,7 @@ export default function AgapeChurchPage() {
                         <span className={styles.deleteButtonPlaceholder} />
                       )}
                       <span className={styles.docIndex}>{(currentPage - 1) * filesPerPage + idx + 1}.</span>
-                      <span className={styles.docFileName}>{file.fileName}</span>
+                      <span className={styles.docFileName}>{file.fileName.toLowerCase().endsWith('.pdf') ? file.fileName : (file.sermonTitle || file.fileName)}</span>
                       <span className={styles.docDate}>{file.uploadDate}</span>
                     </li>
                   ))}
