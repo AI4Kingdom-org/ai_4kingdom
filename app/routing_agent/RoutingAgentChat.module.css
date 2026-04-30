@@ -82,7 +82,7 @@
   flex-direction: column;
   gap: 16px;
   animation: fadeIn 0.3s ease-in;
-  background: #BBBDC0;
+  background: #ffffff;
 }
 
 .messagesContainer::-webkit-scrollbar {
