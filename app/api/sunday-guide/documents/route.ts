@@ -14,8 +14,7 @@ export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
   const assistantId = searchParams.get('assistantId');
-  const agapeFilter = searchParams.get('agapeFilter') === 'true';
-  const unitIdParam = searchParams.get('unitId') || undefined; // 新增：通用 unitId 過濾
+  const unitIdParam = searchParams.get('unitId') || undefined;
     let userId = searchParams.get('userId');
     const allUsers = searchParams.get('allUsers') === 'true'; // 新增：是否獲取所有用戶的文檔
     const page = parseInt(searchParams.get('page') || '1');
@@ -42,16 +41,15 @@ export async function GET(request: Request) {
     let filterExpressions = [];
     const expressionAttributeValues: Record<string, any> = {};
     
-    // Agape 公開瀏覽特殊處理：
-    // 現在 Agape 與 Sunday Guide 共用 assistantId；若 agapeFilter=true 則忽略傳入的 assistantId 過濾，稍後用 unitId / 舊 assistantId 二次篩選。
-    // 未指定 assistantId 且非 agapeFilter → 排除舊 Agape 專用助手資料 (且不排除其他單位)
-    if (!agapeFilter && !unitIdParam) {
+    // 無 unitId 時排除各獨立單位的專屬 assistant，避免混入一般主日學列表
+    if (!unitIdParam) {
       if (assistantId) {
         filterExpressions.push("assistantId = :assistantId");
         expressionAttributeValues[":assistantId"] = assistantId;
       } else {
-        filterExpressions.push("assistantId <> :agapeAid");
+        filterExpressions.push("assistantId <> :agapeAid AND assistantId <> :eastAid");
         expressionAttributeValues[":agapeAid"] = ASSISTANT_IDS.AGAPE_CHURCH;
+        expressionAttributeValues[":eastAid"] = ASSISTANT_IDS.EAST_CHRIST_HOME;
       }
     }
     
@@ -107,36 +105,10 @@ export async function GET(request: Request) {
       truncated: !!lastEvaluatedKey
     });
 
-    // 單位過濾：
-    // - 若有 unitIdParam：僅顯示該單位，並依該單位 allowedUploaders 篩選（公開瀏覽頁面 allUsers=true 場景）
-    // - 若 agapeFilter=true（相容舊參數）：行為等同 unitIdParam='agape'
-    const effectiveUnit = unitIdParam || (agapeFilter ? 'agape' : undefined);
-    if (effectiveUnit) {
-      // 取得該單位對應的 assistantId 與設定
-      const targetConfig = getSundayGuideUnitConfig(effectiveUnit);
-      const targetAssistantId = targetConfig?.assistantId;
-
-      // allUsers=true（公開瀏覽）時不再依 allowedUploaders 限制顯示
+    if (unitIdParam) {
       recordsRaw = recordsRaw.filter(item => {
-        // 優先使用明確 unitId，避免共用 assistantId 時互相混入
-        const hasExplicitUnit = item.unitId !== undefined && item.unitId !== null && `${item.unitId}`.trim() !== '';
-        if (hasExplicitUnit) {
-          return `${item.unitId}` === effectiveUnit;
-        }
-
-        // 舊資料缺 unitId 時，才回退用 assistantId 判斷
-        // 若 assistantId 對應的主單位不是目前單位，代表共享助手場景（如 east/agape），避免混入
-        if (targetAssistantId) {
-          const fallbackUnit = findUnitByAssistantId(targetAssistantId);
-          if (fallbackUnit !== effectiveUnit) {
-            return false;
-          }
-          return item.assistantId === targetAssistantId;
-        }
-
-        // 否則退回嚴格比對 unitId
-        const itemUnit = (item.unitId || findUnitByAssistantId(item.assistantId)).toString();
-        return itemUnit === effectiveUnit;
+        const itemUnit = item.unitId || findUnitByAssistantId(item.assistantId);
+        return String(itemUnit) === unitIdParam;
       });
     }
 

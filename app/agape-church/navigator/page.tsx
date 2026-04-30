@@ -45,7 +45,7 @@ function AgapeNavigatorContent() {
 
   const fetchAgapeFiles = async () => {
     try {
-  const res = await fetch(`/api/sunday-guide/documents?agapeFilter=true&allUsers=true`);
+  const res = await fetch(`/api/sunday-guide/documents?unitId=agape&allUsers=true`);
   if (!res.ok) throw new Error('获取文件记录失败');
       const data = await res.json();
       if (data.success && data.records?.length) {

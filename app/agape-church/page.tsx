@@ -47,7 +47,7 @@ export default function AgapeChurchPage() {
 
   const fetchAllFileRecords = async (page: number = 1) => {
     try {
-      const res = await fetch(`/api/sunday-guide/documents?assistantId=${ASSISTANT_IDS.AGAPE_CHURCH}&page=${page}&limit=${filesPerPage}&allUsers=true&agapeFilter=true`);
+      const res = await fetch(`/api/sunday-guide/documents?unitId=agape&page=${page}&limit=${filesPerPage}&allUsers=true`);
       if (!res.ok) throw new Error('獲取文件記錄失敗');
       const data = await res.json();
       if (data.success && data.records) {

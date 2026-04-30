@@ -48,7 +48,7 @@ export default function EastChristHomePage() {
 
   const fetchAllFileRecords = async (page: number = 1) => {
     try {
-      const res = await fetch(`/api/sunday-guide/documents?assistantId=${eastUnit.assistantId}&page=${page}&limit=${filesPerPage}&allUsers=true&unitId=eastChristHome`);
+      const res = await fetch(`/api/sunday-guide/documents?unitId=eastChristHome&page=${page}&limit=${filesPerPage}&allUsers=true`);
       if (!res.ok) throw new Error('獲取文件記錄失敗');
       const data = await res.json();
       if (data.success && data.records) {
