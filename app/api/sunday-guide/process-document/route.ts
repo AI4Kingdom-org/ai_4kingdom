@@ -16,33 +16,21 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
 });
 
-// 從 AI 生成的 summary 中提取講章標題
-function extractSermonTitle(summary: string): string | null {
+// 用 gpt-4o-mini 直接從 summary 抽取講道標題
+async function extractSermonTitle(openaiClient: OpenAI, summary: string): Promise<string | null> {
   if (!summary) return null;
-  const lines = summary.split('\n');
-  // Pattern 1: 找到含「講道標題」/ 「講章標題」/ 「Sermon Title」的行，取其後第一個非空行（即實際標題）
-  for (let i = 0; i < lines.length - 1; i++) {
-    if (/講道標題|講章標題|Sermon Title/i.test(lines[i])) {
-      for (let j = i + 1; j < lines.length; j++) {
-        const candidate = lines[j].replace(/^[*_#\s]+|[*_#\s]+$/g, '').trim();
-        if (candidate.length > 2) {
-          return candidate.slice(0, 80);
-        }
-      }
-    }
+  try {
+    const res = await openaiClient.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [{ role: 'user', content: `從以下講章總結中提取講道標題，只回答標題本身，不要任何其他內容、標點或說明：\n\n${summary.slice(0, 800)}` }],
+      max_tokens: 60,
+      temperature: 0,
+    });
+    const title = res.choices[0]?.message?.content?.trim() || null;
+    return title ? title.slice(0, 80) : null;
+  } catch {
+    return null;
   }
-  // 過濾掉標籤本身（避免把「講章標題」當成標題回傳）
-  const isLabel = (s: string) => /^(講道標題|講章標題|Sermon Title|Title|標題)$/i.test(s.trim());
-  // Pattern 2: "講道標題：XXX" 在同一行（備援）
-  const inlineMatch = summary.match(/(?:講道標題|講章標題|Sermon Title|Title)[：:]\s*\*?\*?(.+?)\*?\*?\s*$/m);
-  if (inlineMatch) { const t = inlineMatch[1].trim().replace(/^[*_#]+|[*_#]+$/g, '').trim(); if (!isLabel(t) && t.length > 2) return t; }
-  // Pattern 3: Markdown heading
-  const headingMatch = summary.match(/^#{1,3}\s+(.+)$/m);
-  if (headingMatch) { const t = headingMatch[1].trim().replace(/^[*_]+|[*_]+$/g, '').trim(); if (!isLabel(t) && t.length > 2) return t; }
-  // Pattern 4: First bold text（排除標籤本身）
-  const boldMatches = [...summary.matchAll(/\*\*([^*\n]{4,80})\*\*/g)];
-  for (const m of boldMatches) { const t = m[1].trim(); if (!isLabel(t)) return t; }
-  return null;
 }
 
 // 新增：等待特定檔案在向量庫中就緒
@@ -437,7 +425,7 @@ ${type === 'devotional' ?
     
     console.log(`[DEBUG] 完整掃描找到 ${existingRecords.Items.length} 條fileId${unitId ? '+unitId' : ''}匹配記錄（共${pageCount}頁）`);
     
-    const sermonTitle = extractSermonTitle(results.summary) || null;
+    const sermonTitle = await extractSermonTitle(openai, results.summary) || null;
     console.log(`[DEBUG] 提取講章標題: ${sermonTitle}`);
 
     if (existingRecords.Items && existingRecords.Items.length > 0) {
