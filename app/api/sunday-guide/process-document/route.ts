@@ -426,31 +426,49 @@ ${type === 'devotional' ?
     
     console.log(`[DEBUG] 完整掃描找到 ${existingRecords.Items.length} 條fileId${unitId ? '+unitId' : ''}匹配記錄（共${pageCount}頁）`);
     
-    const sermonTitle = fileName ? fileName.replace(/\.[^.]+$/, '') : (await extractSermonTitle(openai, results.summary) || null);
+    const sermonTitle = (await extractSermonTitle(openai, results.summary, fileName)) || (fileName ? fileName.replace(/\.[^.]+$/, '') : null);
     console.log(`[DEBUG] 提取講章標題: ${sermonTitle}`);
 
     if (existingRecords.Items && existingRecords.Items.length > 0) {
       // 找到現有記錄，進行更新
       console.log(`[DEBUG] 找到 ${existingRecords.Items.length} 條既有記錄，更新處理結果`);
       const existingItem = existingRecords.Items[0]; // 使用第一條記錄
-      
-  await docClient.send(new UpdateCommand({
+
+      // 動態建立 UpdateExpression，只包含已成功生成的欄位，
+      // 避免因 devotional / bibleStudy 生成失敗導致值為 undefined 而引發 DynamoDB InvalidUpdateExpression 錯誤
+      const updateExprParts: string[] = [
+        'summary = :summary',
+        'processingTime = :processingTime',
+        'completed = :completed',
+        'generationStatus = :gs',
+        'updatedAt = :now',
+        'sermonTitle = :sermonTitle'
+      ];
+      const updateExprValues: Record<string, any> = {
+        ':summary': results.summary,
+        ':processingTime': serverProcessingTime,
+        ':completed': true,
+        ':gs': 'completed',
+        ':now': new Date().toISOString(),
+        ':sermonTitle': sermonTitle
+      };
+      if (results.devotional !== undefined && results.devotional !== null) {
+        updateExprParts.push('devotional = :devotional');
+        updateExprValues[':devotional'] = results.devotional;
+      }
+      if (results.bibleStudy !== undefined && results.bibleStudy !== null) {
+        updateExprParts.push('bibleStudy = :bibleStudy');
+        updateExprValues[':bibleStudy'] = results.bibleStudy;
+      }
+
+      await docClient.send(new UpdateCommand({
         TableName: SUNDAY_GUIDE_TABLE,
         Key: {
           assistantId: existingItem.assistantId,
           Timestamp: existingItem.Timestamp
         },
-        UpdateExpression: "SET summary = :summary, devotional = :devotional, bibleStudy = :bibleStudy, processingTime = :processingTime, completed = :completed, generationStatus = :gs, updatedAt = :now, sermonTitle = :sermonTitle",
-        ExpressionAttributeValues: {
-          ":summary": results.summary,
-          ":devotional": results.devotional,
-          ":bibleStudy": results.bibleStudy,
-          ":processingTime": serverProcessingTime,
-          ":completed": true,
-          ":gs": 'completed',
-          ":now": new Date().toISOString(),
-          ":sermonTitle": sermonTitle
-        }
+        UpdateExpression: `SET ${updateExprParts.join(', ')}`,
+        ExpressionAttributeValues: updateExprValues
       }));
       console.log(`[DEBUG] 成功更新現有記錄`);
     } else {
