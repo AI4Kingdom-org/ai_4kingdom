@@ -125,6 +125,12 @@ function EastNavigatorContent() {
       const userId = user?.user_id || '';
       const apiUrl = `/api/sunday-guide/content/${eastUnit.assistantId}?type=${mode}&userId=${encodeURIComponent(userId)}&fileId=${encodeURIComponent(selectedFileUniqueId)}`;
       const response = await fetch(apiUrl);
+      if (response.status === 202) {
+        const data = await response.json().catch(() => ({}));
+        setSelectedMode(null);
+        alert(data.error || '內容正在生成中，請稍候再試');
+        return;
+      }
       if (!response.ok) {
         const errData = await response.json().catch(()=>({error:'未知錯誤'}));
         throw new Error(`获取内容失败: ${response.status} - ${errData.error || response.statusText}`);

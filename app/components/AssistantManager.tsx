@@ -353,6 +353,11 @@ export default function AssistantManager({
       const startProcessingTime = new Date();
       
       // 啟動處理流程（fire-and-forget：不 await，避免 CloudFront 30s 超時）
+      const _pathname = typeof window !== 'undefined' ? window.location.pathname : '';
+      const unitId = _pathname.includes('agape-church') ? 'agape'
+        : _pathname.includes('east-christ-home') ? 'eastChristHome'
+        : _pathname.includes('jian-zhu') ? 'jianZhu'
+        : undefined;
       fetch('/api/sunday-guide/process-document', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -361,7 +366,8 @@ export default function AssistantManager({
           vectorStoreId,
           fileName: uploadedFileName,
           fileId: uploadedFileId || undefined,
-          userId: user?.user_id || '-'
+          userId: user?.user_id || '-',
+          ...(unitId ? { unitId } : {})
         })
       }).catch(e => console.log('[AssistantManager] process-document kick:', e.message));
       
