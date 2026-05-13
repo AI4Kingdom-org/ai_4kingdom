@@ -10,6 +10,7 @@ export interface UnitConfigs {
   agape: string[];
   eastChristHome: string[];
   jianZhu: string[];
+  cfscChurch: string[];
 }
 
 /** Read unit allowedUploaders from DynamoDB; falls back to static constants on error. */
@@ -32,6 +33,7 @@ export async function getUnitConfigsFromDB(): Promise<UnitConfigs> {
         agape: Array.isArray(record.agapeUploaders) ? record.agapeUploaders.map(String) : [],
         eastChristHome: Array.isArray(record.eastChristHomeUploaders) ? record.eastChristHomeUploaders.map(String) : [],
         jianZhu: Array.isArray(record.jianZhuUploaders) ? record.jianZhuUploaders.map(String) : [],
+        cfscChurch: Array.isArray(record.cfscChurchUploaders) ? record.cfscChurchUploaders.map(String) : [],
       };
     }
   } catch (e) {
@@ -42,6 +44,7 @@ export async function getUnitConfigsFromDB(): Promise<UnitConfigs> {
     agape: [...((SUNDAY_GUIDE_UNITS as any).agape?.allowedUploaders ?? [])],
     eastChristHome: [...((SUNDAY_GUIDE_UNITS as any).eastChristHome?.allowedUploaders ?? [])],
     jianZhu: [...((SUNDAY_GUIDE_UNITS as any).jianZhu?.allowedUploaders ?? [])],
+    cfscChurch: [...((SUNDAY_GUIDE_UNITS as any).cfscChurch?.allowedUploaders ?? [])],
   };
 }
 
@@ -51,6 +54,7 @@ export async function getUnitAllowedUploaders(unitId: string): Promise<string[]>
   if (unitId === 'agape') return configs.agape;
   if (unitId === 'eastChristHome') return configs.eastChristHome;
   if (unitId === 'jianZhu') return configs.jianZhu;
+  if (unitId === 'cfscChurch') return configs.cfscChurch;
   // default unit uses the global upload permission list, not this function
   return [];
 }

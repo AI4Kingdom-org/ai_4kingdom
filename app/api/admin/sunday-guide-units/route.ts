@@ -17,6 +17,7 @@ export async function GET() {
           agape: { allowedUploaders: configs.agape },
           eastChristHome: { allowedUploaders: configs.eastChristHome },
           jianZhu: { allowedUploaders: configs.jianZhu },
+          cfscChurch: { allowedUploaders: configs.cfscChurch },
         },
       },
     });
@@ -40,7 +41,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: '沒有權限執行此操作' }, { status: 403 });
     }
 
-    if (!['agape', 'eastChristHome', 'jianZhu'].includes(unitId)) {
+    if (!['agape', 'eastChristHome', 'jianZhu', 'cfscChurch'].includes(unitId)) {
       return NextResponse.json({ success: false, error: '不支援的單位' }, { status: 400 });
     }
 
@@ -61,6 +62,7 @@ export async function POST(req: NextRequest) {
           agapeUploaders: updated.agape,
           eastChristHomeUploaders: updated.eastChristHome,
           jianZhuUploaders: updated.jianZhu,
+          cfscChurchUploaders: updated.cfscChurch,
           updatedBy: String(userId),
           updatedAt: new Date().toISOString(),
         },
