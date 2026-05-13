@@ -59,7 +59,7 @@ interface ChatContextType {
   refreshHomeschoolData: () => Promise<void>; // 新增的方法來刷新 homeschool 資料
 }
 
-const ChatContext = createContext<ChatContextType | null>(null);
+export const ChatContext = createContext<ChatContextType | null>(null);
 
 // 串流控制配置
 const SHOW_THINKING_ONLY = true;   // 改為 true 等待完整回復後顯示
@@ -364,6 +364,7 @@ export function ChatProvider({
     if (window.location.pathname.includes('agape-church')) unitId = 'agape';
   else if (window.location.pathname.includes('east-christ-home')) unitId = 'eastChristHome';
   else if (window.location.pathname.includes('jian-zhu')) unitId = 'jianZhu';
+  else if (window.location.pathname.includes('cfsc-church')) unitId = 'cfscChurch';
       else {
               // 可擴充：從 localStorage 或 config 取得
               const storedUnit = localStorage.getItem('currentUnitId');

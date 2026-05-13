@@ -33,6 +33,9 @@ export default function UserPermissionsPage() {
   // Jian Zhu 單位專屬上傳者
   const [jianZhuUploaders, setJianZhuUploaders] = useState<string[]>([]);
   const [newJianZhuUserId, setNewJianZhuUserId] = useState('');
+  // CFSC Church 單位專屬上傳者
+  const [cfscChurchUploaders, setCfscChurchUploaders] = useState<string[]>([]);
+  const [newCfscChurchUserId, setNewCfscChurchUserId] = useState('');
 
   // 檢查當前用戶是否為管理員
   const isAdmin = user?.user_id === '1' || PERMISSION_GROUPS.ADMINS.includes(user?.user_id || '');
@@ -61,6 +64,7 @@ export default function UserPermissionsPage() {
   await loadAgapeUploaders();
   await loadEastUploaders();
   await loadJianZhuUploaders();
+  await loadCfscChurchUploaders();
         await fetchUserDetails();
       } else {
         throw new Error(data.error);
@@ -75,6 +79,7 @@ export default function UserPermissionsPage() {
   await loadAgapeUploaders();
   await loadEastUploaders();
   await loadJianZhuUploaders();
+  await loadCfscChurchUploaders();
       await fetchUserDetails();
     } finally {
       setLoading(false);
@@ -117,6 +122,19 @@ export default function UserPermissionsPage() {
       }
     } catch (e) {
       console.error('載入 Jian Zhu 單位上傳者失敗', e);
+    }
+  };
+
+  // 讀取 CFSC Church 單位 allowedUploaders
+  const loadCfscChurchUploaders = async () => {
+    try {
+      const res = await fetch('/api/admin/sunday-guide-units');
+      const data = await res.json();
+      if (data.success) {
+        setCfscChurchUploaders(data.data.units.cfscChurch?.allowedUploaders || []);
+      }
+    } catch (e) {
+      console.error('載入 CFSC Church 單位上傳者失敗', e);
     }
   };
 
@@ -341,6 +359,24 @@ export default function UserPermissionsPage() {
     }
   };
 
+  // 更新 CFSC Church 單位 allowedUploaders
+  const updateCfscChurchUploaders = async (uploaders: string[]) => {
+    try {
+      const res = await fetch('/api/admin/sunday-guide-units', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ unitId: 'cfscChurch', allowedUploaders: uploaders, userId: user?.user_id })
+      });
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error || '更新失敗');
+      return true;
+    } catch (e) {
+      console.error('更新 CFSC Church 上傳者失敗', e);
+      setMessage({ type: 'error', text: '更新 CFSC Church 上傳者失敗' });
+      return false;
+    }
+  };
+
   // 更新 Jian Zhu 單位 allowedUploaders
   const updateJianZhuUploaders = async (uploaders: string[]) => {
     try {
@@ -444,6 +480,21 @@ export default function UserPermissionsPage() {
       setAgapeUploaders(updated);
       setMessage({ type: 'success', text: 'Agape 上傳者已移除' });
     }
+  };
+
+  const addCfscChurchUploader = async () => {
+    if (!newCfscChurchUserId.trim()) { setMessage({ type: 'error', text: '請輸入用戶ID' }); return; }
+    if (cfscChurchUploaders.includes(newCfscChurchUserId.trim())) { setMessage({ type: 'error', text: '該用戶已在 CFSC Church 上傳清單中' }); return; }
+    const updated = [...cfscChurchUploaders, newCfscChurchUserId.trim()];
+    const ok = await updateCfscChurchUploaders(updated);
+    if (ok) { setCfscChurchUploaders(updated); setNewCfscChurchUserId(''); setMessage({ type: 'success', text: 'CFSC Church 上傳者已新增' }); await fetchUserDetails(); }
+  };
+
+  const removeCfscChurchUploader = async (uId: string) => {
+    if (!confirm(`確定要移除用戶 ${userDetails[uId]?.displayName || uId} 的 CFSC Church 上傳權限嗎？`)) return;
+    const updated = cfscChurchUploaders.filter((id) => id !== uId);
+    const ok = await updateCfscChurchUploaders(updated);
+    if (ok) { setCfscChurchUploaders(updated); setMessage({ type: 'success', text: 'CFSC Church 上傳者已移除' }); }
   };
 
   // 清除消息
@@ -638,6 +689,36 @@ export default function UserPermissionsPage() {
         </div>
       </div>
 
+      {/* CFSC Church 單位專屬上傳權限管理 */}
+      <div className={styles.section}>
+        <h2 className={styles.sectionTitle}>CFSC Church 單位專屬上傳權限</h2>
+        <div className={styles.addUserForm}>
+          <input type="text" placeholder="輸入用戶ID" value={newCfscChurchUserId} onChange={(e) => setNewCfscChurchUserId(e.target.value)} className={styles.input} />
+          <button onClick={addCfscChurchUploader} className={styles.button}>添加 CFSC Church 上傳權限</button>
+        </div>
+        <div className={styles.userList}>
+          <h3>CFSC Church 具有上傳權限的用戶</h3>
+          {loading ? (
+            <div className={styles.loading}>載入中...</div>
+          ) : cfscChurchUploaders.length === 0 ? (
+            <div className={styles.noUsers}>暫無用戶</div>
+          ) : (
+            <ul className={styles.list}>
+              {cfscChurchUploaders.map((userId) => (
+                <li key={userId} className={styles.listItem}>
+                  <div className={styles.userInfo}>
+                    <strong>{userDetails[userId]?.displayName || `用戶${userId}`}</strong>
+                    <span className={styles.userId}>ID: {userId}</span>
+                    {userDetails[userId]?.email && <span className={styles.userEmail}>{userDetails[userId].email}</span>}
+                  </div>
+                  <button onClick={() => removeCfscChurchUploader(userId)} className={styles.removeButton}>移除</button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>
+
       {/* 權限組管理 */}
       <div className={styles.section}>
         <h2 className={styles.sectionTitle}>權限組管理</h2>
@@ -707,7 +788,7 @@ export default function UserPermissionsPage() {
             <p>控制哪些用戶可以在 Sunday Guide（/sunday-guide-v2）看到並使用文檔上傳功能。此名單儲存於資料庫，修改後立即生效，無需重新部署。</p>
           </div>
           <div className={styles.infoItem}>
-            <strong>單位專屬上傳權限（Agape／East Christ Home／Jian Zhu）：</strong>
+            <strong>單位專屬上傳權限（Agape／East Christ Home／Jian Zhu／CFSC Church）：</strong>
             <p>分別控制各單位頁面的上傳與刪除管理員資格。名單中的用戶可以看到所有人的文件刪除按鈕，並有權上傳至該單位。修改後重新整理頁面即可生效，無需重新部署。</p>
           </div>
           <div className={styles.infoItem}>

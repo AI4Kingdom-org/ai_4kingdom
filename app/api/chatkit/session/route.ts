@@ -20,8 +20,16 @@ const resolveWorkflowId = (module?: string) => {
   if (m === 'routing_agent' || m === 'routing-agent' || m === 'routingagent') {
     return process.env.ROUTING_AGENT_WORKFLOW_ID || process.env.NEXT_PUBLIC_ROUTING_AGENT_WORKFLOW_ID || WORKFLOW_IDS.ROUTING_AGENT;
   }
-  if (m === 'agape-church-navigator' || m === 'east-christ-home-navigator') {
+  if (m === 'agape-church-navigator') {
     return process.env.CHURCH_NAVIGATOR_WORKFLOW_ID || process.env.NEXT_PUBLIC_CHURCH_NAVIGATOR_WORKFLOW_ID || '';
+  }
+  if (m === 'east-christ-home-navigator') {
+    return process.env.EAST_CHRIST_HOME_NAVIGATOR_WORKFLOW_ID || process.env.NEXT_PUBLIC_EAST_CHRIST_HOME_NAVIGATOR_WORKFLOW_ID || 'wf_6a034065ba6081908a0a09c3431884b2037d99c7dedea623';
+  }
+  if (m === 'cfsc-church-navigator') {
+    return process.env.CFSC_CHURCH_NAVIGATOR_WORKFLOW_ID
+      || process.env.NEXT_PUBLIC_CFSC_CHURCH_NAVIGATOR_WORKFLOW_ID
+      || 'wf_6a033f874e7881909bf6312fd0359eef030d91c0f15f2594';
   }
   if (m === 'jian-zhu-navigator') {
     return process.env.JIAN_ZHU_NAVIGATOR_WORKFLOW_ID || process.env.NEXT_PUBLIC_JIAN_ZHU_NAVIGATOR_WORKFLOW_ID || '';
