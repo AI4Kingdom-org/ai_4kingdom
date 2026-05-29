@@ -236,6 +236,10 @@ function AgapeNavigatorContent() {
     }
   };
 
+  if (!user) {
+    return <div>請先登錄</div>;
+  }
+
   return (
     <div className={styles.container}>
   <h1 className={styles.title}>主日信息导航</h1>
