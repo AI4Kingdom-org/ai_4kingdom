@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useChat } from '../../contexts/ChatContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { useCredit } from '../../contexts/CreditContext';
@@ -40,6 +40,8 @@ export default function Chat({ type, assistantId, vectorStoreId, userId, threadI
 
   const [isCreatingThread, setIsCreatingThread] = useState(false);
   const [isClearingAll, setIsClearingAll] = useState(false);
+  // 只有用戶主動點選歷史對話時才 load history，避免 sendMessage 建立 thread 時觸發
+  const shouldLoadHistory = useRef(false);
 
   const handleClearAllThreads = async () => {
     const uid = userId || user?.user_id;
@@ -124,7 +126,8 @@ export default function Chat({ type, assistantId, vectorStoreId, userId, threadI
   }, [threadId, currentThreadId, setCurrentThreadId]);
 
   useEffect(() => {
-    if (currentThreadId && config?.userId) {
+    if (currentThreadId && config?.userId && shouldLoadHistory.current) {
+      shouldLoadHistory.current = false;
       loadChatHistory(config.userId as string);
     }
   }, [currentThreadId, loadChatHistory, config]);
@@ -250,6 +253,7 @@ export default function Chat({ type, assistantId, vectorStoreId, userId, threadI
   const handleSelectThread = async (threadId: string) => {
     try {
       if (threadId === currentThreadId) return;
+      shouldLoadHistory.current = true;
       setError('');
       setMessages([]);
       setCurrentThreadId(threadId);
