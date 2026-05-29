@@ -61,6 +61,30 @@ export default function Chat({ type, assistantId, vectorStoreId }: ChatProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [isFetchingHistory, setIsFetchingHistory] = useState(false);
   const [isCreatingThread, setIsCreatingThread] = useState(false);
+  const [isListening, setIsListening] = useState(false);
+  const recognitionRef = useRef<any>(null);
+
+  const toggleMic = () => {
+    if (isListening) {
+      recognitionRef.current?.stop();
+      return;
+    }
+    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SR) { alert('此瀏覽器不支援語音輸入（請使用 Chrome 或 Edge）'); return; }
+    const rec = new SR();
+    rec.lang = 'zh-TW';
+    rec.interimResults = false;
+    rec.continuous = false;
+    rec.onstart = () => setIsListening(true);
+    rec.onend   = () => setIsListening(false);
+    rec.onresult = (e: any) => {
+      const transcript = Array.from(e.results as any[])
+        .map((r: any) => r[0].transcript).join('');
+      setInput(prev => prev ? prev + ' ' + transcript : transcript);
+    };
+    recognitionRef.current = rec;
+    rec.start();
+  };
 
 
   useEffect(() => {
@@ -310,6 +334,14 @@ export default function Chat({ type, assistantId, vectorStoreId }: ChatProps) {
         )}
         {error && <div className={styles.error}>{error}</div>}
         <div className={styles.inputContainer}>
+          <button
+            onClick={toggleMic}
+            className={`${styles.micButton}${isListening ? ` ${styles.micListening}` : ''}`}
+            disabled={isLoading || isFetchingHistory}
+            title={isListening ? '停止錄音' : '語音輸入'}
+          >
+            {isListening ? '🔴' : '🎤'}
+          </button>
           <textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}

@@ -9,11 +9,14 @@ export const CHAT_TYPES: Record<string, ChatType> = {
   CHILDREN_MENTAL: 'children-mental',
   JOHNSUNG: 'johnsung',
   TEEN_CONSOLE: 'teen-console',
-  HOME_CONSOLE: 'home-console'
+  HOME_CONSOLE: 'home-console',
+  AGAPE_CHURCH: 'agape-church',
+  EAST_CHRIST_HOME: 'east-christ-home',
+  CFSC_CHURCH: 'cfsc-church'
 } as const;
 
 
-export type ChatType = 'general' | 'sunday-guide' | 'bible-study' | 'homeschool' | 'spiritual-partner' | 'children-mental' | 'johnsung' | 'teen-console' | 'home-console';
+export type ChatType = 'general' | 'sunday-guide' | 'bible-study' | 'homeschool' | 'spiritual-partner' | 'children-mental' | 'johnsung' | 'teen-console' | 'home-console' | 'agape-church' | 'east-christ-home' | 'cfsc-church';
 
 
 export interface ChatTypeConfig {
@@ -86,6 +89,27 @@ export const CHAT_TYPE_CONFIGS: Record<ChatType, ChatTypeConfig> = {
     description: '家庭关系咨询',
     assistantId: ASSISTANT_IDS.HOME_CONSOLE,
     vectorStoreId: VECTOR_STORE_IDS.HOME_CONSOLE
+  },
+  'agape-church': {
+    type: 'agape-church',
+    title: '愛加倍教會',
+    description: '愛加倍教會牧者助手',
+    assistantId: ASSISTANT_IDS.AGAPE_CHURCH,
+    vectorStoreId: VECTOR_STORE_IDS.AGAPE_CHURCH
+  },
+  'east-christ-home': {
+    type: 'east-christ-home',
+    title: '東基家',
+    description: '東基家牧者助手',
+    assistantId: ASSISTANT_IDS.EAST_CHRIST_HOME,
+    vectorStoreId: VECTOR_STORE_IDS.EAST_CHRIST_HOME
+  },
+  'cfsc-church': {
+    type: 'cfsc-church',
+    title: 'CFSC Church',
+    description: 'CFSC Church 牧者助手',
+    assistantId: ASSISTANT_IDS.CFSC_CHURCH,
+    vectorStoreId: VECTOR_STORE_IDS.CFSC_CHURCH
   }
 
 };
@@ -132,6 +156,18 @@ export const CHAT_CONFIGS: Record<ChatType, ChatConfig> = {
   'home-console': {
     title: '家庭辅导',
     description: '家庭关系咨询'
+  },
+  'agape-church': {
+    title: '愛加倍教會',
+    description: '愛加倍教會牧者助手'
+  },
+  'east-christ-home': {
+    title: '東基家',
+    description: '東基家牧者助手'
+  },
+  'cfsc-church': {
+    title: 'CFSC Church',
+    description: 'CFSC Church 牧者助手'
   }
 
 }; 

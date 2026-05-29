@@ -1,14 +1,27 @@
 .container {
   display: flex;
   height: 100%;
-  width: 100%; /* 確保佔滿父容器寬度 */
-  background: white;
-  border-radius: 8px;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  width: 100%;
   overflow: hidden;
   position: relative;
-  resize: both;
-  box-sizing: border-box; /* 確保邊框和內邊距計入總寬度 */
+  box-sizing: border-box;
+  /* 淺色主題變數（與 agape-church 一致） */
+  --chat-bg: #ffffff;
+  --chat-sidebar-bg: #f5f5f5;
+  --chat-input-bg: #eeeeee;
+  --chat-input-field-bg: #ffffff;
+  --chat-text-color: #1a1a1a;
+  --chat-secondary-text: #666666;
+  --chat-border-color: #e0e0e0;
+  --chat-item-hover-bg: rgba(0, 0, 0, 0.06);
+  --chat-item-active-bg: rgba(0, 0, 0, 0.12);
+  --chat-bot-msg-bg: #f0f0f0;
+  --chat-bot-msg-color: #1a1a1a;
+  --chat-new-btn-bg: #1a1a1a;
+  --chat-new-btn-color: #ffffff;
+  --chat-new-btn-border: #1a1a1a;
+  --chat-send-btn-bg: #1a1a1a;
+  --chat-send-btn-hover: #333333;
 }
 
 .chatWindow {
@@ -16,21 +29,23 @@
   display: flex;
   flex-direction: column;
   height: 100%;
-  width: 100%; /* 確保佔滿父元素寬度 */
+  width: 100%;
   overflow: hidden;
-  background-color: rgb(43, 41, 41);
-  border-radius: 12px;
-  box-sizing: border-box; /* 確保邊框和內邊距計入總寬度 */
+  background-color: var(--chat-bg, #ffffff);
+  box-sizing: border-box;
 }
 
-/* 隱藏對話列表邊欄，讓聊天窗口佔滿全寬 */
+/* 對話列表邊欄（預設隱藏，透過 showSidebar prop 顯示） */
 .conversationListContainer {
-  display: none; /* 隱藏對話列表 */
-  width: 0;
-  min-width: 0;
+  display: none;
+  width: 240px;
+  min-width: 200px;
+  max-width: 280px;
   height: 100%;
+  flex-shrink: 0;
   overflow-y: auto;
-  background: #100001;
+  background: var(--chat-sidebar-bg, #f5f5f5);
+  border-right: 1px solid var(--chat-border-color, #e0e0e0);
 }
 
 .messageList {
@@ -72,6 +87,30 @@
 
 .loginButton:hover {
   background: #0056b3;
+}
+
+.clearAllButton {
+  margin: 8px 10px;
+  padding: 7px 10px;
+  background: transparent;
+  color: #c0392b;
+  border: 1px solid #c0392b;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  cursor: pointer;
+  text-align: left;
+  flex-shrink: 0;
+  transition: background 0.15s, color 0.15s;
+}
+
+.clearAllButton:hover:not(:disabled) {
+  background: #c0392b;
+  color: #ffffff;
+}
+
+.clearAllButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 @media (max-width: 768px) {
