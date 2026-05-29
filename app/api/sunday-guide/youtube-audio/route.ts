@@ -14,8 +14,8 @@ const WHISPER_MAX_BYTES = 24 * 1024 * 1024; // 24 MB
 const WHISPER_MAX_DURATION_SEC = 1400; // ~23 分鐘
 // 每個分片的目標時長（秒）— 20 分鐘，安全低於 1400s 限制
 const CHUNK_DURATION_SEC = 20 * 60;
-// Amplify 相容：YouTube 影片最長 120 分鐘
-const MAX_VIDEO_DURATION_SEC = 120 * 60; // 7200s
+// Amplify 相容：YouTube 影片最長 180 分鐘
+const MAX_VIDEO_DURATION_SEC = 180 * 60; // 10800s
 
 const execAsync = promisify(exec);
 
@@ -185,7 +185,6 @@ async function transcribeFile(filePath: string, ext: string): Promise<string> {
     file: whisperFile,
     model: 'gpt-4o-transcribe',
     response_format: 'text',
-    language: 'zh',
   });
   return typeof result === 'string' ? result : (result as any).text || String(result);
 }
@@ -508,7 +507,7 @@ export async function POST(request: Request) {
             return NextResponse.json(
               {
                 error: 'VIDEO_TOO_LONG',
-                message: `影片時長約 ${Math.round(proxy.duration / 60)} 分鐘，超出上限（120 分鐘）。請使用「指定轉錄片段」功能擷取部分內容，或選擇較短的影片。`,
+                message: `影片時長約 ${Math.round(proxy.duration / 60)} 分鐘，超出上限（180 分鐘）。請使用「指定轉錄片段」功能擷取部分內容，或選擇較短的影片。`,
               },
               { status: 400 }
             );
@@ -552,7 +551,7 @@ export async function POST(request: Request) {
             return NextResponse.json(
               {
                 error: 'VIDEO_TOO_LONG',
-                message: `影片時長約 ${Math.round(dur / 60)} 分鐘，超出上限（120 分鐘）。`,
+                message: `影片時長約 ${Math.round(dur / 60)} 分鐘，超出上限（180 分鐘）。`,
               },
               { status: 400 }
             );

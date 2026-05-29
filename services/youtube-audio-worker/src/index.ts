@@ -102,7 +102,7 @@ function getOpenAI(): OpenAI {
 const WHISPER_MAX_BYTES = 24 * 1024 * 1024;
 const WHISPER_MAX_DURATION_SEC = 1400; // gpt-4o-transcribe 單次時長上限 (~23min)
 const CHUNK_DURATION_SEC = 20 * 60;
-const MAX_VIDEO_DURATION_SEC = 120 * 60;
+const MAX_VIDEO_DURATION_SEC = 180 * 60;
 const WHISPER_CONCURRENCY = 3;
 const COOKIES_PATH = join(os.tmpdir(), 'yt-cookies.txt');
 
@@ -308,7 +308,7 @@ async function transcribeFile(filePath: string, ext: string): Promise<string> {
   const buf = await readFile(filePath);
   const whisperFile = new File([buf], `audio.${ext}`, { type: mimeType });
   const result = await getOpenAI().audio.transcriptions.create({
-    file: whisperFile, model: 'gpt-4o-transcribe', response_format: 'text', language: 'zh',
+    file: whisperFile, model: 'gpt-4o-transcribe', response_format: 'text',
   });
   return typeof result === 'string' ? result : (result as any).text || String(result);
 }
@@ -335,12 +335,12 @@ async function transcribeChunksParallel(
 async function formatTranscript(rawText: string): Promise<string> {
   if (!rawText || rawText.trim().length < 50) return rawText.trim();
   try {
-    const CHUNK_SIZE = 3000;
+    const CHUNK_SIZE = 2000;
     const chunks = splitText(rawText.trim(), CHUNK_SIZE);
     const parts: string[] = [];
     for (const chunk of chunks) {
       const completion = await getOpenAI().chat.completions.create({
-        model: 'gpt-4o-mini', temperature: 0,
+        model: 'gpt-4o', temperature: 0,
         messages: [
           {
             role: 'system',
@@ -350,13 +350,13 @@ async function formatTranscript(rawText: string): Promise<string> {
               '2. Fix punctuation and sentence boundaries',
               '3. Merge broken sentences for readability',
               '4. Remove clearly off-topic interjections',
-              '5. Preserve the original meaning and language (keep Chinese as Chinese)',
+              '5. Preserve the original meaning and language (keep Chinese as Chinese, English as English)',
               'Return only the cleaned transcript text, no commentary.',
             ].join('\n'),
           },
           { role: 'user', content: chunk },
         ],
-        max_tokens: 8192,
+        max_tokens: 16384,
       });
       parts.push(completion.choices[0]?.message?.content?.trim() ?? chunk);
     }
@@ -456,7 +456,13 @@ app.post('/api/youtube-audio', authMiddleware, async (req: express.Request, res:
   const chunkDir = join(tmpDir, 'chunks');
 
   try {
-    const { url, startTime, endTime, format = true } = req.body;
+    const {
+      url,
+      startTime,
+      endTime,
+      format = true,
+      forceAudioTranscription = false,
+    } = req.body;
     if (!url || typeof url !== 'string') {
       res.status(400).json({ error: 'INVALID_URL', message: 'Please provide a valid YouTube URL' });
       return;
@@ -472,7 +478,8 @@ app.post('/api/youtube-audio', authMiddleware, async (req: express.Request, res:
 
     // Strategy 1: youtube_transcript_api (no bot detection)
     // Skip if startTime/endTime specified (cannot time-filter captions easily)
-    if (!startTime && !endTime) {
+    // or caller explicitly forces audio transcription for consistency.
+    if (!forceAudioTranscription && !startTime && !endTime) {
       console.log('[worker] Trying YouTube transcript API first...');
       const transcriptText = await getYouTubeTranscript(videoId);
       if (transcriptText && transcriptText.length > 50) {
@@ -488,7 +495,7 @@ app.post('/api/youtube-audio', authMiddleware, async (req: express.Request, res:
       }
       console.log('[worker] No transcript, falling back to audio download');
     } else {
-      console.log('[worker] Time range specified, skipping transcript, using audio');
+      console.log('[worker] Skipping transcript API, using audio path');
     }
 
     // Strategy 2: yt-dlp + Whisper
@@ -512,7 +519,7 @@ app.post('/api/youtube-audio', authMiddleware, async (req: express.Request, res:
       if (dur > MAX_VIDEO_DURATION_SEC) {
         res.status(400).json({
           error: 'VIDEO_TOO_LONG',
-          message: `Video is ${Math.round(dur / 60)} min, exceeds 100 min limit`,
+          message: `Video is ${Math.round(dur / 60)} min, exceeds 180 min limit`,
         });
         return;
       }
