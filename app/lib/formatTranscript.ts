@@ -3,7 +3,7 @@ import OpenAI from 'openai';
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 /**
- * 使用 GPT-4o-mini 為 Whisper 原始轉錄文字加上標點符號、分段，提升可讀性。
+ * 使用 GPT-4o 為 Whisper 原始轉錄文字加上標點符號、分段，提升可讀性。
  *
  * @param rawText  Whisper 輸出的原始文字（無標點）
  * @returns        格式化後的文字
@@ -15,8 +15,8 @@ export async function formatTranscript(rawText: string): Promise<string> {
   if (rawText.trim().length < 50) return rawText.trim();
 
   try {
-    // 超長文字分段處理（每段最多約 3000 字，避免單次 token 過多）
-    const CHUNK_SIZE = 3000;
+    // 超長文字分段處理（每段最多約 2000 字，避免單次 token 過多）
+    const CHUNK_SIZE = 2000;
     const chunks = splitIntoChunks(rawText.trim(), CHUNK_SIZE);
 
     const formattedParts: string[] = [];
@@ -35,7 +35,7 @@ export async function formatTranscript(rawText: string): Promise<string> {
 
 async function formatChunk(text: string): Promise<string> {
   const completion = await openai.chat.completions.create({
-    model: 'gpt-4o-mini',
+    model: 'gpt-4o',
     temperature: 0,
     messages: [
       {
@@ -47,6 +47,7 @@ async function formatChunk(text: string): Promise<string> {
 3. 修正明顯的同音字/語音辨識錯誤（如「的地得」、「再在」等）
 4. 保留所有原始語義，不刪減、不改寫、不添加內容
 5. 如原文有重複詞彙（口語習慣），保留不刪
+6. 若原文含英文，保留英文原文不翻譯
 只輸出整理後的文字，不要加任何說明或前言。`,
       },
       {
@@ -54,7 +55,7 @@ async function formatChunk(text: string): Promise<string> {
         content: text,
       },
     ],
-    max_tokens: 8192,
+    max_tokens: 16384,
   });
 
   return completion.choices[0]?.message?.content?.trim() ?? text;
