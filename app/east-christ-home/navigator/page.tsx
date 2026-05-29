@@ -3,13 +3,15 @@
 import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useCredit } from '../../contexts/CreditContext';
-import WithChat from '../../components/layouts/WithChat';
+import { ChatProvider, useChat } from '../../contexts/ChatContext';
+import ConversationList from '../../components/ConversationList';
+import MessageList from '../../components/Chat/MessageList';
+import ChatInput from '../../components/Chat/ChatInput';
 import styles from '../../user-sunday-guide/page.module.css';
-import { CHAT_TYPES } from '../../config/chatTypes';
+import chatStyles from './chat.module.css';
 import { getSundayGuideUnitConfig } from '../../config/constants';
+import { ASSISTANT_IDS, VECTOR_STORE_IDS } from '../../config/constants';
 import ReactMarkdown from 'react-markdown';
-import ChatkitEmbed from '../../components/ChatkitEmbed';
-import Script from 'next/script';
 
 // Reuse same type of modes
 type GuideMode = 'summary' | 'devotional' | 'bible' | null;
@@ -36,6 +38,44 @@ function EastNavigatorContent() {
   const [uploadTime, setUploadTime] = useState<string>('');
   const [pdfLoading, setPdfLoading] = useState(false);
   const [pdfError, setPdfError] = useState<string | null>(null);
+  // 手機版 sidebar 展開/折疊
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  // Chat 狀態
+  const { messages, currentThreadId, setCurrentThreadId, sendMessage, isLoading: chatLoading, error: chatError, setError: setChatError, setMessages, loadChatHistory } = useChat();
+  const shouldLoadHistory = useRef(false);
+
+  useEffect(() => {
+    if (chatError) {
+      const t = setTimeout(() => setChatError(''), 8000);
+      return () => clearTimeout(t);
+    }
+  }, [chatError, setChatError]);
+
+  useEffect(() => {
+    if (currentThreadId && user && shouldLoadHistory.current) {
+      shouldLoadHistory.current = false;
+      loadChatHistory(user.user_id);
+    }
+  }, [currentThreadId]);
+
+  const handleCreateNewThread = () => {
+    setCurrentThreadId(null);
+    setMessages([]);
+  };
+
+  const handleSelectThread = (threadId: string) => {
+    if (threadId === currentThreadId) return;
+    shouldLoadHistory.current = true;
+    setChatError('');
+    setMessages([]);
+    setCurrentThreadId(threadId);
+  };
+
+  const handleSendMessage = async (message: string) => {
+    await sendMessage(message);
+    window.dispatchEvent(new CustomEvent('refreshConversations'));
+  };
 
   // 初始化：取得檔案列表
   useEffect(() => {
@@ -211,31 +251,66 @@ function EastNavigatorContent() {
           {fileName === '获取文件信息失败' ? '无法获取文件信息，请稍后重试' : '目前尚无可用文件'}
         </div>
       )}
-      {sermonContent ? (
-        <div className={styles.contentWrapper}>
-          <div className={`${styles.contentArea} ${styles.hasContent}`}>{renderContent()}</div>
-          <div className={styles.chatSection}>
-            {/* ChatKit 前端 SDK 腳本（必要） */}
-            <Script src="https://cdn.platform.openai.com/deployments/chatkit/chatkit.js" strategy="afterInteractive" />
-            {user && (
-              <ChatkitEmbed userId={user.user_id} module="east-christ-home-navigator" />
-            )}
-          </div>
-        </div>
-      ) : (
-        <div className={styles.emptyState}><p>请先选择要查看的内容类型</p></div>
-      )}
+      <div className={styles.contentWrapper}>
+        {sermonContent ? (
+          <>
+            <div className={`${styles.contentArea} ${styles.hasContent}`}>{renderContent()}</div>
+            <div className={styles.chatSection}>
+              <div className={chatStyles.chatWrapper}>
+                <div className={`${chatStyles.sidebar}${sidebarOpen ? ' ' + chatStyles.sidebarOpen : ''}`}>
+                  <button
+                    className={chatStyles.sidebarToggle}
+                    onClick={() => setSidebarOpen(v => !v)}
+                  >
+                    <span>📋 對話記錄</span>
+                    <span>{sidebarOpen ? '▲' : '▼'}</span>
+                  </button>
+                  <ConversationList
+                    userId={user.user_id}
+                    type="east-christ-home"
+                    currentThreadId={currentThreadId}
+                    onSelectThread={handleSelectThread}
+                    isCreating={false}
+                    onCreateNewThread={handleCreateNewThread}
+                    sidebarMode={true}
+                  />
+                </div>
+                <div className={chatStyles.main}>
+                  <MessageList messages={messages} isLoading={chatLoading} />
+                  {chatError && (
+                    <div style={{ color: '#f55', padding: '6px 16px', background: '#3a0000' }}>
+                      {chatError}
+                    </div>
+                  )}
+                  <ChatInput onSend={handleSendMessage} isLoading={chatLoading} />
+                </div>
+              </div>
+            </div>
+          </>
+        ) : (
+          <div className={styles.emptyState} style={{ textAlign: 'center', width: '100%' }}><p>请先选择要查看的内容类型</p></div>
+        )}
+      </div>
     </div>
   );
 }
 
 export default function EastNavigatorPage() {
+  const [mounted, setMounted] = useState(false);
   const { user, loading } = useAuth();
-  if (loading) return <div>Loading...</div>;
+  useEffect(() => setMounted(true), []);
+  if (!mounted || loading) return null;
   if (!user) return <div>请先登录</div>;
   return (
-    <WithChat chatType={CHAT_TYPES.SUNDAY_GUIDE}>
+    <ChatProvider
+      initialConfig={{
+        type: 'east-christ-home',
+        assistantId: ASSISTANT_IDS.EAST_CHRIST_HOME,
+        vectorStoreId: VECTOR_STORE_IDS.EAST_CHRIST_HOME,
+        userId: user.user_id,
+      }}
+    >
       <EastNavigatorContent />
-    </WithChat>
+    </ChatProvider>
   );
 }

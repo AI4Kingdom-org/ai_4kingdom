@@ -17,9 +17,11 @@ interface ChatProps {
   vectorStoreId: string;
   userId?: string;
   threadId?: string | null;
+  showSidebar?: boolean;
+  showClearAll?: boolean;
 }
 
-export default function Chat({ type, assistantId, vectorStoreId, userId, threadId }: ChatProps) {
+export default function Chat({ type, assistantId, vectorStoreId, userId, threadId, showSidebar = false, showClearAll = false }: ChatProps) {
   const { user, loading: authLoading } = useAuth();
   const { refreshUsage } = useCredit(); // 引入信用點數更新函數
   const {
@@ -37,6 +39,34 @@ export default function Chat({ type, assistantId, vectorStoreId, userId, threadI
   } = useChat();
 
   const [isCreatingThread, setIsCreatingThread] = useState(false);
+  const [isClearingAll, setIsClearingAll] = useState(false);
+
+  const handleClearAllThreads = async () => {
+    const uid = userId || user?.user_id;
+    if (!uid || isClearingAll) return;
+    if (!confirm('確定要清空所有對話記錄嗎？此操作無法復原。')) return;
+    try {
+      setIsClearingAll(true);
+      const res = await fetch(`/api/threads?userId=${uid}&type=${type}`, { credentials: 'include' });
+      if (!res.ok) throw new Error('獲取對話列表失敗');
+      const threads = await res.json();
+      await Promise.all(
+        threads.map((t: { threadId: string }) =>
+          fetch(`/api/threads/${t.threadId}`, {
+            method: 'DELETE',
+            headers: { 'user-id': String(uid) },
+          })
+        )
+      );
+      setCurrentThreadId(null);
+      setMessages([]);
+      window.dispatchEvent(new CustomEvent('refreshConversations'));
+    } catch (err) {
+      console.error('[ERROR] 清空對話失敗:', err);
+    } finally {
+      setIsClearingAll(false);
+    }
+  };
 
   // Log props for debugging
   useEffect(() => {
@@ -99,13 +129,8 @@ export default function Chat({ type, assistantId, vectorStoreId, userId, threadI
     }
   }, [currentThreadId, loadChatHistory, config]);
 
-  // 自動創建新對話（只有在沒有 prop threadId 時才創建）
-  useEffect(() => {
-    if (!currentThreadId && !isCreatingThread && user && !threadId) {
-      console.log('[DEBUG] 沒有 threadId，自動創建新對話');
-      handleCreateNewThread();
-    }
-  }, [currentThreadId, isCreatingThread, user, threadId]);
+  // 注意：不自動建立 thread，等使用者發第一則訊息時由 sendMessage 懶惰建立
+  // （ChatContext.sendMessage 已內建懶惰建立邏輯）
 
   const handleCreateNewThread = async () => {
     if (isCreatingThread || !user) return;
@@ -238,7 +263,7 @@ export default function Chat({ type, assistantId, vectorStoreId, userId, threadI
       {userId || user?.user_id ? (
         <>
           {/* 聊天歷史側邊欄 */}
-          <div className={styles.conversationListContainer}>
+          <div className={styles.conversationListContainer} style={showSidebar ? { display: 'flex', flexDirection: 'column' } : undefined}>
             <ConversationList
               userId={String(userId || user?.user_id)}
               type={type}
@@ -247,6 +272,16 @@ export default function Chat({ type, assistantId, vectorStoreId, userId, threadI
               isCreating={isCreatingThread}
               onCreateNewThread={handleCreateNewThread}
             />
+            {showClearAll && (
+              <button
+                className={styles.clearAllButton}
+                onClick={handleClearAllThreads}
+                disabled={isClearingAll}
+                title="清空所有對話記錄"
+              >
+                {isClearingAll ? '清除中…' : '🗑 清空所有記錄'}
+              </button>
+            )}
           </div>
           {/* 聊天主視窗 */}
           <div className={styles.chatWindow}>

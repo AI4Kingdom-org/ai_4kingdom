@@ -1,74 +1,125 @@
 .inputContainer {
   display: flex;
-  gap: 1rem;
-  padding: 0.75rem 1rem; /* 稍微減少上下內邊距 */
-  background-color: #2a2a2a; /* 調整背景色，與消息列表顏色更一致 */
-  border-top: 1px solid #3a3a3a; /* 稍微調暗一些 */
+  gap: 10px;
+  padding: 0.75rem 1rem;
+  background-color: var(--chat-input-bg, #2a2a2a);
+  border-top: 1px solid var(--chat-border-color, #3a3a3a);
   position: sticky;
   bottom: 0;
-  width: 100%; /* 確保使用100%寬度 */
-  box-sizing: border-box; /* 確保內邊距計入總寬度 */
-  box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.15); /* 稍微調整陰影 */
+  width: 100%;
+  box-sizing: border-box;
+  align-items: flex-end;
+}
+
+/* 輸入框 + mic 的容器 */
+.inputField {
+  flex: 1;
+  display: flex;
+  align-items: flex-end;
+  background-color: var(--chat-input-field-bg, #333333);
+  border: 1px solid var(--chat-border-color, #3a3a3a);
+  border-radius: 12px;
+  overflow: hidden;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.inputField:focus-within {
+  border-color: #4a5fc1;
+  box-shadow: 0 0 0 2px rgba(74, 95, 193, 0.2);
 }
 
 .textArea {
   flex: 1;
-  padding: 0.75rem 1rem;
-  border: 1px solid #3a3a3a; /* 調整邊框顏色 */
-  border-radius: 12px;
+  padding: 0.75rem 0.75rem;
+  border: none;
+  background: transparent;
   resize: none;
   font-family: inherit;
   font-size: 1rem;
   line-height: 1.5;
   min-height: 50px;
   max-height: 200px;
-  background-color: #333333; /* 調整背景色，使其與新的暗色主題一致 */
-  color: #ffffff; /* 設置文字顏色為白色 */
-  transition: all 0.2s ease;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
-}
-
-.textArea:focus {
+  color: var(--chat-text-color, #ffffff);
   outline: none;
-  border-color: #4a5fc1; /* 調整高亮顏色 */
-  box-shadow: 0 0 0 3px rgba(74, 95, 193, 0.2); /* 調整陰影顏色 */
 }
 
-.button {
-  padding: 0 1rem;
-  height: 50px;
-  min-width: 100px;
-  background-color: #4a5fc1; /* 調整按鈕顏色，使其與暗色主題更加協調 */
-  color: white;
+.textArea::placeholder {
+  color: #6b7280;
+}
+
+/* 泡泡狀發送按鈕 */
+.sendButton {
+  flex: 0 0 auto;
+  background: var(--chat-send-btn-bg, #4a5fc1);
+  color: var(--chat-new-btn-color, white);
   border: none;
-  border-radius: 12px;
-  cursor: pointer;
-  font-size: 1rem;
-  font-weight: 500;
+  border-radius: 18px 18px 18px 4px;
+  padding: 0 18px;
+  height: 42px;
+  font-size: 0.95rem;
+  font-weight: 600;
   display: flex;
   align-items: center;
   justify-content: center;
+  cursor: pointer;
   transition: all 0.2s ease;
+  align-self: flex-end;
+  margin-bottom: 6px;
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
-.button:hover:not(:disabled) {
-  background-color: #3949a0; /* 調整 hover 狀態顏色 */
-  transform: translateY(-1px);
-  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2); /* 添加些許陰影效果 */
+.sendButton:hover:not(:disabled) {
+  background: var(--chat-send-btn-hover, #3949a0);
+  transform: scale(1.05);
 }
 
-.button:disabled {
-  background-color: #4a4a4a; /* 調整禁用狀態顏色，使其與暗色主題一致 */
+.sendButton:active:not(:disabled) {
+  transform: scale(0.95);
+}
+
+.sendButton:disabled {
+  background: #4a4a4a;
   cursor: not-allowed;
-  color: #8a8a8a; /* 調整禁用狀態文字顏色 */
+  opacity: 0.5;
 }
 
 @media (max-width: 768px) {
   .inputContainer {
-    padding: 1rem;
+    padding: 0.75rem;
   }
-  
-  .button {
-    min-width: 100px;
-  }
+}
+
+/* Mic 按鈕（在輸入框內右側） */
+.micButton {
+  flex: 0 0 auto;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 0 10px;
+  padding-bottom: 14px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  color: #6b7280;
+  transition: color 0.2s;
+}
+
+.micButton:hover:not(:disabled) {
+  color: #d1d5db;
+}
+
+.micButton:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.micListening {
+  color: #dc2626;
+  animation: micPulse 1s infinite;
+}
+
+@keyframes micPulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.12); }
 }

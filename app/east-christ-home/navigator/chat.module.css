@@ -1,0 +1,90 @@
+/* 新版 Chat UI 嵌入在 chatSection 內的佈局 */
+
+.chatWrapper {
+  display: flex;
+  flex-direction: row;
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+  /* 淺色主題變數 */
+  --chat-bg: #ffffff;
+  --chat-sidebar-bg: #f5f5f5;
+  --chat-input-bg: #eeeeee;
+  --chat-input-field-bg: #ffffff;
+  --chat-text-color: #1a1a1a;
+  --chat-secondary-text: #666666;
+  --chat-border-color: #e0e0e0;
+  --chat-item-hover-bg: rgba(0, 0, 0, 0.06);
+  --chat-item-active-bg: rgba(0, 0, 0, 0.12);
+  --chat-bot-msg-bg: #f0f0f0;
+  --chat-bot-msg-color: #1a1a1a;
+  --chat-new-btn-bg: #1a1a1a;
+  --chat-new-btn-color: #ffffff;
+  --chat-new-btn-border: #1a1a1a;
+  --chat-send-btn-bg: #1a1a1a;
+  --chat-send-btn-hover: #333333;
+}
+
+.sidebar {
+  width: 252px;
+  min-width: 252px;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+.main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--chat-bg, rgb(43, 41, 41));
+}
+
+/* 在窄視窗改為垂直佈局 */
+@media (max-width: 768px) {
+  .chatWrapper {
+    flex-direction: column;
+  }
+
+  /* 預設折疊：只顯示 toggle header（44px），展開後最多 200px */
+  .sidebar {
+    width: 100%;
+    min-width: unset;
+    height: 44px;
+    max-height: 44px;
+    flex-shrink: 0;
+    overflow: hidden;
+    border-right: none;
+    border-bottom: 1px solid var(--chat-border-color, #e0e0e0);
+    transition: max-height 0.25s ease, height 0.25s ease;
+  }
+
+  /* JS 加上 open class 後展開 */
+  .sidebar.sidebarOpen {
+    height: auto;
+    max-height: 220px;
+    overflow-y: auto;
+  }
+
+  /* toggle 按鈕 */
+  .sidebarToggle {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 14px;
+    height: 44px;
+    background: var(--chat-sidebar-bg, #f5f5f5);
+    border: none;
+    width: 100%;
+    cursor: pointer;
+    font-size: 0.85rem;
+    color: var(--chat-text-color, #1a1a1a);
+    font-weight: 500;
+    flex-shrink: 0;
+  }
+}
+
+/* 桌面版隱藏 toggle 按鈕 */
+.sidebarToggle {
+  display: none;
+}

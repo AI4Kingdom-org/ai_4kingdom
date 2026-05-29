@@ -19,6 +19,8 @@ interface ConversationListProps {
   type: ChatType;
   isCreating: boolean;
   onCreateNewThread: (e: React.MouseEvent) => void;
+  /** 強制只顯示桌面版 sidebar 視圖，隱藏 mobile dropdown */
+  sidebarMode?: boolean;
 }
 
 export default function ConversationList({
@@ -27,7 +29,8 @@ export default function ConversationList({
   onSelectThread,
   type,
   isCreating,
-  onCreateNewThread
+  onCreateNewThread,
+  sidebarMode = false
 }: ConversationListProps) {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [loading, setLoading] = useState(true);
@@ -54,7 +57,7 @@ export default function ConversationList({
         // 添加数据验证日志
         const validConversations = data.filter((conv: any) => {
             const convType = conv.Type || conv.type;
-            const isValid = conv.threadId && convType === type;
+            const isValid = conv.threadId && (convType || '').toUpperCase() === type.toUpperCase();
             
             if (!isValid) {
                 console.warn('[WARN] 过滤掉无效对话:', {
@@ -243,22 +246,22 @@ export default function ConversationList({
 
   return (
     <>
-      {/* 桌面版视图 */}
-      <div className={styles.container}>
+      {/* 桌面版视图 - sidebarMode 時強制顯示（覆蓋 mobile media query 的 display:none） */}
+      <div className={styles.container} style={sidebarMode ? { display: 'flex' } : undefined}>
         <div className={styles.header}>
           <button
             className={styles.newButton}
             onClick={handleCreateNewThread}
             disabled={isCreating}
           >
-            {isCreating ? '创建中...' : `+ 新建${config.title}`}
+            {isCreating ? '建立中...' : '💬 新增對話'}
           </button>
         </div>
         {renderConversationList()}
       </div>
 
-      {/* 移动端下拉菜单 */}
-      <div className={styles.mobileDropdown}>
+      {/* 移动端下拉菜单 - sidebarMode 時隱藏 */}
+      {!sidebarMode && <div className={styles.mobileDropdown}>
         <button 
           className={styles.dropdownButton}
           onClick={() => setIsDropdownOpen(!isDropdownOpen)}
@@ -288,11 +291,11 @@ export default function ConversationList({
             }}
             disabled={isCreating}
           >
-            {isCreating ? '创建中...' : `+ 新建${config.title}`}
+            {isCreating ? '建立中...' : '💬 新增對話'}
           </button>
           {renderConversationList()}
         </div>
-      </div>
+      </div>}
     </>
   );
 }

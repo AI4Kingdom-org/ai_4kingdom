@@ -2,8 +2,8 @@
   height: 100%;
   display: flex; /* 修改: 顯示對話列表 */
   flex-direction: column;
-  background-color: #ffffff;
-  border-right: 1px solid #e5e7eb;
+  background-color: var(--chat-sidebar-bg, rgb(43, 41, 41));
+  border-right: 1px solid var(--chat-border-color, rgba(255,255,255,0.08));
   width: 252px; /* 將原來的 280px 減少 10% */
   min-width: 252px; /* 將原來的 280px 減少 10% */
   overflow: hidden;
@@ -66,8 +66,8 @@
 
 .header {
   padding: 1rem;
-  border-bottom: 1px solid #e5e7eb;
-  background-color: #f8fafc;
+  border-bottom: 1px solid var(--chat-border-color, rgba(255,255,255,0.08));
+  background-color: var(--chat-sidebar-bg, rgb(43, 41, 41));
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -76,7 +76,7 @@
 .title {
   font-size: 1.1rem;
   font-weight: 600;
-  color: #0f172a;
+  color: var(--chat-text-color, #f0f0f0);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -143,6 +143,7 @@
   transition: all 0.2s ease;
   background-color: transparent;
   border: 1px solid transparent;
+  color: var(--chat-text-color, #e5e7eb);
   user-select: none;
   min-height: 44px;
   position: relative;
@@ -150,12 +151,28 @@
   max-width: 100%;
 }
 
+.itemTitle {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--chat-text-color, #f3f4f6);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.itemTime {
+  font-size: 0.75rem;
+  color: var(--chat-secondary-text, #9ca3af);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
 .item:hover {
-  background-color: #f3f4f6;
+  background-color: var(--chat-item-hover-bg, rgba(255,255,255,0.09));
 }
 
 .item.active {
-  background-color: #e5e7eb;
+  background-color: var(--chat-item-active-bg, rgba(255,255,255,0.16));
 }
 
 .itemContent {
@@ -224,6 +241,75 @@
   transform: scale(1.05);
 }
 
+/* 漫畫對話泡泡形狀新增對話按鈕 */
+.newButton {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  width: calc(100% - 2rem);
+  margin: 1rem;
+  padding: 0.65rem 1rem;
+  background-color: var(--chat-new-btn-bg, #000000);
+  color: var(--chat-new-btn-color, #ffffff);
+  border: 2px solid var(--chat-new-btn-border, #ffffff);
+  border-radius: 18px 18px 18px 4px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 600;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+}
+
+.newButton::after {
+  content: '';
+  position: absolute;
+  bottom: -10px;
+  left: 12px;
+  width: 0;
+  height: 0;
+  border-left: 8px solid transparent;
+  border-right: 0px solid transparent;
+  border-top: 10px solid var(--chat-new-btn-border, #ffffff);
+}
+
+.newButton::before {
+  content: '';
+  position: absolute;
+  bottom: -7px;
+  left: 14px;
+  width: 0;
+  height: 0;
+  border-left: 6px solid transparent;
+  border-right: 0px solid transparent;
+  border-top: 8px solid var(--chat-new-btn-bg, #000000);
+  z-index: 1;
+}
+
+.newButton:hover {
+  background-color: #1a1a1a;
+}
+
+.newButton:active {
+  background-color: #333333;
+}
+
+.newButton:disabled {
+  background-color: #2a2a2a;
+  color: #6b7280;
+  border-color: #6b7280;
+  cursor: not-allowed;
+}
+
+.newButton:disabled::after {
+  border-top-color: #6b7280;
+}
+
+.newButton:disabled::before {
+  border-top-color: #2a2a2a;
+}
+
 .list {
   overflow-x: hidden;
   overflow-y: auto;
@@ -262,7 +348,7 @@
   align-items: center;
   justify-content: center;
   padding: 2rem;
-  color: #6b7280;
+  color: #9ca3af;
   text-align: center;
 }
 
@@ -281,7 +367,7 @@
 .loading, .error {
   padding: 16px;
   text-align: center;
-  color: #fff;
+  color: var(--chat-text-color, #fff);
 }
 
 .error {

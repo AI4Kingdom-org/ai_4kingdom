@@ -233,8 +233,8 @@ export function ChatProvider({
       setConfig({
         ...config,
         type: initialConfig?.type,
-        assistantId: ASSISTANT_IDS[initialConfig?.type.toUpperCase() as keyof typeof ASSISTANT_IDS],
-        vectorStoreId: VECTOR_STORE_IDS[initialConfig?.type.toUpperCase() as keyof typeof VECTOR_STORE_IDS],
+        assistantId: initialConfig?.assistantId || ASSISTANT_IDS[initialConfig?.type.toUpperCase().replace(/-/g, '_') as keyof typeof ASSISTANT_IDS],
+        vectorStoreId: initialConfig?.vectorStoreId || VECTOR_STORE_IDS[initialConfig?.type.toUpperCase().replace(/-/g, '_') as keyof typeof VECTOR_STORE_IDS],
         userId: user?.user_id || authUser?.user_id
       });
     }
@@ -406,7 +406,28 @@ export function ChatProvider({
         if (!requestUserId) {
           console.error('[ERROR] ❌ userId 缺失！無法記錄 token 使用量');
         }
-        
+
+        // ── 若無 threadId，自動建立 thread 並存入 DynamoDB ──
+        if (!finalThreadId && requestUserId && config?.type) {
+          try {
+            const rawTitle = message.trim();
+            const threadTitle = rawTitle.length > 30 ? rawTitle.slice(0, 30) + '…' : rawTitle;
+            const createRes = await fetch('/api/threads/create', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ userId: requestUserId, type: config.type, title: threadTitle }),
+            });
+            const createData = await createRes.json();
+            if (createData.success && createData.threadId) {
+              finalThreadId = createData.threadId;
+              setCurrentThreadId(createData.threadId);
+              window.dispatchEvent(new CustomEvent('refreshConversations'));
+            }
+          } catch (e) {
+            console.warn('[WARN] 自動建立 thread 失敗，將由 /api/chat fallback 建立', e);
+          }
+        }
+
         const response = await fetch('/api/chat', {
             method: 'POST',
             headers: {
@@ -414,7 +435,7 @@ export function ChatProvider({
             },
             body: JSON.stringify({
                 message,
-                threadId: currentThreadId,
+                threadId: finalThreadId,
                 userId: requestUserId,
                 config: {
                     type: config?.type,

@@ -12,7 +12,7 @@ const openai = new OpenAI({
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { userId, type } = body;
+    const { userId, type, title } = body;
     
     console.log('[DEBUG] 开始创建对话:', { userId, type });
 
@@ -37,7 +37,8 @@ export async function POST(request: Request) {
         UserId: String(userId),  // 确保 UserId 是字符串类型
         Timestamp: timestamp,
         threadId: thread.id,
-        Type: type.toUpperCase()
+        Type: type.toUpperCase(),
+        ...(title ? { title: String(title).slice(0, 50) } : {})
       }
     });
 

@@ -6,7 +6,7 @@
   flex-direction: column;
   width: 100%; /* 確保使用100%寬度 */
   box-sizing: border-box; /* 確保內邊距計入總寬度 */
-  background-color: #1e1e1e; /* 稍微調整背景色，增加與內容區域的對比 */
+  background-color: var(--chat-bg, #1e1e1e);
 }
 
 .message {
@@ -47,11 +47,11 @@
 }
 
 .botMessage .messageContent {
-  background-color: #2a2a2a; /* 調整機器人消息背景顏色，與暗色主題協調 */
-  color: #e0e0e0; /* 淺色文字以保持在暗背景上的可讀性 */
+  background-color: var(--chat-bot-msg-bg, #2a2a2a);
+  color: var(--chat-bot-msg-color, #e0e0e0);
   border-top-left-radius: 4px;
   margin-left: 0.5rem;
-  border: 1px solid #3a3a3a; /* 添加細微邊框 */
+  border: 1px solid var(--chat-border-color, #3a3a3a);
   box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2); /* 添加陰影增強立體感 */
 }
 

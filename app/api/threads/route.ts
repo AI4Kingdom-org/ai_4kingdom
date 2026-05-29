@@ -25,7 +25,7 @@ export async function GET(request: Request) {
       },
       ExpressionAttributeValues: {
         ":userId": userId,
-        ":type": type
+        ":type": type.toUpperCase()
       }
     });
 
