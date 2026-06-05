@@ -3,7 +3,7 @@ import OpenAI from 'openai';
 import { createDynamoDBClient } from '@/app/utils/dynamodb';
 import { PutCommand, ScanCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
 import { getPromptsInBatch, defaultPrompts } from '@/app/utils/aiPrompts';
-import { ASSISTANT_IDS, VECTOR_STORE_IDS } from '@/app/config/constants';
+import { getSundayGuideUnitConfig } from '@/app/config/constants';
 import { optimizedQuery } from '@/app/utils/dynamodbHelpers';
 import { splitDocumentIfNeeded, createMultiThreadProcessor } from '@/app/utils/documentProcessor';
 // waitUntil is Vercel-specific; imported conditionally below
@@ -100,6 +100,46 @@ async function prepareEffectiveVectorStore(openaiClient: OpenAI, vectorStoreId: 
   }
 
   return { effectiveVectorStoreId, cleanup };
+}
+
+// 將 AI 生成的 summary/devotional/bibleStudy 上傳至 OpenAI Files 並加入單位共用向量庫
+async function uploadGeneratedContentToVectorStore(
+  openaiClient: OpenAI,
+  {
+    summary,
+    devotional,
+    bibleStudy,
+    sermonTitle,
+    fileName,
+    unitVectorStoreId,
+  }: {
+    summary?: string;
+    devotional?: string;
+    bibleStudy?: string;
+    sermonTitle: string | null;
+    fileName: string;
+    unitVectorStoreId: string;
+  }
+): Promise<string[]> {
+  const baseName = (sermonTitle || fileName.replace(/\.[^.]+$/, '')).slice(0, 60);
+  const contents: { type: string; content: string }[] = [];
+  if (summary) contents.push({ type: 'summary', content: summary });
+  if (devotional) contents.push({ type: 'devotional', content: devotional });
+  if (bibleStudy) contents.push({ type: 'bibleStudy', content: bibleStudy });
+
+  const uploadedFileIds: string[] = [];
+  for (const { type, content } of contents) {
+    try {
+      const txtFile = new File([content], `${baseName}_${type}.txt`, { type: 'text/plain' });
+      const uploaded = await openaiClient.files.create({ file: txtFile, purpose: 'assistants' });
+      await openaiClient.beta.vectorStores.files.create(unitVectorStoreId, { file_id: uploaded.id });
+      uploadedFileIds.push(uploaded.id);
+      console.log(`[DEBUG] 已上傳 ${type} 至向量庫 ${unitVectorStoreId}: ${uploaded.id}`);
+    } catch (e) {
+      console.warn(`[WARN] 上傳 ${type} 至向量庫失敗（不阻斷流程）:`, e);
+    }
+  }
+  return uploadedFileIds;
 }
 
 // 進度更新：若表不存在則僅記一次警告並停用後續寫入
@@ -496,9 +536,49 @@ ${type === 'devotional' ?
         }
       }));
     }
+
+    // 同步生成內容到單位共用向量庫（供 Chat UI RAG 使用）
+    const unitCfg = getSundayGuideUnitConfig(unitId);
+    const unitVectorStoreId = unitCfg?.vectorStoreId;
+    if (unitVectorStoreId) {
+      const generatedFileIds = await uploadGeneratedContentToVectorStore(openai, {
+        summary: results.summary,
+        devotional: results.devotional,
+        bibleStudy: results.bibleStudy,
+        sermonTitle,
+        fileName,
+        unitVectorStoreId,
+      });
+      // 將生成文件的 fileId 存回 DynamoDB，以便後續清理
+      if (generatedFileIds.length > 0) {
+        try {
+          const scanRes = await docClient.send(new ScanCommand({
+            TableName: SUNDAY_GUIDE_TABLE,
+            FilterExpression: 'fileId = :fid',
+            ExpressionAttributeValues: { ':fid': fileId || vectorStoreId }
+          }));
+          const latest = (scanRes.Items || []).sort((a, b) =>
+            new Date(b.Timestamp || '').getTime() - new Date(a.Timestamp || '').getTime()
+          )[0];
+          if (latest?.assistantId && latest?.Timestamp) {
+            await docClient.send(new UpdateCommand({
+              TableName: SUNDAY_GUIDE_TABLE,
+              Key: { assistantId: latest.assistantId, Timestamp: latest.Timestamp },
+              UpdateExpression: 'SET generatedFileIds = :ids',
+              ExpressionAttributeValues: { ':ids': generatedFileIds }
+            }));
+          }
+        } catch (e) {
+          console.warn('[WARN] 儲存 generatedFileIds 至 DynamoDB 失敗（不阻斷流程）:', e);
+        }
+      }
+    } else {
+      console.warn('[WARN] 無法取得單位向量庫 ID，跳過同步生成內容', { unitId });
+    }
+
   // 最終標記完成進度
   await updateProgress(docClient, { vectorStoreId, fileName, stage: 'bibleStudy', status: 'completed', progress: 100 });
-    
+
     console.log('[DEBUG] 處理完成，結果已保存');
     return true;
   } catch (error) {
