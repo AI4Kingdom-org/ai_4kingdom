@@ -18,6 +18,7 @@ export async function GET() {
           eastChristHome: { allowedUploaders: configs.eastChristHome },
           jianZhu: { allowedUploaders: configs.jianZhu },
           cfscChurch: { allowedUploaders: configs.cfscChurch },
+          chinesePastorNetwork: { allowedUploaders: configs.chinesePastorNetwork },
         },
       },
     });
@@ -41,7 +42,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: '沒有權限執行此操作' }, { status: 403 });
     }
 
-    if (!['agape', 'eastChristHome', 'jianZhu', 'cfscChurch'].includes(unitId)) {
+    if (!['agape', 'eastChristHome', 'jianZhu', 'cfscChurch', 'chinesePastorNetwork'].includes(unitId)) {
       return NextResponse.json({ success: false, error: '不支援的單位' }, { status: 400 });
     }
 
@@ -63,6 +64,7 @@ export async function POST(req: NextRequest) {
           eastChristHomeUploaders: updated.eastChristHome,
           jianZhuUploaders: updated.jianZhu,
           cfscChurchUploaders: updated.cfscChurch,
+          chinesePastorNetworkUploaders: updated.chinesePastorNetwork,
           updatedBy: String(userId),
           updatedAt: new Date().toISOString(),
         },
