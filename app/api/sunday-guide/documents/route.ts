@@ -49,11 +49,12 @@ export async function GET(request: Request) {
         filterExpressions.push("assistantId = :assistantId");
         expressionAttributeValues[":assistantId"] = assistantId;
       } else {
-        filterExpressions.push("assistantId <> :agapeAid AND assistantId <> :eastAid AND assistantId <> :jianZhuAid AND assistantId <> :cfscAid");
+        filterExpressions.push("assistantId <> :agapeAid AND assistantId <> :eastAid AND assistantId <> :jianZhuAid AND assistantId <> :cfscAid AND assistantId <> :cpnAid");
         expressionAttributeValues[":agapeAid"] = ASSISTANT_IDS.AGAPE_CHURCH;
         expressionAttributeValues[":eastAid"] = ASSISTANT_IDS.EAST_CHRIST_HOME;
         expressionAttributeValues[":jianZhuAid"] = ASSISTANT_IDS.JIAN_ZHU;
         expressionAttributeValues[":cfscAid"] = ASSISTANT_IDS.CFSC_CHURCH;
+        expressionAttributeValues[":cpnAid"] = ASSISTANT_IDS.CHINESE_PASTOR_NETWORK;
       }
     }
     
@@ -386,7 +387,7 @@ export async function DELETE(request: Request) {
     if (!fileId || !unitId || !userId) {
       return NextResponse.json({ success: false, error: '缺少必要參數 fileId / unitId / userId' }, { status: 400 });
     }
-    if (!['agape', 'eastChristHome', 'jianZhu', 'cfscChurch', 'default'].includes(unitId)) {
+    if (!['agape', 'eastChristHome', 'jianZhu', 'cfscChurch', 'chinesePastorNetwork', 'default'].includes(unitId)) {
       return NextResponse.json({ success: false, error: '不支援的單位' }, { status: 400 });
     }    const docClient = await createDynamoDBClient();
     const tableName = process.env.NEXT_PUBLIC_SUNDAY_GUIDE_TABLE || 'SundayGuide';

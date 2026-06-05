@@ -365,6 +365,7 @@ export function ChatProvider({
   else if (window.location.pathname.includes('east-christ-home')) unitId = 'eastChristHome';
   else if (window.location.pathname.includes('jian-zhu')) unitId = 'jianZhu';
   else if (window.location.pathname.includes('cfsc-church')) unitId = 'cfscChurch';
+  else if (window.location.pathname.includes('chinese-pastor-network')) unitId = 'chinesePastorNetwork';
       else {
               // 可擴充：從 localStorage 或 config 取得
               const storedUnit = localStorage.getItem('currentUnitId');

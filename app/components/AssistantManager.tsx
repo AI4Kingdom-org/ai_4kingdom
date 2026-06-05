@@ -155,7 +155,11 @@ export default function AssistantManager({
     const pathname = typeof window !== 'undefined' ? window.location.pathname : '';
     const unitQS = pathname.includes('agape-church')
       ? '&unitId=agape'
-      : (pathname.includes('east-christ-home') ? '&unitId=eastChristHome' : (pathname.includes('jian-zhu') ? '&unitId=jianZhu' : (pathname.includes('cfsc-church') ? '&unitId=cfscChurch' : '')));
+      : pathname.includes('east-christ-home') ? '&unitId=eastChristHome'
+      : pathname.includes('jian-zhu') ? '&unitId=jianZhu'
+      : pathname.includes('cfsc-church') ? '&unitId=cfscChurch'
+      : pathname.includes('chinese-pastor-network') ? '&unitId=chinesePastorNetwork'
+      : '';
   const uploadResponse = await fetch(`/api/vector-store/upload?vectorStoreId=${vectorStoreId}&assistantId=${assistantId}${unitQS}` , {
         method: 'POST',
         body: formData
@@ -358,6 +362,7 @@ export default function AssistantManager({
         : _pathname.includes('east-christ-home') ? 'eastChristHome'
         : _pathname.includes('jian-zhu') ? 'jianZhu'
         : _pathname.includes('cfsc-church') ? 'cfscChurch'
+        : _pathname.includes('chinese-pastor-network') ? 'chinesePastorNetwork'
         : undefined;
       fetch('/api/sunday-guide/process-document', {
         method: 'POST',

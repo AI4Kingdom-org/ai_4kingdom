@@ -12,11 +12,12 @@ export const CHAT_TYPES: Record<string, ChatType> = {
   HOME_CONSOLE: 'home-console',
   AGAPE_CHURCH: 'agape-church',
   EAST_CHRIST_HOME: 'east-christ-home',
-  CFSC_CHURCH: 'cfsc-church'
+  CFSC_CHURCH: 'cfsc-church',
+  CHINESE_PASTOR_NETWORK: 'chinese-pastor-network'
 } as const;
 
 
-export type ChatType = 'general' | 'sunday-guide' | 'bible-study' | 'homeschool' | 'spiritual-partner' | 'children-mental' | 'johnsung' | 'teen-console' | 'home-console' | 'agape-church' | 'east-christ-home' | 'cfsc-church';
+export type ChatType = 'general' | 'sunday-guide' | 'bible-study' | 'homeschool' | 'spiritual-partner' | 'children-mental' | 'johnsung' | 'teen-console' | 'home-console' | 'agape-church' | 'east-christ-home' | 'cfsc-church' | 'chinese-pastor-network';
 
 
 export interface ChatTypeConfig {
@@ -110,6 +111,13 @@ export const CHAT_TYPE_CONFIGS: Record<ChatType, ChatTypeConfig> = {
     description: 'CFSC Church 牧者助手',
     assistantId: ASSISTANT_IDS.CFSC_CHURCH,
     vectorStoreId: VECTOR_STORE_IDS.CFSC_CHURCH
+  },
+  'chinese-pastor-network': {
+    type: 'chinese-pastor-network',
+    title: '华牧网络教会事工联盟',
+    description: '华牧网络教会事工联盟牧者助手',
+    assistantId: ASSISTANT_IDS.CHINESE_PASTOR_NETWORK,
+    vectorStoreId: VECTOR_STORE_IDS.CHINESE_PASTOR_NETWORK
   }
 
 };
@@ -168,6 +176,10 @@ export const CHAT_CONFIGS: Record<ChatType, ChatConfig> = {
   'cfsc-church': {
     title: 'CFSC Church',
     description: 'CFSC Church 牧者助手'
+  },
+  'chinese-pastor-network': {
+    title: '华牧网络教会事工联盟',
+    description: '华牧网络教会事工联盟牧者助手'
   }
 
-}; 
+};

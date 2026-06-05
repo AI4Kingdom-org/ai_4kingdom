@@ -11,6 +11,7 @@ export interface UnitConfigs {
   eastChristHome: string[];
   jianZhu: string[];
   cfscChurch: string[];
+  chinesePastorNetwork: string[];
 }
 
 /** Read unit allowedUploaders from DynamoDB; falls back to static constants on error. */
@@ -29,11 +30,13 @@ export async function getUnitConfigsFromDB(): Promise<UnitConfigs> {
     const items = result.Items || [];
     const record = items.find((i) => i.recordType === UNIT_CONFIG_TYPE);
     if (record) {
+      const staticFallback = (key: string) => [...((SUNDAY_GUIDE_UNITS as any)[key]?.allowedUploaders ?? [])];
       return {
-        agape: Array.isArray(record.agapeUploaders) ? record.agapeUploaders.map(String) : [],
-        eastChristHome: Array.isArray(record.eastChristHomeUploaders) ? record.eastChristHomeUploaders.map(String) : [],
-        jianZhu: Array.isArray(record.jianZhuUploaders) ? record.jianZhuUploaders.map(String) : [],
-        cfscChurch: Array.isArray(record.cfscChurchUploaders) ? record.cfscChurchUploaders.map(String) : [],
+        agape: Array.isArray(record.agapeUploaders) ? record.agapeUploaders.map(String) : staticFallback('agape'),
+        eastChristHome: Array.isArray(record.eastChristHomeUploaders) ? record.eastChristHomeUploaders.map(String) : staticFallback('eastChristHome'),
+        jianZhu: Array.isArray(record.jianZhuUploaders) ? record.jianZhuUploaders.map(String) : staticFallback('jianZhu'),
+        cfscChurch: Array.isArray(record.cfscChurchUploaders) ? record.cfscChurchUploaders.map(String) : staticFallback('cfscChurch'),
+        chinesePastorNetwork: Array.isArray(record.chinesePastorNetworkUploaders) ? record.chinesePastorNetworkUploaders.map(String) : staticFallback('chinesePastorNetwork'),
       };
     }
   } catch (e) {
@@ -45,6 +48,7 @@ export async function getUnitConfigsFromDB(): Promise<UnitConfigs> {
     eastChristHome: [...((SUNDAY_GUIDE_UNITS as any).eastChristHome?.allowedUploaders ?? [])],
     jianZhu: [...((SUNDAY_GUIDE_UNITS as any).jianZhu?.allowedUploaders ?? [])],
     cfscChurch: [...((SUNDAY_GUIDE_UNITS as any).cfscChurch?.allowedUploaders ?? [])],
+    chinesePastorNetwork: [...((SUNDAY_GUIDE_UNITS as any).chinesePastorNetwork?.allowedUploaders ?? [])],
   };
 }
 
@@ -55,6 +59,7 @@ export async function getUnitAllowedUploaders(unitId: string): Promise<string[]>
   if (unitId === 'eastChristHome') return configs.eastChristHome;
   if (unitId === 'jianZhu') return configs.jianZhu;
   if (unitId === 'cfscChurch') return configs.cfscChurch;
+  if (unitId === 'chinesePastorNetwork') return configs.chinesePastorNetwork;
   // default unit uses the global upload permission list, not this function
   return [];
 }
