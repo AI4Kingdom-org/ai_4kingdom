@@ -40,6 +40,7 @@ Instructions
 - Provide every single scripture reference in the order they appear.
 - Copy the verse text fully and accurately.
 - Use the Chinese Union Version (和合本圣经) if the sermon is in Chinese; use NIV if the sermon is in English.
+- Do NOT add any source annotations, labels, or parenthetical notes after scripture references (e.g., do not write "from summary", "in sermon", "(sermon)", "(summary)", or any similar attribution).
 
 4. Output Language
 - The language of your output must match the original sermon language.
@@ -70,7 +71,7 @@ PRIORITY ORDER:
 2. Then, add verses directly quoted or referenced in that section of the sermon
 3. Only if fewer than 3 verses are available from steps 1-2, supplement with 1–2 additional Bible verses that are most directly relevant and widely accepted for this theme in orthodox Christian teaching
 
-Every supplemental verse must be clearly labeled as "Supplemental Verse," and you must briefly explain why it was chosen (e.g., "Supplemental: This verse is a classic biblical expression of the day's theme of forgiveness.").
+Every supplemental verse must be used only when necessary to meet the required number of verses.
 
 If more than 3 verses are available from the summary and sermon, select the 3 most central to the message of that section.
 
@@ -78,10 +79,7 @@ AVOID DUPLICATION: Do not repeat the same verse across different days unless it 
 
 All summaries, prayer guidance, and applications must be strictly based on the sermon's own stories, examples, and themes.
 
-When quoting scripture, always provide the exact text as written (Chinese Union Version if Chinese, NIV if English), and indicate the verse's source:
-- [From Summary] - if taken from the sermon summary
-- [In Sermon] - if found directly in the sermon text
-- [Supplemental: reason] - if added to meet the required number
+When quoting scripture, always provide the exact text as written (Chinese Union Version if Chinese, NIV if English). Do NOT add any source annotations, labels, or parenthetical notes after scripture references (e.g., do not write "From Summary", "In Sermon", "Supplemental", or any similar attribution).
 
 If the sermon repeats or elaborates a point, include that in the relevant daily devotion.
 
@@ -102,8 +100,8 @@ b. 3 Bible Verses
 List exactly 3 verses for that day following the PRIORITY ORDER above:
 - Start with verses from the sermon summary that relate to this section
 - Add verses present in this section of the sermon
-- If fewer than 3, supplement as allowed above, label as "Supplemental Verse", and give a brief reason for selection
-Provide the full verse text (和合本 if Chinese; NIV if English), and note its source as described above.
+- If fewer than 3, supplement as allowed above
+Provide the full verse text (和合本 if Chinese; NIV if English). Do NOT add any source labels or annotations after scripture references.
 
 c. Prayer Guidance
 Provide prayer direction strictly based on this section's sermon content and the verses selected above.
@@ -131,16 +129,11 @@ PRIORITY ORDER FOR VERSE SELECTION:
 2. Add any additional verses directly quoted or referenced in the sermon text
 3. If more verses are required for format compliance, carefully supplement with 1–2 additional Bible verses that are directly relevant, commonly recognized, and widely accepted in orthodox Christian teaching for this topic
 
-Clearly mark each verse with its source:
-- [From Summary] - if taken from the sermon summary
-- [In Sermon] - if found directly in the sermon text  
-- [Supplemental: reason] - if added to meet required numbers with brief justification
-
 AVOID DUPLICATION: Do not repeat the same verse in multiple sections unless it serves different purposes or appears in multiple parts of the sermon.
 
 All other references, discussions, questions, applications, prayers, testimonies, etc., must NOT introduce, supplement, or reference any additional Bible verse beyond what's in the summary and sermon text.
 
-When quoting scripture, always provide the exact text (Chinese Union Version for Chinese, NIV for English), and clearly indicate the origin using the labels above.
+When quoting scripture, always provide the exact text (Chinese Union Version for Chinese, NIV for English). Do NOT add any source annotations, labels, or parenthetical notes after scripture references (e.g., do not write "From Summary", "In Sermon", "Supplemental", or any similar attribution).
 
 When listing or highlighting verses, always start with all those found in the summary and sermon, and only supplement if necessary to meet the format's requirements.
 
@@ -169,7 +162,7 @@ PRIORITY ORDER:
 For each verse, provide:
 - The exact text and reference
 - The original paragraph/section in the sermon where it appears (if applicable)
-- Source label: [From Summary], [In Sermon], or [Supplemental: reason]
+- Do NOT add any source labels or annotations (e.g., do not write "From Summary", "In Sermon", "Supplemental", or any similar attribution)
 
 Never summarize or combine verses.
 All other sections may not supplement with external verses.
