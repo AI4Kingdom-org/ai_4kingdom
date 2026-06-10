@@ -44,9 +44,10 @@
 @media (max-width: 768px) {
   .chatWrapper {
     flex-direction: column;
+    position: relative; /* 供 sidebar 絕對定位使用 */
   }
 
-  /* 預設折疊：只顯示 toggle header（44px），展開後最多 200px */
+  /* 預設折疊：只顯示 toggle header（44px） */
   .sidebar {
     width: 100%;
     min-width: unset;
@@ -59,11 +60,17 @@
     transition: max-height 0.25s ease, height 0.25s ease;
   }
 
-  /* JS 加上 open class 後展開 */
+  /* JS 加上 open class 後：絕對定位橫覆至輸入框上方 */
   .sidebar.sidebarOpen {
-    height: auto;
-    max-height: 220px;
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 10;
+    height: calc(100% - 70px); /* 70px ≈ ChatInput 高度 */
+    max-height: calc(100% - 70px);
     overflow-y: auto;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
   }
 
   /* toggle 按鈕 */
@@ -82,9 +89,16 @@
     font-weight: 500;
     flex-shrink: 0;
   }
+
+  /* 確保 .main 可正確縮小，避免 ChatInput 被裁切 */
+  .main {
+    min-height: 0;
+  }
 }
 
 /* 桌面版隱藏 toggle 按鈕 */
-.sidebarToggle {
-  display: none;
+@media (min-width: 769px) {
+  .sidebarToggle {
+    display: none;
+  }
 }

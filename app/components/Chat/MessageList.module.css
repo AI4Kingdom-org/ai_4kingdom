@@ -6,6 +6,7 @@
   flex-direction: column;
   width: 100%; /* 確保使用100%寬度 */
   box-sizing: border-box; /* 確保內邊距計入總寬度 */
+  min-height: 0; /* 允許 flex 正確縮小，避免壓縮輸入框 */
   background-color: var(--chat-bg, #1e1e1e);
 }
 

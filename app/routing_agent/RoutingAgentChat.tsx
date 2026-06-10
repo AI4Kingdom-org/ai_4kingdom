@@ -229,7 +229,7 @@ export default function RoutingAgentChat({ userId }: RoutingAgentChatProps) {
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder={isListening ? '正在聆听...' : '常用提问: 儿童主日学AI工具, 爱修教会主日教导, 家庭属灵辅导, AI4Kingdom是什么? 我要支持奉献'}
+              placeholder={isListening ? '正在聆听...' : '平安！您想问什么？'}
               disabled={isLoading}
               rows={1}
             />

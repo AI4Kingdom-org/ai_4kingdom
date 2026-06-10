@@ -1,6 +1,6 @@
 .container {
   display: flex;
-  height: 100vh;
+  height: 100dvh;
   width: 100%;
   background-color: #ffffff;
 }
@@ -35,7 +35,7 @@
 @media (max-width: 768px) {
   .container {
     width: 100%;
-    height: calc(100vh - 56px);
+    height: calc(100dvh - 56px);
   }
 
   .chatContainer {
