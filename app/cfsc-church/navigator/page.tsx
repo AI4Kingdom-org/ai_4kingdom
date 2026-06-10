@@ -69,6 +69,7 @@ function CfscChurchNavigatorContent() {
     setChatError('');
     setMessages([]);
     setCurrentThreadId(threadId);
+    setSidebarOpen(false);
   };
 
   const handleSendMessage = async (message: string) => {

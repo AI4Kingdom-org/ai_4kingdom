@@ -1,7 +1,7 @@
 .container {
   display: flex;
   flex-direction: column;
-  height: 100vh;
+  height: 100dvh;
   width: 100%;
   padding: 1rem;
   background-color: #ffffff;
@@ -37,7 +37,7 @@
 /* 适配移动端 */
 @media (max-width: 768px) {
   .container {
-    height: calc(100vh - 56px);
+    height: calc(100dvh - 56px);
     padding: 0.5rem;
   }
   
