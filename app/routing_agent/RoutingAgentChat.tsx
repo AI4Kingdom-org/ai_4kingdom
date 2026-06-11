@@ -131,19 +131,21 @@ export default function RoutingAgentChat({ userId }: RoutingAgentChatProps) {
         hasStarted ? styles.routingAgentContainerFull : ''
       }`}
     >
-      {/* 歡迎詞區域 */}
-      <div
-        className={`${styles.welcomeSection} ${styles.welcomeSectionCompact}`}
-      >
-        <Image
-          src="/ai4kingdom-logo.png"
-          alt="Ai4Kingdom"
-          width={294}
-          height={92}
-          style={{ objectFit: 'contain' }}
-          priority
-        />
-      </div>
+      {/* 歡迎詞區域 - 對話開始後隱藏 */}
+      {!hasStarted && (
+        <div
+          className={`${styles.welcomeSection} ${styles.welcomeSectionCompact}`}
+        >
+          <Image
+            src="/ai4kingdom-logo.png"
+            alt="Ai4Kingdom"
+            width={294}
+            height={92}
+            style={{ objectFit: 'contain' }}
+            priority
+          />
+        </div>
+      )}
 
       {/* 對話區域 - 開始後才顯示 */}
       {hasStarted && (
