@@ -1,12 +1,18 @@
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import SermonInputTabs from '../components/SermonInputTabs';
 import WithChat from '../components/layouts/WithChat';
 import UserIdDisplay from '../components/UserIdDisplay';
 import { useCredit } from '../contexts/CreditContext';
 import { useAuth } from '../contexts/AuthContext';
+import { useChat } from '../contexts/ChatContext';
+import ConversationList from '../components/ConversationList';
+import MessageList from '../components/Chat/MessageList';
+import ChatInput from '../components/Chat/ChatInput';
+import ReactMarkdown from 'react-markdown';
 import styles from '../sunday-guide-v2/SundayGuide.module.css';
+import chatStyles from './navigator/chat.module.css';
 import { ASSISTANT_IDS, VECTOR_STORE_IDS } from '../config/constants';
 
 interface ProcessedContent {
@@ -16,7 +22,12 @@ interface ProcessedContent {
   bibleStudy: string;
 }
 
-export default function AgapeChurchPage() {
+type GuideMode = 'summary' | 'devotional' | 'bible' | null;
+
+// ─────────────────────────────────────────────────────────────────
+// Inner component — runs inside WithChat's ChatProvider
+// ─────────────────────────────────────────────────────────────────
+function AgapeChurchContent() {
   const { refreshUsage, hasInsufficientTokens, remainingCredits } = useCredit();
   const { user } = useAuth();
   const [isProcessing, setIsProcessing] = useState(false);
@@ -37,6 +48,31 @@ export default function AgapeChurchPage() {
   const [allowedUploaders, setAllowedUploaders] = useState<string[]>([]);
   const hasUploadPermission = !!user?.user_id && allowedUploaders.includes(user.user_id);
 
+  // ── Navigator states ─────────────────────────────────────────
+  const [selectedMode, setSelectedMode] = useState<GuideMode>(null);
+  const [sermonContent, setSermonContent] = useState<string | null>(null);
+  const [navLoading, setNavLoading] = useState(false);
+  const [navFileName, setNavFileName] = useState<string>('');
+  const [navUploadTime, setNavUploadTime] = useState<string>('');
+  const [pdfLoading, setPdfLoading] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [pdfError, setPdfError] = useState<string | null>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
+
+  // ── Chat context (provided by WithChat) ──────────────────────
+  const {
+    messages,
+    currentThreadId,
+    setCurrentThreadId,
+    sendMessage,
+    isLoading: chatLoading,
+    error: chatError,
+    setError: setChatError,
+    setMessages,
+    loadChatHistory,
+  } = useChat();
+  const shouldLoadHistory = useRef(false);
+
   useEffect(() => {
     fetch('/api/admin/sunday-guide-units')
       .then((r) => r.json())
@@ -47,6 +83,35 @@ export default function AgapeChurchPage() {
   }, []);
 
   useEffect(() => { setIsUploadDisabled(remainingCredits <= 0); }, [remainingCredits, hasInsufficientTokens]);
+
+  // ── Chat error auto-clear ─────────────────────────────────────
+  useEffect(() => {
+    if (chatError) {
+      const t = setTimeout(() => setChatError(''), 8000);
+      return () => clearTimeout(t);
+    }
+  }, [chatError, setChatError]);
+
+  useEffect(() => {
+    if (currentThreadId && user && shouldLoadHistory.current) {
+      shouldLoadHistory.current = false;
+      loadChatHistory(user.user_id);
+    }
+  }, [currentThreadId]);
+
+  // Restore selected file from localStorage once files load
+  useEffect(() => {
+    if (allFiles.length === 0) return;
+    const storedId = typeof window !== 'undefined' ? localStorage.getItem('selectedFileId') : null;
+    const storedName = typeof window !== 'undefined' ? localStorage.getItem('selectedFileName') : null;
+    const target = (storedId ? allFiles.find(f => f.fileId === storedId) : null) || allFiles[0];
+    if (!target) return;
+    if (!selectedFileId) setSelectedFileId(target.fileId);
+    const displayName = (!target.fileName.toLowerCase().endsWith('.pdf') && target.sermonTitle)
+      ? target.sermonTitle : target.fileName;
+    setNavFileName(storedName || displayName);
+    setNavUploadTime(target.uploadDate);
+  }, [allFiles]);
 
   const fetchAllFileRecords = async () => {
     try {
@@ -88,7 +153,13 @@ export default function AgapeChurchPage() {
         alert('刪除失敗: ' + (data.error || res.status));
       } else {
         await fetchAllFileRecords();
-        if (selectedFileId === fileId) setSelectedFileId(null);
+        if (selectedFileId === fileId) {
+          setSelectedFileId(null);
+          setNavFileName('');
+          setNavUploadTime('');
+          setSermonContent(null);
+          setSelectedMode(null);
+        }
       }
     } catch (e: any) {
       alert('刪除時發生錯誤: ' + (e.message || '未知錯誤'));
@@ -111,6 +182,7 @@ export default function AgapeChurchPage() {
       const data = await res.json();
       if (res.ok && data.success) {
         setAllFiles(prev => prev.map(f => f.fileId === fileId ? { ...f, sermonTitle: data.sermonTitle } : f));
+        if (selectedFileId === fileId) setNavFileName(data.sermonTitle || newTitle.trim());
       } else {
         alert('更新失敗: ' + (data.error || res.status));
       }
@@ -132,8 +204,16 @@ export default function AgapeChurchPage() {
 
   const handleSelectFile = (fileId: string) => {
     setSelectedFileId(fileId);
+    // Reset navigator content when a new file is chosen
+    setSermonContent(null);
+    setSelectedMode(null);
+    const file = recentFiles.find(f => f.fileId === fileId);
+    const displayName = file
+      ? ((!file.fileName.toLowerCase().endsWith('.pdf') && file.sermonTitle) ? file.sermonTitle : file.fileName)
+      : '';
+    setNavFileName(displayName);
+    setNavUploadTime(file?.uploadDate || '');
     try {
-      const file = recentFiles.find(f => f.fileId === fileId);
       localStorage.setItem('selectedFileId', fileId);
       if (file) localStorage.setItem('selectedFileName', file.fileName);
       const channel = new BroadcastChannel('file-selection');
@@ -150,10 +230,100 @@ export default function AgapeChurchPage() {
     }
   };
 
+  // ── Navigator functions ──────────────────────────────────────
+  const handleCreateNewThread = () => {
+    setCurrentThreadId(null);
+    setMessages([]);
+  };
+
+  const handleSelectThread = (threadId: string) => {
+    if (threadId === currentThreadId) return;
+    shouldLoadHistory.current = true;
+    setChatError('');
+    setMessages([]);
+    setCurrentThreadId(threadId);
+    setSidebarOpen(false);
+  };
+
+  const handleSendMessage = async (message: string) => {
+    await sendMessage(message);
+    window.dispatchEvent(new CustomEvent('refreshConversations'));
+  };
+
+  const handleModeSelect = async (mode: GuideMode) => {
+    if (!selectedFileId) return;
+    setSelectedMode(mode);
+    setNavLoading(true);
+    try {
+      const userId = user?.user_id || '';
+      const apiUrl = `/api/sunday-guide/content/${ASSISTANT_IDS.AGAPE_CHURCH}?type=${mode}&userId=${encodeURIComponent(userId)}&fileId=${encodeURIComponent(selectedFileId)}`;
+      const response = await fetch(apiUrl);
+      if (response.status === 202) {
+        const data = await response.json().catch(() => ({}));
+        setSelectedMode(null);
+        alert(data.error || '內容正在生成中，請稍候再試');
+        return;
+      }
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({ error: '未知錯誤' }));
+        throw new Error(`获取内容失败: ${response.status} - ${errData.error || response.statusText}`);
+      }
+      const data = await response.json();
+      setSermonContent(data.content);
+      await refreshUsage();
+    } catch (e) {
+      console.error(e);
+      alert(e instanceof Error ? e.message : '請稍後重試');
+    } finally {
+      setNavLoading(false);
+    }
+  };
+
+  const handleDownloadPDF = () => {
+    setPdfError(null);
+    setPdfLoading(true);
+    try {
+      const userId = user?.user_id || '';
+      const params = new URLSearchParams();
+      params.set('assistantId', ASSISTANT_IDS.AGAPE_CHURCH);
+      params.set('userId', userId);
+      params.set('includeAll', 'true');
+      window.open(`/api/sunday-guide/download-pdf?${params.toString()}`, '_blank');
+      setTimeout(() => setPdfLoading(false), 1200);
+    } catch (err) {
+      console.error('PDF 下載失敗', err);
+      setPdfError(err instanceof Error ? err.message : '下載失敗');
+      setPdfLoading(false);
+    }
+  };
+
+  const renderNavContent = () => {
+    if (navLoading) return <div className={styles.loading}>加载中，请稍候...</div>;
+    if (!sermonContent) return null;
+    const titles: Record<string, string> = { summary: '讲道总结', devotional: '每日灵修', bible: '查经指引' };
+    return (
+      <div className={styles.contentBox}>
+        <div className={styles.contentHeader}>
+          <h2>{titles[selectedMode!]}</h2>
+          <button
+            className={styles.downloadButton}
+            onClick={handleDownloadPDF}
+            disabled={pdfLoading}
+          >
+            {pdfLoading ? '生成中...' : '下载完整版'}
+          </button>
+        </div>
+        {pdfError && <div className={styles.errorMessage}>{pdfError}</div>}
+        <div className={styles.markdownContent} ref={contentRef}>
+          <ReactMarkdown>{sermonContent}</ReactMarkdown>
+        </div>
+      </div>
+    );
+  };
+
   return (
-    <WithChat chatType="sunday-guide">
-      <div className={styles.container}>
-        <UserIdDisplay />
+    <div className={styles.container}>
+      <UserIdDisplay />
 
         {/* =============== 1. Upload Section =============== */}
         {hasUploadPermission && (
@@ -289,16 +459,100 @@ export default function AgapeChurchPage() {
             )}
           </aside>
 
-          <div className={styles.guidePlaceholder}>
-            <div className={styles.guidePlaceholderIcon}>👈</div>
-            <p className={styles.guidePlaceholderText}>
-              选择讲章后可前往<br />
-              <a href="/agape-church/navigator" style={{ color: '#0070f3', textDecoration: 'underline' }}>愛加倍信息導覽</a><br />
-              查看信息总结、灵修与查经
-            </p>
+          {/* ── Right: Navigator Panel (hidden on mobile ≤900px) ── */}
+          <div className={styles.navigatorPanel}>
+            <h2 style={{ textAlign: 'center', fontSize: '1.1rem', fontWeight: 700, color: '#1e293b', margin: '0 0 0.5rem' }}>
+              主日信息导航
+            </h2>
+
+            {navFileName && (
+              <div style={{ fontSize: '13px', color: '#0070f3', marginBottom: 8, textAlign: 'center' }}>
+                当前文件: {navFileName}{navUploadTime && ` (上传时间: ${navUploadTime})`}
+              </div>
+            )}
+
+            <div className={styles.buttonGroup}>
+              <button
+                className={`${styles.modeButton} ${selectedMode === 'summary' ? styles.active : ''}`}
+                onClick={() => handleModeSelect('summary')}
+                disabled={!selectedFileId}
+              >信息总结</button>
+              <button
+                className={`${styles.modeButton} ${selectedMode === 'devotional' ? styles.active : ''}`}
+                onClick={() => handleModeSelect('devotional')}
+                disabled={!selectedFileId}
+              >每日灵修</button>
+              <button
+                className={`${styles.modeButton} ${selectedMode === 'bible' ? styles.active : ''}`}
+                onClick={() => handleModeSelect('bible')}
+                disabled={!selectedFileId}
+              >查经指引</button>
+            </div>
+
+            {allFiles.length === 0 && (
+              <div style={{ fontSize: '14px', color: '#ff6b6b', textAlign: 'center', padding: '12px', background: '#fff5f5', borderRadius: '8px', border: '1px solid #ffebee' }}>
+                目前尚无可用文件
+              </div>
+            )}
+
+            <div className={styles.contentWrapper}>
+              {sermonContent ? (
+                <>
+                  <div className={`${styles.contentArea} ${styles.hasContent}`}>
+                    {renderNavContent()}
+                  </div>
+                  <div className={styles.chatSection}>
+                    <div className={chatStyles.chatWrapper}>
+                      <div className={`${chatStyles.sidebar}${sidebarOpen ? ' ' + chatStyles.sidebarOpen : ''}`}>
+                        <button
+                          className={chatStyles.sidebarToggle}
+                          onClick={() => setSidebarOpen(v => !v)}
+                        >
+                          <span>📋 對話記錄</span>
+                          <span>{sidebarOpen ? '▲' : '▼'}</span>
+                        </button>
+                        <ConversationList
+                          userId={user!.user_id}
+                          type="agape-church"
+                          currentThreadId={currentThreadId}
+                          onSelectThread={handleSelectThread}
+                          isCreating={false}
+                          onCreateNewThread={handleCreateNewThread}
+                          sidebarMode={true}
+                        />
+                      </div>
+                      <div className={chatStyles.main}>
+                        <MessageList messages={messages} isLoading={chatLoading} />
+                        {chatError && (
+                          <div style={{ color: '#f55', padding: '6px 16px', background: '#3a0000' }}>
+                            {chatError}
+                          </div>
+                        )}
+                        <ChatInput onSend={handleSendMessage} isLoading={chatLoading} />
+                      </div>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <div style={{ textAlign: 'center', width: '100%', padding: '2rem 0', color: '#94a3b8' }}>
+                  <p>请先选择要查看的内容类型</p>
+                </div>
+              )}
+            </div>
           </div>
+
         </div>
       </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Page entry — wraps content with ChatProvider via WithChat
+// ─────────────────────────────────────────────────────────────────
+export default function AgapeChurchPage() {
+  return (
+    <WithChat chatType="agape-church">
+      <AgapeChurchContent />
     </WithChat>
   );
 }

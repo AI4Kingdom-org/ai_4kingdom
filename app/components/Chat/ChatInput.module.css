@@ -47,17 +47,16 @@
   color: #6b7280;
 }
 
-/* 泡泡狀發送按鈕 */
+/* 圓形箭頭發送按鈕 */
 .sendButton {
   flex: 0 0 auto;
   background: var(--chat-send-btn-bg, #4a5fc1);
   color: var(--chat-new-btn-color, white);
   border: none;
-  border-radius: 18px 18px 18px 4px;
-  padding: 0 18px;
+  border-radius: 50%;
+  width: 42px;
   height: 42px;
-  font-size: 0.95rem;
-  font-weight: 600;
+  padding: 0;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -66,7 +65,6 @@
   align-self: flex-end;
   margin-bottom: 6px;
   flex-shrink: 0;
-  white-space: nowrap;
 }
 
 .sendButton:hover:not(:disabled) {
