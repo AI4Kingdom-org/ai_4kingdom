@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import Image from 'next/image';
-import { useRoutingAgent, type Message } from './hooks/useRoutingAgent';
+import { useRoutingAgent } from './hooks/useRoutingAgent';
 import styles from './RoutingAgentChat.module.css';
 
 interface RoutingAgentChatProps {
@@ -36,6 +36,7 @@ export default function RoutingAgentChat({ userId }: RoutingAgentChatProps) {
   const [hasStarted, setHasStarted] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [speechSupported, setSpeechSupported] = useState(false);
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -126,6 +127,83 @@ export default function RoutingAgentChat({ userId }: RoutingAgentChatProps) {
   };
 
   return (
+    <div className={styles.pageWrapper}>
+      {/* ── Left sidebar ── */}
+      <aside className={styles.sidebar}>
+        {/* Hamburger — opens article-links menu */}
+        <button
+          className={styles.hamburgerBtn}
+          onClick={() => setIsMenuOpen((o) => !o)}
+          aria-label="開啟選單"
+        >
+          <span className={styles.hamburgerLine} />
+          <span className={styles.hamburgerLine} />
+          <span className={styles.hamburgerLine} />
+        </button>
+
+        {/* 关于我们 */}
+        <a
+          href="https://ai4kingdom.org/elementor-799/"
+          target="_blank"
+          rel="noopener noreferrer"
+          className={styles.sidebarBox}
+          title="同性恋是罪吗？"
+          style={{ backgroundImage: 'url(https://ai4kingdom.org/wp-content/uploads/2025/01/rsw_1280-1-1.webp)' }}
+        >
+          同性恋是罪吗？
+        </a>
+
+        <a
+          href="https://ai4kingdom.org/%e9%97%ae%e9%a2%98%ef%bc%9a%e8%af%b7%e9%97%ae%e5%a0%95%e8%83%8e%e6%98%af%e5%8f%af%e4%bb%a5%e7%9a%84%e5%90%97%ef%bc%9f/"
+          target="_blank"
+          rel="noopener noreferrer"
+          className={styles.sidebarBox}
+          title="请问堕胎是可以的吗？"
+          style={{ backgroundImage: 'url(https://ai4kingdom.org/wp-content/uploads/2025/01/rsw_1280-4.webp)' }}
+        >
+          请问堕胎是可以的吗？
+        </a>
+      </aside>
+
+      {/* Slide-out menu drawer */}
+      {isMenuOpen && (
+        <>
+          <div
+            className={styles.menuOverlay}
+            onClick={() => setIsMenuOpen(false)}
+          />
+          <nav className={styles.menuDrawer}>
+            <div className={styles.menuHeader}>
+              <button
+                className={styles.menuCloseBtn}
+                onClick={() => setIsMenuOpen(false)}
+                aria-label="關閉選單"
+              >
+                ✕
+              </button>
+            </div>
+            <ul className={styles.menuList}>
+              <li>
+                <a
+                  href="https://ai4kingdom.org/%e4%bd%bf%e7%94%a8%e5%9c%8b%e5%ba%a6ai%e6%9c%80%e6%96%b0gpt/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={styles.menuItemLink}
+                >
+                  <img
+                    src="https://ai4kingdom.org/wp-content/uploads/2025/01/image25-scaled.jpg"
+                    alt=""
+                    className={styles.menuItemThumb}
+                  />
+                  国度AI GPT
+                </a>
+              </li>
+            </ul>
+          </nav>
+        </>
+      )}
+
+      {/* ── Main chat area ── */}
     <div
       className={`${styles.routingAgentContainer} ${
         hasStarted ? styles.routingAgentContainerFull : ''
@@ -270,6 +348,7 @@ export default function RoutingAgentChat({ userId }: RoutingAgentChatProps) {
       {!hasStarted && (
         <div className={styles.guideSection} />
       )}
+    </div>
     </div>
   );
 }
