@@ -163,6 +163,22 @@ export default function RoutingAgentChat({ userId }: RoutingAgentChatProps) {
         >
           请问堕胎是可以的吗？
         </a>
+
+        {/* 国度AI GPT — mobile sidebar only */}
+        <a
+          href="https://ai4kingdom.org/%e4%bd%bf%e7%94%a8%e5%9c%8b%e5%ba%a6ai%e6%9c%80%e6%96%b0gpt/"
+          target="_blank"
+          rel="noopener noreferrer"
+          className={styles.sidebarGptMobile}
+          title="国度AI GPT"
+        >
+          <img
+            src="https://ai4kingdom.org/wp-content/uploads/2025/01/image25-scaled.jpg"
+            alt="国度AI GPT"
+            className={styles.sidebarGptThumb}
+          />
+          <span className={styles.sidebarGptLabel}>国度AI GPT</span>
+        </a>
       </aside>
 
       {/* Slide-out menu drawer */}
