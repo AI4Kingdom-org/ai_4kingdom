@@ -83,6 +83,24 @@
   display: none;
 }
 
+/* ── Mobile floating circle toggle (hidden on desktop) ── */
+.mobileSidebarToggle {
+  display: none;
+}
+
+/* ── Mobile sidebar overlay backdrop ── */
+.mobileSidebarOverlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.2);
+  z-index: 90;
+}
+
+.mobileSidebarOverlayVisible {
+  display: block;
+}
+
 .sidebarGptThumb {
   width: 40px;
   height: 40px;
@@ -604,10 +622,43 @@
 }
 
 @media (max-width: 768px) {
+  /* Sidebar floats over content on mobile */
   .sidebar {
-    width: 60px;
+    width: 72px;
     padding: 12px 0;
     gap: 10px;
+    transform: translateX(-100%);
+    transition: transform 0.25s ease-out;
+    z-index: 100;
+  }
+
+  .sidebarMobileOpen {
+    transform: translateX(0);
+  }
+
+  /* .mobileSidebarOverlayVisible activates the always-rendered overlay */
+
+  /* Floating circle FAB toggle for mobile */
+  .mobileSidebarToggle {
+    display: flex;
+    position: fixed;
+    bottom: 24px;
+    left: 20px;
+    z-index: 110;
+    width: 42px;
+    height: 42px;
+    background: #1e3a5f;
+    border: none;
+    border-radius: 50%;
+    cursor: pointer;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+    transition: background 0.2s, transform 0.15s;
+  }
+
+  .mobileSidebarToggle:active {
+    transform: scale(0.92);
   }
 
   .hamburgerBtn {
@@ -615,8 +666,8 @@
   }
 
   .sidebarBox {
-    width: 44px;
-    min-height: 44px;
+    width: 50px;
+    min-height: 50px;
     font-size: 7px;
   }
 
@@ -635,10 +686,11 @@
     background: rgba(0, 0, 0, 0.08);
   }
 
+  /* Chat takes full width — sidebar overlays on top */
   .routingAgentContainer {
     height: auto;
     min-height: 100vh;
-    margin-left: 60px;
+    margin-left: 0;
     justify-content: center;
   }
 
@@ -651,7 +703,7 @@
   }
 
   .messagesContainer {
-    padding: 16px;
+    padding: 16px 16px 80px;
     gap: 12px;
     max-height: calc(100vh - 300px);
   }

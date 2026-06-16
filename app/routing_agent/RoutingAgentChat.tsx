@@ -37,6 +37,7 @@ export default function RoutingAgentChat({ userId }: RoutingAgentChatProps) {
   const [isListening, setIsListening] = useState(false);
   const [speechSupported, setSpeechSupported] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -128,8 +129,33 @@ export default function RoutingAgentChat({ userId }: RoutingAgentChatProps) {
 
   return (
     <div className={styles.pageWrapper}>
+      {/* ── Mobile floating circle toggle ── */}
+      <button
+        className={styles.mobileSidebarToggle}
+        onClick={() => setIsSidebarOpen((o) => !o)}
+        aria-label="開啟/關閉側欄"
+      >
+        {isSidebarOpen ? (
+          /* Left chevron — close sidebar */
+          <svg xmlns="http://www.w3.org/2000/svg" width="34" height="34" viewBox="0 0 6 10" fill="none" stroke="#ffffff" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="5 0.5 0.5 5 5 9.5" />
+          </svg>
+        ) : (
+          /* Right chevron — open sidebar */
+          <svg xmlns="http://www.w3.org/2000/svg" width="34" height="34" viewBox="0 0 6 10" fill="none" stroke="#ffffff" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="1 0.5 5.5 5 1 9.5" />
+          </svg>
+        )}
+      </button>
+
+      {/* ── Mobile sidebar overlay backdrop ── */}
+      <div
+        className={`${styles.mobileSidebarOverlay} ${isSidebarOpen ? styles.mobileSidebarOverlayVisible : ''}`}
+        onClick={() => setIsSidebarOpen(false)}
+      />
+
       {/* ── Left sidebar ── */}
-      <aside className={styles.sidebar}>
+      <aside className={`${styles.sidebar} ${isSidebarOpen ? styles.sidebarMobileOpen : ''}`}>
         {/* Hamburger — opens article-links menu */}
         <button
           className={styles.hamburgerBtn}
