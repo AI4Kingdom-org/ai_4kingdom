@@ -100,8 +100,8 @@ function getOpenAI(): OpenAI {
 
 // Constants
 const WHISPER_MAX_BYTES = 24 * 1024 * 1024;
-const WHISPER_MAX_DURATION_SEC = 1400; // gpt-4o-transcribe 單次時長上限 (~23min)
-const CHUNK_DURATION_SEC = 20 * 60;
+const WHISPER_MAX_DURATION_SEC = 600; // 10 min per chunk — smaller = faster upload = less ECONNRESET
+const CHUNK_DURATION_SEC = 10 * 60;
 const MAX_VIDEO_DURATION_SEC = 180 * 60;
 const WHISPER_CONCURRENCY = 3;
 const COOKIES_PATH = join(os.tmpdir(), 'yt-cookies.txt');
@@ -334,6 +334,26 @@ async function splitAudio(
   return files.filter((f) => /^chunk_\d+\.\w+$/.test(f)).sort().map((f) => join(outputDir, f));
 }
 
+function isTransientWhisperError(err: any): boolean {
+  return err?.code === 'ECONNRESET'
+    || err?.cause?.code === 'ECONNRESET'
+    || err?.message?.includes('Connection error')
+    || err?.message?.includes('ECONNRESET')
+    || err?.status === 429
+    || (err?.status !== undefined && err.status >= 500);
+}
+
+async function callWhisper(
+  buf: Buffer, ext: string, mimeType: string, model: 'gpt-4o-transcribe' | 'whisper-1',
+): Promise<string> {
+  const whisperFile = new File([buf], `audio.${ext}`, { type: mimeType });
+  const result = await getOpenAI().audio.transcriptions.create(
+    { file: whisperFile, model, response_format: 'text' },
+    { timeout: 300_000 }, // 5-minute timeout per chunk
+  );
+  return typeof result === 'string' ? result : (result as any).text || String(result);
+}
+
 async function transcribeFile(filePath: string, ext: string): Promise<string> {
   const mimeMap: Record<string, string> = {
     m4a: 'audio/mp4', webm: 'audio/webm', mp3: 'audio/mpeg',
@@ -343,23 +363,27 @@ async function transcribeFile(filePath: string, ext: string): Promise<string> {
   const mimeType = mimeMap[ext] || 'audio/mp4';
   const buf = await readFile(filePath);
 
-  const MAX_RETRIES = 3;
+  // gpt-4o-transcribe as primary for quality; fall back to whisper-1 if all retries fail.
+  // Keep delays short (2s, 5s, 10s) so total retry time stays within Amplify's 160s proxy limit.
+  const DELAYS = [2_000, 5_000, 10_000]; // 3 retries before model fallback
   let lastErr: any;
-  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+
+  for (let attempt = 0; attempt <= DELAYS.length; attempt++) {
     try {
-      const whisperFile = new File([buf], `audio.${ext}`, { type: mimeType });
-      const result = await getOpenAI().audio.transcriptions.create({
-        file: whisperFile, model: 'gpt-4o-transcribe', response_format: 'text',
-      });
-      return typeof result === 'string' ? result : (result as any).text || String(result);
+      const model: 'gpt-4o-transcribe' | 'whisper-1' = attempt < DELAYS.length ? 'gpt-4o-transcribe' : 'whisper-1';
+      if (attempt === DELAYS.length) console.log('[worker] gpt-4o-transcribe failed, falling back to whisper-1...');
+      const text = await callWhisper(buf, ext, mimeType, model);
+      if (attempt > 0) console.log(`[worker] Whisper succeeded on attempt ${attempt + 1} (${model})`);
+      return text;
     } catch (err: any) {
       lastErr = err;
-      const isTransient = err?.code === 'ECONNRESET' || err?.cause?.code === 'ECONNRESET'
-        || err?.message?.includes('Connection error') || err?.status === 429 || err?.status >= 500;
-      if (!isTransient || attempt === MAX_RETRIES) throw err;
-      const delay = attempt * 5000; // 5s, 10s, 15s
-      console.log(`[worker] Whisper attempt ${attempt} failed (${err?.code || err?.message?.slice(0, 60)}), retrying in ${delay / 1000}s...`);
-      await new Promise((r) => setTimeout(r, delay));
+      if (attempt < DELAYS.length && isTransientWhisperError(err)) {
+        const delay = DELAYS[attempt];
+        console.log(`[worker] Whisper attempt ${attempt + 1} failed (${err?.message?.slice(0, 60)}), retrying in ${delay / 1000}s...`);
+        await new Promise((r) => setTimeout(r, delay));
+      } else if (attempt < DELAYS.length) {
+        throw err; // non-transient, fail fast
+      }
     }
   }
   throw lastErr;
