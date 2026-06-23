@@ -141,12 +141,13 @@ export default function SermonInputTabs({
 
     if (apiRes.ok && apiData.transcript) return apiData;
 
-    // If Amplify/API Gateway returns non-JSON 5xx/504, retry direct worker path.
+    // If Amplify/API Gateway returns 5xx or a proxy timeout (WORKER_PROXY_FAILED),
+    // retry directly against the Fly.io worker URL (bypasses the 160s Amplify limit).
     const shouldTryDirectWorker =
       !apiRes.ok &&
-      !apiData.message &&
       !!publicWorkerUrl &&
-      apiRes.status >= 500;
+      apiRes.status >= 500 &&
+      (!apiData.message || apiData.error === 'WORKER_PROXY_FAILED');
 
     if (!shouldTryDirectWorker) {
       throw new Error(apiData.message || apiData.error || `音频转录失败（HTTP ${apiRes.status}）`);
