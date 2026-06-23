@@ -33,35 +33,53 @@ export async function POST(request: Request) {
     console.log('[youtube-transcript] Fetching captions for:', videoId, 'lang:', lang || 'auto');
 
     // 嘗試抓取字幕：優先繁體中文 → 簡體中文 → 泛中文，最後才用 client 傳入的 lang 或預設語言
+    // 重要：某些影片的中文字幕軌只覆蓋部分內容，預設軌才是完整的。
+    // 因此在找到第一個有效字幕後，還會與預設軌比較，選用 segment 數量最多的（最完整的）。
     let transcriptItems;
     try {
-      // 依優先順序嘗試語言，確保取得中文字幕（而非 YouTube 預設的英文 auto-caption）
       const langCandidates: Array<string | undefined> = ['zh-TW', 'zh-Hant', 'zh-Hans', 'zh'];
-      // 若 client 有傳 lang 且不在預設清單內，追加到最後
       if (lang && !langCandidates.includes(lang)) langCandidates.push(lang);
-      // 最後加入無 lang（預設）作為 fallback
-      langCandidates.push(undefined);
 
+      let bestItems: typeof transcriptItems = undefined;
       let lastErr: any;
+
+      // 先嘗試中文語言候選
       for (const candidate of langCandidates) {
         try {
           const config: { lang?: string } = {};
           if (candidate) config.lang = candidate;
           const items = await YoutubeTranscript.fetchTranscript(videoId, config);
           if (items && items.length > 0) {
-            transcriptItems = items;
-            console.log(`[youtube-transcript] Got ${items.length} segments with lang=${candidate ?? 'default'}`);
-            break;
+            if (!bestItems || items.length > bestItems.length) {
+              bestItems = items;
+            }
+            console.log(`[youtube-transcript] Got ${items.length} segments with lang=${candidate}`);
+            break; // 找到中文字幕，停止嘗試其他中文語言
           }
         } catch (e: any) {
           lastErr = e;
-          // 繼續嘗試下一個語言
         }
       }
 
-      if (!transcriptItems) {
+      // 一律也嘗試預設軌（無語言限制），比較哪個更完整
+      try {
+        const defaultItems = await YoutubeTranscript.fetchTranscript(videoId, {});
+        if (defaultItems && defaultItems.length > 0) {
+          console.log(`[youtube-transcript] Got ${defaultItems.length} segments with lang=default`);
+          // 若預設軌 segment 數量多於中文軌 20% 以上，代表中文軌不完整，改用預設軌
+          if (!bestItems || defaultItems.length > bestItems.length * 1.2) {
+            console.log(`[youtube-transcript] Using default track (${defaultItems.length} segs > zh track ${bestItems?.length ?? 0} segs * 1.2)`);
+            bestItems = defaultItems;
+          }
+        }
+      } catch (e: any) {
+        if (!bestItems) lastErr = e;
+      }
+
+      if (!bestItems) {
         throw lastErr ?? new Error('No transcript found for any language');
       }
+      transcriptItems = bestItems;
     } catch (err: any) {
       const msg = err?.message || '';
       console.error('[youtube-transcript] Failed:', msg);

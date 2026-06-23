@@ -129,36 +129,50 @@ function proxyArg(): string {
 
 // Python script for youtube_transcript_api (bypasses bot detection via timedtext API)
 // Compatible with youtube-transcript-api v1.x+ (new API) and falls back for older versions
+// Strategy: fetch both the preferred-language track AND the default track, use whichever is longer.
 const TRANSCRIPT_SCRIPT = `
-import sys, json
+import sys
 
 video_id = sys.argv[1]
 langs = sys.argv[2:] or ['zh-TW','zh-Hant','zh-Hans','zh','en']
+
+def fetch_snippets(data):
+    snippets = []
+    for item in data:
+        text = getattr(item, 'text', None) or (item.get('text') if isinstance(item, dict) else str(item))
+        if text:
+            snippets.append(text)
+    return snippets
 
 try:
     from youtube_transcript_api import YouTubeTranscriptApi
 
     # v1.x+ API: instance-based
     ytt = YouTubeTranscriptApi()
-    try:
-        # Try fetching with preferred languages
-        data = ytt.fetch(video_id, languages=langs)
-    except Exception:
-        # Fallback: fetch without language preference (auto-generated)
-        try:
-            data = ytt.fetch(video_id)
-        except Exception as e2:
-            print(f"ERROR: {e2}", file=sys.stderr)
-            sys.exit(1)
 
-    snippets = []
-    for item in data:
-        text = getattr(item, 'text', None) or (item.get('text') if isinstance(item, dict) else str(item))
-        if text:
-            snippets.append(text)
-    if not snippets:
+    best_snippets = []
+
+    # Try preferred languages first
+    try:
+        data = ytt.fetch(video_id, languages=langs)
+        best_snippets = fetch_snippets(data)
+    except Exception:
+        pass
+
+    # Always also try default track (no language filter) and keep the longer result.
+    # Some videos have a partial zh track + complete auto-generated default track.
+    try:
+        default_data = ytt.fetch(video_id)
+        default_snippets = fetch_snippets(default_data)
+        # If default track has >20% more segments, it is more complete — prefer it.
+        if len(default_snippets) > len(best_snippets) * 1.2:
+            best_snippets = default_snippets
+    except Exception:
+        pass
+
+    if not best_snippets:
         print("NO_TRANSCRIPT", file=sys.stderr); sys.exit(1)
-    print(' '.join(snippets))
+    print(' '.join(best_snippets))
 
 except Exception as e:
     print(f"ERROR: {e}", file=sys.stderr); sys.exit(1)
