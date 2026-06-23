@@ -342,14 +342,30 @@ async function transcribeFile(filePath: string, ext: string): Promise<string> {
   };
   const mimeType = mimeMap[ext] || 'audio/mp4';
   const buf = await readFile(filePath);
-  const whisperFile = new File([buf], `audio.${ext}`, { type: mimeType });
-  const result = await getOpenAI().audio.transcriptions.create({
-    file: whisperFile, model: 'gpt-4o-transcribe', response_format: 'text',
-  });
-  return typeof result === 'string' ? result : (result as any).text || String(result);
+
+  const MAX_RETRIES = 3;
+  let lastErr: any;
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      const whisperFile = new File([buf], `audio.${ext}`, { type: mimeType });
+      const result = await getOpenAI().audio.transcriptions.create({
+        file: whisperFile, model: 'gpt-4o-transcribe', response_format: 'text',
+      });
+      return typeof result === 'string' ? result : (result as any).text || String(result);
+    } catch (err: any) {
+      lastErr = err;
+      const isTransient = err?.code === 'ECONNRESET' || err?.cause?.code === 'ECONNRESET'
+        || err?.message?.includes('Connection error') || err?.status === 429 || err?.status >= 500;
+      if (!isTransient || attempt === MAX_RETRIES) throw err;
+      const delay = attempt * 5000; // 5s, 10s, 15s
+      console.log(`[worker] Whisper attempt ${attempt} failed (${err?.code || err?.message?.slice(0, 60)}), retrying in ${delay / 1000}s...`);
+      await new Promise((r) => setTimeout(r, delay));
+    }
+  }
+  throw lastErr;
 }
 
-// Parallel Whisper transcription with concurrency limit
+// Sequential Whisper transcription (avoids parallel ECONNRESET under load)
 async function transcribeChunksParallel(
   chunks: string[], defaultExt: string,
 ): Promise<string[]> {
@@ -358,11 +374,13 @@ async function transcribeChunksParallel(
     const batch = chunks.slice(i, i + WHISPER_CONCURRENCY)
       .filter((c) => statSync(c).size <= WHISPER_MAX_BYTES);
     if (!batch.length) continue;
-    console.log(`[worker] Transcribing chunks ${i + 1}–${Math.min(i + WHISPER_CONCURRENCY, chunks.length)}/${chunks.length} (parallel)...`);
-    const results = await Promise.all(
-      batch.map((c) => transcribeFile(c, c.split('.').pop()?.toLowerCase() || defaultExt)),
-    );
-    parts.push(...results.filter((r) => r.trim()));
+    console.log(`[worker] Transcribing chunks ${i + 1}–${Math.min(i + WHISPER_CONCURRENCY, chunks.length)}/${chunks.length}...`);
+    // Sequential within each batch to avoid concurrent large uploads triggering ECONNRESET
+    for (const c of batch) {
+      const chunkExt = c.split('.').pop()?.toLowerCase() || defaultExt;
+      const text = await transcribeFile(c, chunkExt);
+      if (text.trim()) parts.push(text.trim());
+    }
   }
   return parts;
 }
@@ -512,10 +530,10 @@ app.post('/api/youtube-audio', authMiddleware, async (req: express.Request, res:
 
     console.log(`[worker] Starting: ${videoId}`);
 
-    // Strategy 1: youtube_transcript_api (no bot detection)
-    // Skip if startTime/endTime specified (cannot time-filter captions easily)
-    // or caller explicitly forces audio transcription for consistency.
-    if (!forceAudioTranscription && !startTime && !endTime) {
+    // Strategy 1: youtube_transcript_api (Python — no bot detection, no proxy needed)
+    // Always try this first unless a time range is specified (captions can't be trimmed).
+    // This library differs from the Next.js npm one and often succeeds where npm fails.
+    if (!startTime && !endTime) {
       console.log('[worker] Trying YouTube transcript API first...');
       const transcriptText = await getYouTubeTranscript(videoId);
       if (transcriptText && transcriptText.length > 50) {
@@ -531,7 +549,7 @@ app.post('/api/youtube-audio', authMiddleware, async (req: express.Request, res:
       }
       console.log('[worker] No transcript, falling back to audio download');
     } else {
-      console.log('[worker] Skipping transcript API, using audio path');
+      console.log('[worker] Time range specified — skipping transcript API, using audio path');
     }
 
     // Strategy 2: yt-dlp + Whisper
@@ -561,39 +579,49 @@ app.post('/api/youtube-audio', authMiddleware, async (req: express.Request, res:
       }
     } catch { /* ignore duration check errors */ }
 
-    // Format selector
-    const fmtSel = 'bestaudio[abr<=48][ext=webm]/bestaudio[abr<=48]/bestaudio[abr<=64][ext=m4a]/bestaudio[ext=webm]/bestaudio[ext=m4a]/bestaudio';
+    // Format selector: prefer small audio-only, fall back to low-res muxed (ffmpeg extracts audio)
+    // The muxed fallback (best[height<=360]) handles clients that only provide muxed streams.
+    const fmtSel = 'bestaudio[abr<=48][ext=webm]/bestaudio[abr<=48]/bestaudio[abr<=64][ext=m4a]/bestaudio[ext=webm]/bestaudio[ext=m4a]/bestaudio/best[height<=360]';
     const outTpl = join(tmpDir, '%(id)s.%(ext)s');
     let downloadOk = false;
     let lastErr = '';
-    console.log('[worker] Downloading audio...');
+    const proxyStr = proxyArg();
+    console.log(`[worker] Downloading audio (proxy: ${proxyStr ? 'yes' : 'no'})...`);
 
-    for (const client of playerClients) {
-      const dlCmd = `${ytBase} --extractor-args "youtube:player_client=${client}" -f "${fmtSel}" --no-playlist --no-post-overwrites -o "${outTpl}" "https://www.youtube.com/watch?v=${videoId}"`;
-      try {
-        console.log(`[worker] Trying player_client=${client}...`);
-        const { stderr } = await execAsync(dlCmd, { timeout: 600_000, maxBuffer: 50 * 1024 * 1024 });
-        if (stderr) console.log('[worker] yt-dlp stderr:', stderr.slice(0, 300));
-        downloadOk = true;
-        console.log(`[worker] Download succeeded with player_client=${client}`);
-        break;
-      } catch (dlError: any) {
-        lastErr = dlError?.stderr || dlError?.message || 'unknown';
-        console.log(`[worker] player_client=${client} failed:`, lastErr.slice(0, 300));
+    // Build command variants: with proxy first, then without proxy as fallback.
+    // Webshare rotating proxy can cause 403 when the signed URL IP doesn't match download IP.
+    const ytBaseNoProxy = `"${ytDlp}" --no-warnings --js-runtimes node --user-agent "${fakeUA}" --add-headers "Accept-Language:zh-TW,zh;q=0.9,en;q=0.8" ${cookiesArg()}`.trim();
+    const commandBases = proxyStr ? [ytBase, ytBaseNoProxy] : [ytBase];
+
+    outer: for (const base of commandBases) {
+      const usingProxy = base.includes('--proxy');
+      for (const client of playerClients) {
+        const dlCmd = `${base} --extractor-args "youtube:player_client=${client}" -f "${fmtSel}" --no-playlist --no-post-overwrites -o "${outTpl}" "https://www.youtube.com/watch?v=${videoId}"`;
+        try {
+          console.log(`[worker] Trying player_client=${client} (proxy=${usingProxy})...`);
+          const { stderr } = await execAsync(dlCmd, { timeout: 600_000, maxBuffer: 50 * 1024 * 1024 });
+          if (stderr) console.log('[worker] yt-dlp stderr:', stderr.slice(0, 300));
+          downloadOk = true;
+          console.log(`[worker] Download succeeded with player_client=${client} proxy=${usingProxy}`);
+          break outer;
+        } catch (dlError: any) {
+          lastErr = dlError?.stderr || dlError?.message || 'unknown';
+          console.log(`[worker] player_client=${client} proxy=${usingProxy} failed:`, lastErr.slice(0, 300));
+        }
       }
-    }
 
-    if (!downloadOk) {
+      // Also try default (no explicit player_client) for this proxy setting
       try {
-        console.log('[worker] Trying default (no player_client)...');
-        const dlCmd = `${ytBase} -f "${fmtSel}" --no-playlist --no-post-overwrites -o "${outTpl}" "https://www.youtube.com/watch?v=${videoId}"`;
+        const dlCmd = `${base} -f "${fmtSel}" --no-playlist --no-post-overwrites -o "${outTpl}" "https://www.youtube.com/watch?v=${videoId}"`;
+        console.log(`[worker] Trying default client (proxy=${usingProxy})...`);
         const { stderr } = await execAsync(dlCmd, { timeout: 600_000, maxBuffer: 50 * 1024 * 1024 });
         if (stderr) console.log('[worker] yt-dlp stderr:', stderr.slice(0, 300));
         downloadOk = true;
-        console.log('[worker] Download succeeded with default');
+        console.log(`[worker] Download succeeded with default proxy=${usingProxy}`);
+        break outer;
       } catch (dlError: any) {
         lastErr = dlError?.stderr || dlError?.message || 'unknown';
-        console.log('[worker] Default also failed:', lastErr.slice(0, 300));
+        console.log(`[worker] Default proxy=${usingProxy} failed:`, lastErr.slice(0, 300));
       }
     }
 

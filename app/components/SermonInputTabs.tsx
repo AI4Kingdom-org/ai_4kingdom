@@ -116,7 +116,9 @@ export default function SermonInputTabs({
       url: ytUrl.trim(),
       startTime: ytStartTime.trim() || undefined,
       endTime: ytEndTime.trim() || undefined,
-      forceAudioTranscription: true,
+      // Do NOT force audio — let the worker try its Python caption API first
+      // (different library from the Next.js npm one, often succeeds where npm fails)
+      forceAudioTranscription: false,
     };
 
     const tryParseJson = async (res: Response): Promise<Record<string, any>> => {
