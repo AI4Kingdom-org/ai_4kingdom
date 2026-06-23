@@ -40,7 +40,8 @@ export async function POST(request: Request) {
       const langCandidates: Array<string | undefined> = ['zh-TW', 'zh-Hant', 'zh-Hans', 'zh'];
       if (lang && !langCandidates.includes(lang)) langCandidates.push(lang);
 
-      let bestItems: typeof transcriptItems = undefined;
+      type TranscriptItems = Awaited<ReturnType<typeof YoutubeTranscript.fetchTranscript>>;
+      let bestItems: TranscriptItems | undefined;
       let lastErr: any;
 
       // 先嘗試中文語言候選
