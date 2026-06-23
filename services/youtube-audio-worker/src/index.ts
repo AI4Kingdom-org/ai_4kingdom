@@ -211,56 +211,78 @@ async function getYouTubeTranscript(videoId: string): Promise<string | null> {
 
 // yt-dlp binary management
 let ytDlpBin: string | null = null;
+const YTDLP_MAX_AGE_DAYS = 60; // force re-download if binary is older than this
 
-async function ensureYtDlp(): Promise<string> {
-  if (ytDlpBin) return ytDlpBin;
+/**
+ * Parse yt-dlp version string (YYYY.MM.DD) and return age in days.
+ * Returns Infinity if the version cannot be parsed.
+ */
+function ytDlpVersionAgeDays(version: string): number {
+  const m = version.trim().match(/^(\d{4})\.(\d{2})\.(\d{2})/);
+  if (!m) return Infinity;
+  const built = new Date(parseInt(m[1]), parseInt(m[2]) - 1, parseInt(m[3]));
+  return (Date.now() - built.getTime()) / 86_400_000;
+}
 
-  // 1. Try system yt-dlp (installed in Dockerfile)
-  try {
-    const { stdout } = await execAsync('yt-dlp --version', { timeout: 5000 });
-    if (stdout.trim()) {
-      console.log('[worker] system yt-dlp:', stdout.trim());
-      ytDlpBin = 'yt-dlp';
-
-      // Self-update to latest version (runs once per process start)
-      try {
-        console.log('[worker] Updating yt-dlp to latest...');
-        const { stdout: upOut } = await execAsync('yt-dlp -U', { timeout: 60_000 });
-        console.log('[worker] yt-dlp update:', (upOut || '').trim().split('\n')[0] || 'already up to date');
-      } catch (upErr: any) {
-        console.log('[worker] yt-dlp -U skipped:', upErr?.message?.slice(0, 100));
-      }
-
-      return ytDlpBin;
-    }
-  } catch { /* not in PATH */ }
-
-  // 2. Download to /tmp
+/**
+ * Download the latest yt-dlp standalone binary from GitHub releases to /tmp.
+ * Returns the path to the downloaded binary.
+ */
+async function downloadLatestYtDlp(): Promise<string> {
   const binDir = join(os.tmpdir(), 'yt-dlp-bin');
-  const binaryPath = join(binDir, 'yt-dlp_linux');
-  if (existsSync(binaryPath)) { ytDlpBin = binaryPath; return ytDlpBin; }
-
-  console.log('[worker] Downloading yt-dlp binary...');
-  await mkdir(binDir, { recursive: true });
   const assetName = process.arch === 'arm64' ? 'yt-dlp_linux_aarch64' : 'yt-dlp_linux';
+  const binaryPath = join(binDir, assetName);
+  await mkdir(binDir, { recursive: true });
   const url = `https://github.com/yt-dlp/yt-dlp/releases/latest/download/${assetName}`;
-  const resp = await fetch(url, { redirect: 'follow' });
+  console.log(`[worker] Downloading latest yt-dlp from GitHub (${assetName})...`);
+  const resp = await fetch(url, { redirect: 'follow', signal: AbortSignal.timeout(120_000) });
   if (!resp.ok) throw new Error(`Download yt-dlp failed: HTTP ${resp.status}`);
   const buf = await resp.arrayBuffer();
   await writeFile(binaryPath, Buffer.from(buf));
   chmodSync(binaryPath, 0o755);
-  console.log('[worker] yt-dlp ready:', binaryPath);
-  ytDlpBin = binaryPath;
+  const { stdout: ver } = await execAsync(`"${binaryPath}" --version`, { timeout: 5000 });
+  console.log(`[worker] yt-dlp downloaded: ${ver.trim()}`);
+  return binaryPath;
+}
 
-  // Self-update to latest version (runs once per process start)
+async function ensureYtDlp(): Promise<string> {
+  if (ytDlpBin) return ytDlpBin;
+
+  // 1. Try system yt-dlp (installed in Dockerfile) — but only if it is fresh enough.
   try {
-    console.log('[worker] Updating yt-dlp to latest...');
-    const { stdout: upOut } = await execAsync(`"${ytDlpBin}" -U`, { timeout: 60_000 });
-    console.log('[worker] yt-dlp update:', (upOut || '').trim().split('\n')[0] || 'already up to date');
-  } catch (upErr: any) {
-    console.log('[worker] yt-dlp -U skipped:', upErr?.message?.slice(0, 100));
+    const { stdout } = await execAsync('yt-dlp --version', { timeout: 5000 });
+    const version = stdout.trim();
+    const ageDays = ytDlpVersionAgeDays(version);
+    console.log(`[worker] system yt-dlp: ${version} (${Math.round(ageDays)} days old)`);
+
+    if (ageDays <= YTDLP_MAX_AGE_DAYS) {
+      ytDlpBin = 'yt-dlp';
+      return ytDlpBin;
+    }
+
+    // Version is too old — fall through to download a fresh binary.
+    console.log(`[worker] system yt-dlp is ${Math.round(ageDays)} days old (>${YTDLP_MAX_AGE_DAYS}), downloading latest...`);
+  } catch { /* not in PATH */ }
+
+  // 2. Check cached /tmp binary — reuse only if still fresh.
+  const binDir = join(os.tmpdir(), 'yt-dlp-bin');
+  const assetName = process.arch === 'arm64' ? 'yt-dlp_linux_aarch64' : 'yt-dlp_linux';
+  const cachedPath = join(binDir, assetName);
+  if (existsSync(cachedPath)) {
+    try {
+      const { stdout: cachedVer } = await execAsync(`"${cachedPath}" --version`, { timeout: 5000 });
+      const ageDays = ytDlpVersionAgeDays(cachedVer.trim());
+      console.log(`[worker] cached yt-dlp: ${cachedVer.trim()} (${Math.round(ageDays)} days old)`);
+      if (ageDays <= YTDLP_MAX_AGE_DAYS) {
+        ytDlpBin = cachedPath;
+        return ytDlpBin;
+      }
+      console.log(`[worker] cached yt-dlp is stale, re-downloading...`);
+    } catch { /* corrupt binary — re-download */ }
   }
 
+  // 3. Download latest binary from GitHub.
+  ytDlpBin = await downloadLatestYtDlp();
   return ytDlpBin;
 }
 
@@ -518,7 +540,7 @@ app.post('/api/youtube-audio', authMiddleware, async (req: express.Request, res:
     await mkdir(chunkDir, { recursive: true });
 
     const fakeUA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
-    const ytBase = `"${ytDlp}" --js-runtimes node --user-agent "${fakeUA}" --add-headers "Accept-Language:zh-TW,zh;q=0.9,en;q=0.8" ${cookiesArg()} ${proxyArg()}`.trim();
+    const ytBase = `"${ytDlp}" --no-warnings --js-runtimes node --user-agent "${fakeUA}" --add-headers "Accept-Language:zh-TW,zh;q=0.9,en;q=0.8" ${cookiesArg()} ${proxyArg()}`.trim();
     // tv_embedded often bypasses bot detection; web_creator is another good option
     const playerClients = ['tv_embedded', 'ios', 'web_creator', 'android', 'mweb', 'web'];
 
@@ -576,12 +598,18 @@ app.post('/api/youtube-audio', authMiddleware, async (req: express.Request, res:
     }
 
     if (!downloadOk) {
-      const isBotBlock = lastErr.includes('Sign in to confirm') || lastErr.includes('not a bot');
+      // Strip WARNING lines (e.g. outdated version notice) — show only real errors.
+      const cleanErr = lastErr
+        .split('\n')
+        .filter((l: string) => !l.trimStart().startsWith('WARNING:'))
+        .join('\n')
+        .trim() || lastErr.trim();
+      const isBotBlock = cleanErr.includes('Sign in to confirm') || cleanErr.includes('not a bot');
       res.status(isBotBlock ? 403 : 500).json({
         error: isBotBlock ? 'BOT_DETECTED' : 'DOWNLOAD_FAILED',
         message: isBotBlock
           ? 'YouTube bot detection triggered. Please try again later.'
-          : `Download failed: ${lastErr.slice(0, 200)}`,
+          : `Download failed: ${cleanErr.slice(0, 200)}`,
       });
       return;
     }
