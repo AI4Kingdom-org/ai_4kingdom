@@ -363,26 +363,46 @@ async function transcribeFile(filePath: string, ext: string): Promise<string> {
   const mimeType = mimeMap[ext] || 'audio/mp4';
   const buf = await readFile(filePath);
 
-  // gpt-4o-transcribe as primary for quality; fall back to whisper-1 if all retries fail.
-  // Keep delays short (2s, 5s, 10s) so total retry time stays within Amplify's 160s proxy limit.
-  const DELAYS = [2_000, 5_000, 10_000]; // 3 retries before model fallback
+  // gpt-4o-transcribe as primary; fall back to whisper-1 after 3 retries.
+  // Delays: 5s/15s/30s for gpt-4o retries, then 10s/20s for whisper-1 retries.
+  // Total worst-case delay ~80s — fits within the 160s Amplify proxy window even for multi-chunk videos.
+  const GPT_DELAYS = [5_000, 15_000, 30_000];
+  const W1_DELAYS  = [10_000, 20_000];
   let lastErr: any;
 
-  for (let attempt = 0; attempt <= DELAYS.length; attempt++) {
+  // gpt-4o-transcribe attempts
+  for (let attempt = 0; attempt <= GPT_DELAYS.length; attempt++) {
     try {
-      const model: 'gpt-4o-transcribe' | 'whisper-1' = attempt < DELAYS.length ? 'gpt-4o-transcribe' : 'whisper-1';
-      if (attempt === DELAYS.length) console.log('[worker] gpt-4o-transcribe failed, falling back to whisper-1...');
-      const text = await callWhisper(buf, ext, mimeType, model);
-      if (attempt > 0) console.log(`[worker] Whisper succeeded on attempt ${attempt + 1} (${model})`);
+      const text = await callWhisper(buf, ext, mimeType, 'gpt-4o-transcribe');
+      if (attempt > 0) console.log(`[worker] Whisper succeeded on attempt ${attempt + 1} (gpt-4o-transcribe)`);
       return text;
     } catch (err: any) {
       lastErr = err;
-      if (attempt < DELAYS.length && isTransientWhisperError(err)) {
-        const delay = DELAYS[attempt];
+      if (attempt < GPT_DELAYS.length && isTransientWhisperError(err)) {
+        const delay = GPT_DELAYS[attempt];
         console.log(`[worker] Whisper attempt ${attempt + 1} failed (${err?.message?.slice(0, 60)}), retrying in ${delay / 1000}s...`);
         await new Promise((r) => setTimeout(r, delay));
-      } else if (attempt < DELAYS.length) {
+      } else if (attempt < GPT_DELAYS.length) {
         throw err; // non-transient, fail fast
+      }
+    }
+  }
+
+  // whisper-1 fallback with its own retries
+  console.log('[worker] gpt-4o-transcribe failed, falling back to whisper-1...');
+  for (let attempt = 0; attempt <= W1_DELAYS.length; attempt++) {
+    try {
+      const text = await callWhisper(buf, ext, mimeType, 'whisper-1');
+      if (attempt > 0) console.log(`[worker] whisper-1 succeeded on attempt ${attempt + 1}`);
+      return text;
+    } catch (err: any) {
+      lastErr = err;
+      if (attempt < W1_DELAYS.length && isTransientWhisperError(err)) {
+        const delay = W1_DELAYS[attempt];
+        console.log(`[worker] whisper-1 attempt ${attempt + 1} failed (${err?.message?.slice(0, 60)}), retrying in ${delay / 1000}s...`);
+        await new Promise((r) => setTimeout(r, delay));
+      } else if (attempt < W1_DELAYS.length) {
+        throw err;
       }
     }
   }
