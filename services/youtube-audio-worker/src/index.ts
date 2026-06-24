@@ -41,7 +41,7 @@ const PORT = parseInt(process.env.PORT || '8080', 10);
 
 // Auth
 const SHARED_SECRET = process.env.WORKER_SECRET || '';
-const PUBLIC_ALLOWED_ORIGINS = (process.env.PUBLIC_ALLOWED_ORIGINS || '*.amplifyapp.com,localhost,127.0.0.1')
+const PUBLIC_ALLOWED_ORIGINS = (process.env.PUBLIC_ALLOWED_ORIGINS || '*.amplifyapp.com,ai4kingdom.org,www.ai4kingdom.org,localhost,127.0.0.1')
   .split(',')
   .map((s) => s.trim().toLowerCase())
   .filter(Boolean);
@@ -100,7 +100,13 @@ function getOpenAI(): OpenAI {
       const dispatcher = new ProxyAgent(httpProxy);
       _openai = new OpenAI({
         apiKey: process.env.OPENAI_API_KEY,
-        fetch: (url, init) => undiciFetch(url as string, { ...(init as any), dispatcher }) as any,
+        fetch: (url, init) => {
+          const undiciInit: any = { ...(init as any), dispatcher };
+          if (undiciInit.body && !undiciInit.duplex) {
+            undiciInit.duplex = 'half';
+          }
+          return undiciFetch(url as string, undiciInit) as any;
+        },
       });
       console.log('[worker] OpenAI client using HTTP proxy');
     } else {
