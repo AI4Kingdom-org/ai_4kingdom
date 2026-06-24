@@ -93,7 +93,7 @@ let _openai: OpenAI | null = null;
 function getOpenAI(): OpenAI {
   if (!_openai) {
     if (!process.env.OPENAI_API_KEY) throw new Error('OPENAI_API_KEY not set');
-    _openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+    _openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, fetch: globalThis.fetch });
   }
   return _openai;
 }
@@ -326,12 +326,13 @@ async function getAudioDuration(ffmpeg: string, filePath: string): Promise<numbe
 async function splitAudio(
   ffmpeg: string, inputPath: string, outputDir: string, chunkSec: number,
 ): Promise<string[]> {
-  const ext = inputPath.split('.').pop()?.toLowerCase() || 'm4a';
-  const pattern = join(outputDir, `chunk_%03d.${ext}`);
-  const cmd = `"${ffmpeg}" -i "${inputPath}" -f segment -segment_time ${chunkSec} -c copy -reset_timestamps 1 "${pattern}"`;
-  await execAsync(cmd, { timeout: 120_000, maxBuffer: 50 * 1024 * 1024 });
+  // Re-encode to 16kHz mono mp3 — ensures clean splits at any boundary (not limited to keyframes).
+  // -c copy on webm/opus silently drops audio at cluster boundaries, causing missing sections.
+  const pattern = join(outputDir, `chunk_%03d.mp3`);
+  const cmd = `"${ffmpeg}" -i "${inputPath}" -f segment -segment_time ${chunkSec} -c:a libmp3lame -q:a 5 -ar 16000 -ac 1 -reset_timestamps 1 "${pattern}"`;
+  await execAsync(cmd, { timeout: 180_000, maxBuffer: 50 * 1024 * 1024 });
   const files = await readdir(outputDir);
-  return files.filter((f) => /^chunk_\d+\.\w+$/.test(f)).sort().map((f) => join(outputDir, f));
+  return files.filter((f) => /^chunk_\d+\.mp3$/.test(f)).sort().map((f) => join(outputDir, f));
 }
 
 function isTransientWhisperError(err: any): boolean {
@@ -443,13 +444,13 @@ async function formatTranscript(rawText: string): Promise<string> {
           {
             role: 'system',
             content: [
-              'You are a transcript editor. Clean up the following speech transcript:',
-              '1. Remove filler words and repetitions',
-              '2. Fix punctuation and sentence boundaries',
-              '3. Merge broken sentences for readability',
-              '4. Remove clearly off-topic interjections',
-              '5. Preserve the original meaning and language (keep Chinese as Chinese, English as English)',
-              'Return only the cleaned transcript text, no commentary.',
+              'You are a transcript editor. Format the following speech transcript:',
+              '1. Fix punctuation and sentence boundaries only',
+              '2. Do NOT remove any words, phrases, or content — preserve everything',
+              '3. Do NOT summarize, shorten, or paraphrase',
+              '4. Preserve repeated phrases, prayers, and emphasis (e.g. "阿們", "讚美主")',
+              '5. Preserve the original language exactly (Chinese stays Chinese, English stays English)',
+              'Return only the reformatted transcript, no commentary.',
             ].join('\n'),
           },
           { role: 'user', content: chunk },
