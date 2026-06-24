@@ -14,6 +14,7 @@ import { existsSync, statSync, chmodSync } from 'fs';
 import { join } from 'path';
 import os from 'os';
 import OpenAI from 'openai';
+import { ProxyAgent, fetch as undiciFetch } from 'undici';
 
 const app = express();
 app.use(express.json());
@@ -88,12 +89,23 @@ function authMiddleware(
   next();
 }
 
-// Lazy OpenAI client
+// Lazy OpenAI client — routes through HTTP proxy when OPENAI_HTTP_PROXY is set,
+// bypassing Fly.io → OpenAI direct connection issues.
 let _openai: OpenAI | null = null;
 function getOpenAI(): OpenAI {
   if (!_openai) {
     if (!process.env.OPENAI_API_KEY) throw new Error('OPENAI_API_KEY not set');
-    _openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, fetch: globalThis.fetch });
+    const httpProxy = process.env.OPENAI_HTTP_PROXY;
+    if (httpProxy) {
+      const dispatcher = new ProxyAgent(httpProxy);
+      _openai = new OpenAI({
+        apiKey: process.env.OPENAI_API_KEY,
+        fetch: (url, init) => undiciFetch(url as string, { ...(init as any), dispatcher }) as any,
+      });
+      console.log('[worker] OpenAI client using HTTP proxy');
+    } else {
+      _openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, fetch: globalThis.fetch });
+    }
   }
   return _openai;
 }
