@@ -13,11 +13,12 @@ export const CHAT_TYPES: Record<string, ChatType> = {
   AGAPE_CHURCH: 'agape-church',
   EAST_CHRIST_HOME: 'east-christ-home',
   CFSC_CHURCH: 'cfsc-church',
-  CHINESE_PASTOR_NETWORK: 'chinese-pastor-network'
+  CHINESE_PASTOR_NETWORK: 'chinese-pastor-network',
+  ZHIMING_YUAN: 'zhiming-yuan',
 } as const;
 
 
-export type ChatType = 'general' | 'sunday-guide' | 'bible-study' | 'homeschool' | 'spiritual-partner' | 'children-mental' | 'johnsung' | 'teen-console' | 'home-console' | 'agape-church' | 'east-christ-home' | 'cfsc-church' | 'chinese-pastor-network';
+export type ChatType = 'general' | 'sunday-guide' | 'bible-study' | 'homeschool' | 'spiritual-partner' | 'children-mental' | 'johnsung' | 'teen-console' | 'home-console' | 'agape-church' | 'east-christ-home' | 'cfsc-church' | 'chinese-pastor-network' | 'zhiming-yuan';
 
 
 export interface ChatTypeConfig {
@@ -118,7 +119,14 @@ export const CHAT_TYPE_CONFIGS: Record<ChatType, ChatTypeConfig> = {
     description: '华牧网络教会事工联盟牧者助手',
     assistantId: ASSISTANT_IDS.CHINESE_PASTOR_NETWORK,
     vectorStoreId: VECTOR_STORE_IDS.CHINESE_PASTOR_NETWORK
-  }
+  },
+  'zhiming-yuan': {
+    type: 'zhiming-yuan',
+    title: '遠志明耶穌頌 AI 助手',
+    description: '遠志明神學問答集牧者助手',
+    assistantId: ASSISTANT_IDS.ZHIMING_YUAN,
+    vectorStoreId: VECTOR_STORE_IDS.ZHIMING_YUAN
+  },
 
 };
 
@@ -180,6 +188,10 @@ export const CHAT_CONFIGS: Record<ChatType, ChatConfig> = {
   'chinese-pastor-network': {
     title: '华牧网络教会事工联盟',
     description: '华牧网络教会事工联盟牧者助手'
-  }
+  },
+  'zhiming-yuan': {
+    title: '遠志明耶穌頌 AI 助手',
+    description: '遠志明神學問答集牧者助手'
+  },
 
 };

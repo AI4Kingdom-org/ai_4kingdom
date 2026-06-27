@@ -51,6 +51,7 @@ function EastChristHomeContent() {
   const [navFileName, setNavFileName] = useState<string>('');
   const [navUploadTime, setNavUploadTime] = useState<string>('');
   const [pdfLoading, setPdfLoading] = useState(false);
+  const [chatOpen, setChatOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [pdfError, setPdfError] = useState<string | null>(null);
   const contentRef = useRef<HTMLDivElement>(null);
@@ -331,31 +332,42 @@ function EastChristHomeContent() {
           {allFiles.length === 0 && <div style={{ fontSize: '14px', color: '#ff6b6b', textAlign: 'center', padding: '12px', background: '#fff5f5', borderRadius: '8px', border: '1px solid #ffebee' }}>目前尚无可用文件</div>}
           <div className={styles.contentWrapper}>
             {sermonContent ? (
-              <>
-                <div className={`${styles.contentArea} ${styles.hasContent}`}>{renderNavContent()}</div>
-                <div className={styles.chatSection}>
-                  <div className={chatStyles.chatWrapper}>
-                    <div className={`${chatStyles.sidebar}${sidebarOpen ? ' ' + chatStyles.sidebarOpen : ''}`}>
-                      <button className={chatStyles.sidebarToggle} onClick={() => setSidebarOpen(v => !v)}>
-                        <span>📋 對話記錄</span><span>{sidebarOpen ? '▲' : '▼'}</span>
-                      </button>
-                      <ConversationList userId={user!.user_id} type="east-christ-home" currentThreadId={currentThreadId}
-                        onSelectThread={handleSelectThread} isCreating={false} onCreateNewThread={handleCreateNewThread} sidebarMode={true} />
-                    </div>
-                    <div className={chatStyles.main}>
-                      <MessageList messages={messages} isLoading={chatLoading} />
-                      {chatError && <div style={{ color: '#f55', padding: '6px 16px', background: '#3a0000' }}>{chatError}</div>}
-                      <ChatInput onSend={handleSendMessage} isLoading={chatLoading} />
-                    </div>
-                  </div>
-                </div>
-              </>
+              <div className={`${styles.contentArea} ${styles.hasContent}`}>{renderNavContent()}</div>
             ) : (
               <div style={{ textAlign: 'center', width: '100%', padding: '2rem 0', color: '#94a3b8' }}><p>请先选择要查看的内容类型</p></div>
             )}
           </div>
         </div>
       </div>
+
+      {/* ── Floating chat bubble + panel ── */}
+      {user && (
+        <>
+          <div className={`${chatStyles.floatingPanel}${chatOpen ? ' ' + chatStyles.panelOpen : ''}`}>
+            <div className={chatStyles.panelHeader}>
+              <span className={chatStyles.panelTitle}>東方基督之家 AI 助手</span>
+              <button className={chatStyles.panelClose} onClick={() => setChatOpen(false)}>✕</button>
+            </div>
+            <div className={chatStyles.chatWrapper}>
+              <div className={`${chatStyles.sidebar}${sidebarOpen ? ' ' + chatStyles.sidebarOpen : ''}`}>
+                <button className={chatStyles.sidebarToggle} onClick={() => setSidebarOpen(v => !v)}>
+                  <span>📋 對話記錄</span><span>{sidebarOpen ? '▲' : '▼'}</span>
+                </button>
+                <ConversationList userId={user.user_id} type="east-christ-home" currentThreadId={currentThreadId}
+                  onSelectThread={handleSelectThread} isCreating={false} onCreateNewThread={handleCreateNewThread} sidebarMode={true} />
+              </div>
+              <div className={chatStyles.main}>
+                <MessageList messages={messages} isLoading={chatLoading} />
+                {chatError && <div style={{ color: '#f55', padding: '6px 16px', background: '#3a0000' }}>{chatError}</div>}
+                <ChatInput onSend={handleSendMessage} isLoading={chatLoading} />
+              </div>
+            </div>
+          </div>
+          <button className={chatStyles.floatingBubble} onClick={() => { setChatOpen(v => !v); setSidebarOpen(false); }} title="AI 對話助手">
+            <span className={chatStyles.bubbleLabel}>AI</span>
+          </button>
+        </>
+      )}
     </div>
   );
 }

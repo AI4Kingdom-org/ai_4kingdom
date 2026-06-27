@@ -9,6 +9,7 @@ export const ASSISTANT_IDS = {
   HOME_CONSOLE: 'asst_0p6WP3BaiYidMkfcsyM8EPyM',  //家庭辅导
   AGAPE_CHURCH: 'asst_Vm0kpSHh7snqF5SAJ32SmAMN', // 愛加倍教會專用牧者助手（獨立）
   EAST_CHRIST_HOME: 'asst_XMyPwcJsH7TiTcAsGEu1GuY2', // 東基家專用牧者助手（獨立）
+  ZHIMING_YUAN: 'asst_syEv0z4BpjKRsk4VVlxOeoeb', // 遠志明神學問答集專用助手（獨立）
   JIAN_ZHU: 'asst_bGYjfmBTbjuF0tCGbJ0yEa8I', // 祝建牧師助手（獨立）
   CFSC_CHURCH: 'asst_6JH0Gph4Mmdwskp56YkQVIh5', // CFSC Church 專用牧者助手
   CHINESE_PASTOR_NETWORK: 'asst_EF1jZ1CtvMdM6nqSdwAs4kAy', // 华牧网络教会事工联盟專用牧者助手
@@ -26,6 +27,7 @@ export const VECTOR_STORE_IDS = {
   HOME_CONSOLE: 'vs_67b28ec53da48191863817002d79222b',  // 使用與 CHILDREN_MENTAL 相同的向量存儲 ID
   AGAPE_CHURCH: 'vs_68a9ee54724c8191b6a7d574a59ca91a', // 愛加倍教會專用向量庫
   EAST_CHRIST_HOME: 'vs_69f204caa1f88191ab85505bcd04f09f', // 東基家專用向量庫
+  ZHIMING_YUAN: 'vs_699d07be23448191b874b7653f8c7829', // 遠志明神學問答集向量庫
   JIAN_ZHU: 'vs_6853c96fdfb88191a8421097e5bea232', // 祝建牧師助手向量庫
   CFSC_CHURCH: 'vs_6a033b3feb8c8191a802c848539322a1', // CFSC Church 專用向量庫
   CHINESE_PASTOR_NETWORK: 'vs_6853c96fdfb88191a8421097e5bea232', // 华牧网络教会事工联盟專用向量庫
@@ -79,6 +81,12 @@ export const SUNDAY_GUIDE_UNITS = {
     assistantId: ASSISTANT_IDS.CHINESE_PASTOR_NETWORK,
     vectorStoreId: VECTOR_STORE_IDS.CHINESE_PASTOR_NETWORK,
     allowedUploaders: ['1', '24', '22', '6'] as string[],
+    accessType: 'public' as const,
+  },
+  zhimingYuan: {
+    assistantId: ASSISTANT_IDS.ZHIMING_YUAN,
+    vectorStoreId: VECTOR_STORE_IDS.ZHIMING_YUAN,
+    allowedUploaders: ['1', '24'] as string[],
     accessType: 'public' as const,
   },
 } as const;

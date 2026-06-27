@@ -55,6 +55,7 @@ function AgapeChurchContent() {
   const [navFileName, setNavFileName] = useState<string>('');
   const [navUploadTime, setNavUploadTime] = useState<string>('');
   const [pdfLoading, setPdfLoading] = useState(false);
+  const [chatOpen, setChatOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [pdfError, setPdfError] = useState<string | null>(null);
   const contentRef = useRef<HTMLDivElement>(null);
@@ -497,42 +498,9 @@ function AgapeChurchContent() {
 
             <div className={styles.contentWrapper}>
               {sermonContent ? (
-                <>
-                  <div className={`${styles.contentArea} ${styles.hasContent}`}>
-                    {renderNavContent()}
-                  </div>
-                  <div className={styles.chatSection}>
-                    <div className={chatStyles.chatWrapper}>
-                      <div className={`${chatStyles.sidebar}${sidebarOpen ? ' ' + chatStyles.sidebarOpen : ''}`}>
-                        <button
-                          className={chatStyles.sidebarToggle}
-                          onClick={() => setSidebarOpen(v => !v)}
-                        >
-                          <span>📋 對話記錄</span>
-                          <span>{sidebarOpen ? '▲' : '▼'}</span>
-                        </button>
-                        <ConversationList
-                          userId={user!.user_id}
-                          type="agape-church"
-                          currentThreadId={currentThreadId}
-                          onSelectThread={handleSelectThread}
-                          isCreating={false}
-                          onCreateNewThread={handleCreateNewThread}
-                          sidebarMode={true}
-                        />
-                      </div>
-                      <div className={chatStyles.main}>
-                        <MessageList messages={messages} isLoading={chatLoading} />
-                        {chatError && (
-                          <div style={{ color: '#f55', padding: '6px 16px', background: '#3a0000' }}>
-                            {chatError}
-                          </div>
-                        )}
-                        <ChatInput onSend={handleSendMessage} isLoading={chatLoading} />
-                      </div>
-                    </div>
-                  </div>
-                </>
+                <div className={`${styles.contentArea} ${styles.hasContent}`}>
+                  {renderNavContent()}
+                </div>
               ) : (
                 <div style={{ textAlign: 'center', width: '100%', padding: '2rem 0', color: '#94a3b8' }}>
                   <p>请先选择要查看的内容类型</p>
@@ -542,7 +510,36 @@ function AgapeChurchContent() {
           </div>
 
         </div>
-      </div>
+
+      {/* ── Floating chat bubble + panel ── */}
+      {user && (
+        <>
+          <div className={`${chatStyles.floatingPanel}${chatOpen ? ' ' + chatStyles.panelOpen : ''}`}>
+            <div className={chatStyles.panelHeader}>
+              <span className={chatStyles.panelTitle}>Agape 教會 AI 助手</span>
+              <button className={chatStyles.panelClose} onClick={() => setChatOpen(false)}>✕</button>
+            </div>
+            <div className={chatStyles.chatWrapper}>
+              <div className={`${chatStyles.sidebar}${sidebarOpen ? ' ' + chatStyles.sidebarOpen : ''}`}>
+                <button className={chatStyles.sidebarToggle} onClick={() => setSidebarOpen(v => !v)}>
+                  <span>📋 對話記錄</span><span>{sidebarOpen ? '▲' : '▼'}</span>
+                </button>
+                <ConversationList userId={user.user_id} type="agape-church" currentThreadId={currentThreadId}
+                  onSelectThread={handleSelectThread} isCreating={false} onCreateNewThread={handleCreateNewThread} sidebarMode={true} />
+              </div>
+              <div className={chatStyles.main}>
+                <MessageList messages={messages} isLoading={chatLoading} />
+                {chatError && <div style={{ color: '#f55', padding: '6px 16px', background: '#3a0000' }}>{chatError}</div>}
+                <ChatInput onSend={handleSendMessage} isLoading={chatLoading} />
+              </div>
+            </div>
+          </div>
+          <button className={chatStyles.floatingBubble} onClick={() => { setChatOpen(v => !v); setSidebarOpen(false); }} title="AI 對話助手">
+            <span className={chatStyles.bubbleLabel}>AI</span>
+          </button>
+        </>
+      )}
+    </div>
   );
 }
 
