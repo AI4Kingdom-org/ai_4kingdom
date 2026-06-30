@@ -247,7 +247,7 @@ export default function ConversationList({
   return (
     <>
       {/* 桌面版视图 - sidebarMode 時強制顯示（覆蓋 mobile media query 的 display:none） */}
-      <div className={styles.container} style={sidebarMode ? { display: 'flex' } : undefined}>
+      <div className={styles.container} style={sidebarMode ? { display: 'flex', width: '100%', minWidth: 'unset' } : undefined}>
         <div className={styles.header}>
           <button
             className={styles.newButton}

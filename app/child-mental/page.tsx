@@ -1,33 +1,94 @@
-"use client";
+'use client';
 
-import { useAuth } from '@/app/contexts/AuthContext';
+import { useState, useEffect, useRef } from 'react';
 import WithChat from '@/app/components/layouts/WithChat';
-import Chat from '@/app/components/Chat/Chat';
-import { ASSISTANT_IDS, VECTOR_STORE_IDS } from '@/app/config/constants';
+import { useAuth } from '@/app/contexts/AuthContext';
+import { useChat } from '@/app/contexts/ChatContext';
+import ConversationList from '@/app/components/ConversationList';
+import MessageList from '@/app/components/Chat/MessageList';
+import ChatInput from '@/app/components/Chat/ChatInput';
 import styles from './page.module.css';
 
-export default function ChildMentalPage() {
-  const { user, loading } = useAuth();
+function ChildMentalContent() {
+  const { user } = useAuth();
+  const {
+    messages,
+    currentThreadId,
+    setCurrentThreadId,
+    sendMessage,
+    isLoading,
+    error,
+    setError,
+    loadChatHistory,
+    setMessages,
+  } = useChat();
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const shouldLoadHistory = useRef(false);
 
-  if (loading) {
-    return <div>Loading, please wait...</div>;
-  }
+  useEffect(() => {
+    if (currentThreadId && user && shouldLoadHistory.current) {
+      shouldLoadHistory.current = false;
+      loadChatHistory(user.user_id);
+    }
+  }, [currentThreadId]);
 
-  if (!user) {
-    return <div>請先登錄</div>;
-  }
+  const handleCreateNewThread = () => {
+    setCurrentThreadId(null);
+    setMessages([]);
+  };
+
+  const handleSelectThread = (threadId: string) => {
+    if (threadId === currentThreadId) return;
+    shouldLoadHistory.current = true;
+    setError('');
+    setMessages([]);
+    setCurrentThreadId(threadId);
+    setSidebarOpen(false);
+  };
+
+  const handleSendMessage = async (message: string) => {
+    await sendMessage(message);
+    window.dispatchEvent(new CustomEvent('refreshConversations'));
+  };
+
+  if (!user) return null;
 
   return (
     <div className={styles.container}>
-      <WithChat chatType="children-mental">
-        <Chat
-          type="children-mental"
-          assistantId={ASSISTANT_IDS.CHILDREN_MENTAL}
-          vectorStoreId={VECTOR_STORE_IDS.CHILDREN_MENTAL}
-          userId={user.user_id}
-          showSidebar={true}
-        />
-      </WithChat>
+      <div className={styles.panel}>
+        <div className={styles.panelHeader}>
+          <span className={styles.panelTitle}>👶 兒童心理 AI 助手</span>
+        </div>
+        <div className={styles.chatWrapper}>
+          <div className={`${styles.sidebar}${sidebarOpen ? ' ' + styles.sidebarOpen : ''}`}>
+            <button className={styles.sidebarToggle} onClick={() => setSidebarOpen(v => !v)}>
+              <span>📋 對話記錄</span><span>{sidebarOpen ? '▲' : '▼'}</span>
+            </button>
+            <ConversationList
+              userId={user.user_id}
+              type="children-mental"
+              currentThreadId={currentThreadId}
+              onSelectThread={handleSelectThread}
+              isCreating={false}
+              onCreateNewThread={handleCreateNewThread}
+              sidebarMode={true}
+            />
+          </div>
+          <div className={styles.main}>
+            <MessageList messages={messages} isLoading={isLoading} />
+            {error && <div className={styles.errorBanner}>{error}</div>}
+            <ChatInput onSend={handleSendMessage} isLoading={isLoading} />
+          </div>
+        </div>
+      </div>
     </div>
+  );
+}
+
+export default function ChildMentalPage() {
+  return (
+    <WithChat chatType="children-mental">
+      <ChildMentalContent />
+    </WithChat>
   );
 }
