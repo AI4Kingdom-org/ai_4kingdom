@@ -1,44 +1,145 @@
+/* Homeschool — Always-visible chat panel */
+
 .container {
   display: flex;
+  justify-content: center;
+  align-items: stretch;
   height: 100dvh;
   width: 100%;
-  background-color: #ffffff;
+  background: #f1f5f9;
+  padding: 20px;
+  box-sizing: border-box;
 }
 
-.content {
+.panel {
+  --chat-bg: #ffffff;
+  --chat-sidebar-bg: #f5f5f5;
+  --chat-input-bg: #eeeeee;
+  --chat-input-field-bg: #ffffff;
+  --chat-text-color: #1a1a1a;
+  --chat-secondary-text: #666666;
+  --chat-border-color: #e0e0e0;
+  --chat-item-hover-bg: rgba(0, 0, 0, 0.06);
+  --chat-item-active-bg: rgba(0, 0, 0, 0.12);
+  --chat-bot-msg-bg: #f0f0f0;
+  --chat-bot-msg-color: #1a1a1a;
+  --chat-new-btn-bg: #1a1a1a;
+  --chat-new-btn-color: #ffffff;
+  --chat-send-btn-bg: #1a1a1a;
+  --chat-send-btn-hover: #333333;
   display: flex;
   flex-direction: column;
-  flex: 1;
-  min-height: 0;
-}
-
-.chatContainer {
-  flex: 1;
-  display: flex;
-  width: 50%;
-  margin: 0 auto;
-  min-height: 400px;
-  background: white;
-  border-radius: 12px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  width: 100%;
+  max-width: 900px;
+  border-radius: 16px;
+  background: #ffffff;
+  box-shadow: 0 8px 40px rgba(15, 23, 42, 0.12), 0 2px 12px rgba(0,0,0,0.08);
+  border: 1px solid #e2e8f0;
   overflow: hidden;
 }
 
-.chatContainer > div {
-  flex: 1;
+.panelHeader {
   display: flex;
-  width: 100%;
-  height: 100%;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 20px;
+  background: linear-gradient(135deg, #3b82f6 0%, #6366f1 100%);
+  flex-shrink: 0;
 }
 
-/* 适配移动端 */
+.panelTitle {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #ffffff;
+}
+
+.newChatBtn {
+  background: rgba(255,255,255,0.2);
+  border: 1px solid rgba(255,255,255,0.3);
+  color: #ffffff;
+  padding: 4px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 0.8rem;
+  font-weight: 500;
+  transition: background 0.15s;
+}
+
+.newChatBtn:hover {
+  background: rgba(255,255,255,0.35);
+}
+
+.chatWrapper {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+}
+
+.sidebar {
+  width: 100%;
+  height: 44px;
+  max-height: 44px;
+  flex-shrink: 0;
+  overflow: hidden;
+  background: #f5f5f5;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.sidebar.sidebarOpen {
+  position: absolute;
+  top: 44px;
+  left: 0;
+  right: 0;
+  z-index: 10;
+  height: auto;
+  max-height: calc(100% - 44px - 70px);
+  overflow-y: auto;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.sidebarToggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 14px;
+  height: 44px;
+  background: #f5f5f5;
+  border: none;
+  width: 100%;
+  cursor: pointer;
+  font-size: 0.85rem;
+  color: #1a1a1a;
+  font-weight: 500;
+  flex-shrink: 0;
+}
+
+.main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: #ffffff;
+  min-height: 0;
+}
+
+.errorBanner {
+  color: #f55;
+  padding: 6px 16px;
+  background: #3a0000;
+  font-size: 0.85rem;
+}
+
 @media (max-width: 768px) {
   .container {
-    width: 100%;
-    height: calc(100dvh - 56px);
+    padding: 0;
+    background: #ffffff;
   }
 
-  .chatContainer {
-    width: 90%;
+  .panel {
+    border-radius: 0;
+    box-shadow: none;
+    border: none;
   }
 }
