@@ -57,7 +57,6 @@ function ChildMentalContent() {
     <div className={styles.container}>
       <div className={styles.panel}>
         <div className={styles.panelHeader}>
-          <span className={styles.panelTitle}>👶 兒童心理 AI 助手</span>
         </div>
         <div className={styles.chatWrapper}>
           <div className={`${styles.sidebar}${sidebarOpen ? ' ' + styles.sidebarOpen : ''}`}>
