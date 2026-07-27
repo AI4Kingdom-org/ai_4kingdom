@@ -54,6 +54,20 @@ function compareFilesByBookOrder(a: FileRecord, b: FileRecord) {
   return fileNameCollator.compare(a.fileName, b.fileName);
 }
 
+function normalizeFileName(fileName: string) {
+  return fileName.trim().replace(/\.pdf$/i, '').toLowerCase();
+}
+
+function dedupeFilesByName(files: FileRecord[]) {
+  const seen = new Set<string>();
+  return files.filter(file => {
+    const key = normalizeFileName(file.fileName);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 // 清除 OpenAI file_search RAG 引用標記：【X:Y†filename】
 function stripCitations(text: string): string {
   // 只移除引用標記，保留所有換行（\s{2,} 會誤殺段落分隔）
@@ -159,12 +173,14 @@ function ZhimingYuanContent() {
       if (!res.ok) throw new Error('獲取文件記錄失敗');
       const data = await res.json();
       if (data.success && data.records) {
-        const sorted: FileRecord[] = data.records
+        const mapped: FileRecord[] = data.records
           .map((rec: any) => ({
             fileName: rec.fileName || '未命名文件',
             fileId: rec.fileId || '',
             uploadDate: new Date(rec.createdAt).toLocaleDateString('zh-TW'),
           }))
+          .filter((rec: FileRecord) => rec.fileName && rec.fileId);
+        const sorted = dedupeFilesByName(mapped)
           .sort(compareFilesByBookOrder);
         setAllFiles(sorted);
         setCurrentPage(1);
