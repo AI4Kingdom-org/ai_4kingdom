@@ -62,7 +62,7 @@ interface ChatContextType {
 export const ChatContext = createContext<ChatContextType | null>(null);
 
 // 串流控制配置
-const SHOW_THINKING_ONLY = true;   // 改為 true 等待完整回復後顯示
+const SHOW_THINKING_ONLY = false;   // false 時收到第一個串流 chunk 就立即顯示內容
 const SMART_FILTERING = false;     // 關閉智能過濾，使用 thinking only 模式
 
 // 智能過濾配置參數 - 極速優化版
@@ -355,6 +355,11 @@ export function ChatProvider({
         // 創建一個暫時的機器人回應，用於流式更新
         let finalThreadId = currentThreadId;
         let currentReferences: DocumentReference[] = [];
+        const assistantTempId = `assistant_${Date.now()}`;
+        setMessages(prev => [
+          ...prev,
+          { sender: 'bot', text: 'AI 正在思考...', id: assistantTempId, isThinking: true }
+        ]);
         
         // 使用流式 API 發送請求
         // 判斷是否為 agape 單位（以 localStorage 選檔案時可能保存 unitId 或直接依賴 URL）
@@ -488,8 +493,6 @@ export function ChatProvider({
 
         // 檢查是否為流式回應
         if (response.headers.get('Content-Type')?.includes('text/event-stream')) {
-            // 建立占位訊息
-            const assistantTempId = `assistant_${Date.now()}`;
             
             // 智能過濾狀態
             let textBuffer = '';           // 累積緩衝
@@ -499,15 +502,15 @@ export function ChatProvider({
             if (SHOW_THINKING_ONLY) {
               // 思考模式：先顯示學生資料摘要（如果有）
               const initialText = replyHeader ? `${replyHeader}AI 正在思考中...` : 'AI 正在思考中...';
-              setMessages(prev => [...prev, { sender: 'bot', text: initialText, id: assistantTempId, isThinking: true }]);
+              setMessages(prev => prev.map(m => m.id === assistantTempId ? { ...m, text: initialText, isThinking: true } : m));
             } else if (SMART_FILTERING) {
               // 智能過濾模式：先顯示學生資料摘要（如果有）
               const initialText = replyHeader ? `${replyHeader}AI 正在思考中...` : 'AI 正在思考中...';
-              setMessages(prev => [...prev, { sender: 'bot', text: initialText, id: assistantTempId, isThinking: true }]);
+              setMessages(prev => prev.map(m => m.id === assistantTempId ? { ...m, text: initialText, isThinking: true } : m));
             } else {
               // 在原始即時模式下，先放入學生資料摘要作為回覆開頭
               const initialText = replyHeader || 'AI正在思考中，請稍候...';
-              setMessages(prev => [...prev, { sender: 'bot', text: initialText, id: assistantTempId, references: [] }]);
+              setMessages(prev => prev.map(m => m.id === assistantTempId ? { ...m, text: initialText, isThinking: true, references: [] } : m));
             }
 
             const reader = response.body?.getReader();
@@ -597,8 +600,8 @@ export function ChatProvider({
                             if (smartFilter.isValidChunk(deltaText) && deltaText.trim()) {
                               setMessages(prev => prev.map(m => {
                                 if (m.id === assistantTempId) {
-                                  const currentText = m.text === 'AI正在思考中，請稍候...' ? replyHeader : (m.text || replyHeader);
-                                  return { ...m, text: currentText + deltaText };
+                                  const currentText = m.isThinking ? replyHeader : (m.text || replyHeader);
+                                  return { ...m, text: currentText + deltaText, isThinking: false };
                                 }
                                 return m;
                               }));
