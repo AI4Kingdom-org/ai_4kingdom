@@ -25,6 +25,35 @@ interface FileRecord {
   uploadDate: string;
 }
 
+const fileNameCollator = new Intl.Collator('zh-Hans-u-kn-true', {
+  numeric: true,
+  sensitivity: 'base',
+});
+
+function getFileOrderParts(fileName: string): number[] {
+  const baseName = fileName.replace(/\.pdf$/i, '');
+  const prefixMatch = baseName.match(/^\s*(\d+(?:[.-]\d+)*)/);
+  if (!prefixMatch) return [];
+  return prefixMatch[1]
+    .split(/[.-]/)
+    .map(part => Number(part))
+    .filter(Number.isFinite);
+}
+
+function compareFilesByBookOrder(a: FileRecord, b: FileRecord) {
+  const aParts = getFileOrderParts(a.fileName);
+  const bParts = getFileOrderParts(b.fileName);
+  const length = Math.max(aParts.length, bParts.length);
+
+  for (let i = 0; i < length; i += 1) {
+    const aValue = aParts[i] ?? -1;
+    const bValue = bParts[i] ?? -1;
+    if (aValue !== bValue) return aValue - bValue;
+  }
+
+  return fileNameCollator.compare(a.fileName, b.fileName);
+}
+
 // 清除 OpenAI file_search RAG 引用標記：【X:Y†filename】
 function stripCitations(text: string): string {
   // 只移除引用標記，保留所有換行（\s{2,} 會誤殺段落分隔）
@@ -131,12 +160,12 @@ function ZhimingYuanContent() {
       const data = await res.json();
       if (data.success && data.records) {
         const sorted: FileRecord[] = data.records
-          .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
           .map((rec: any) => ({
             fileName: rec.fileName || '未命名文件',
             fileId: rec.fileId || '',
             uploadDate: new Date(rec.createdAt).toLocaleDateString('zh-TW'),
-          }));
+          }))
+          .sort(compareFilesByBookOrder);
         setAllFiles(sorted);
         setCurrentPage(1);
       } else {

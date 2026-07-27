@@ -93,8 +93,6 @@ export async function GET(
       items = items.concat(result.Items || []);
       lastEvaluatedKey = result.LastEvaluatedKey;
       scanPages++;
-      // 找到目標就提前結束（只在有 fileId 精確查詢時適用）
-      if (fileId && items.length > 0) break;
     } while (lastEvaluatedKey && scanPages < MAX_SCAN_PAGES);
 
     console.log('[DEBUG] 查詢結果:', { itemCount: items.length, scanPages });
