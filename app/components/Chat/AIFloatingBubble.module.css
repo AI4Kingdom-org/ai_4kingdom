@@ -1,0 +1,37 @@
+/* Shared AI chat toggle button — same size/shape on mobile and desktop */
+
+.bubble {
+  position: fixed;
+  bottom: 28px;
+  right: 28px;
+  z-index: 1100;
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: #2563eb;
+  box-shadow: 0 4px 20px rgba(37, 99, 235, 0.45), 0 2px 8px rgba(0, 0, 0, 0.18);
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  user-select: none;
+}
+
+.bubble:hover {
+  transform: scale(1.08);
+  box-shadow: 0 6px 28px rgba(37, 99, 235, 0.55), 0 3px 12px rgba(0, 0, 0, 0.22);
+}
+
+.bubble:active {
+  transform: scale(0.96);
+}
+
+.bubbleLabel {
+  font-size: 1.25rem;
+  font-weight: 800;
+  color: #ffffff;
+  letter-spacing: 0.02em;
+  line-height: 1;
+}

@@ -7,6 +7,7 @@ import { useChat } from '../contexts/ChatContext';
 import ConversationList from '../components/ConversationList';
 import MessageList from '../components/Chat/MessageList';
 import ChatInput from '../components/Chat/ChatInput';
+import AIFloatingBubble from '../components/Chat/AIFloatingBubble';
 import styles from './page.module.css';
 
 function SpiritualPartnerContent() {
@@ -23,6 +24,7 @@ function SpiritualPartnerContent() {
     setMessages,
   } = useChat();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [chatOpen, setChatOpen] = useState(false);
   const shouldLoadHistory = useRef(false);
 
   useEffect(() => {
@@ -54,10 +56,11 @@ function SpiritualPartnerContent() {
   if (!user) return null;
 
   return (
-    <div className={styles.container}>
-      <div className={styles.panel}>
+    <>
+      <div className={`${styles.floatingPanel}${chatOpen ? ' ' + styles.panelOpen : ''}`}>
         <div className={styles.panelHeader}>
           <span className={styles.panelTitle}>🙏 靈修伙伴 AI 助手</span>
+          <button className={styles.panelClose} onClick={() => setChatOpen(false)}>✕</button>
         </div>
         <div className={styles.chatWrapper}>
           <div className={`${styles.sidebar}${sidebarOpen ? ' ' + styles.sidebarOpen : ''}`}>
@@ -81,7 +84,8 @@ function SpiritualPartnerContent() {
           </div>
         </div>
       </div>
-    </div>
+      <AIFloatingBubble open={chatOpen} onToggle={() => { setChatOpen(v => !v); setSidebarOpen(false); }} />
+    </>
   );
 }
 
