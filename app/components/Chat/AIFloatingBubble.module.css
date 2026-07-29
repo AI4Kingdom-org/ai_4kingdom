@@ -19,6 +19,11 @@
   user-select: none;
 }
 
+.topRight {
+  top: 28px;
+  bottom: auto;
+}
+
 .bubble:hover {
   transform: scale(1.08);
   box-shadow: 0 6px 28px rgba(37, 99, 235, 0.55), 0 3px 12px rgba(0, 0, 0, 0.22);
