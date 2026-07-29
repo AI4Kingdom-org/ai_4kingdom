@@ -53,7 +53,7 @@ export async function POST(request: Request) {
 
     // 3. 删除旧文件
     console.log('[DEBUG] 开始删除旧文件');
-    const files = await openai.beta.vectorStores.files.list(item.vectorStoreId);
+    const files = await openai.vectorStores.files.list(item.vectorStoreId);
     console.log('[DEBUG] Vector Store 中的文件:', {
       count: files.data.length,
       files: files.data.map(f => ({ id: f.id, created_at: f.created_at }))
@@ -62,7 +62,7 @@ export async function POST(request: Request) {
     // 从 Vector Store 中移除所有文件
     for (const oldFile of files.data) {
       try {
-        await openai.beta.vectorStores.files.del(item.vectorStoreId, oldFile.id);
+        await openai.vectorStores.files.delete(oldFile.id, { vector_store_id: item.vectorStoreId });
         console.log('[DEBUG] 从 Vector Store 移除文件:', oldFile.id);
       } catch (deleteError) {
         console.warn('[WARN] 从 Vector Store 移除文件失败:', {
@@ -75,7 +75,7 @@ export async function POST(request: Request) {
     // 删除旧的 OpenAI 文件
     if (item.fileId) {
       try {
-        await openai.files.del(item.fileId);
+        await openai.files.delete(item.fileId);
         console.log('[DEBUG] 删除 OpenAI 文件成功:', item.fileId);
       } catch (deleteError) {
         console.warn('[WARN] 删除 OpenAI 文件失败，可能已经不存在:', {
@@ -91,7 +91,7 @@ export async function POST(request: Request) {
       fileId: file.id
     });
     
-    await openai.beta.vectorStores.files.create(
+    await openai.vectorStores.files.create(
       item.vectorStoreId,
       { file_id: file.id }
     );

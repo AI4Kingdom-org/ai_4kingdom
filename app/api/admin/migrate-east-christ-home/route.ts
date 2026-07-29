@@ -68,14 +68,14 @@ export async function POST(req: NextRequest) {
       try {
         // (a) Add file to new VS (idempotent: ignore if already exists)
         try {
-          await openai.beta.vectorStores.files.create(NEW_VS_ID, { file_id: fileId });
+          await openai.vectorStores.files.create(NEW_VS_ID, { file_id: fileId });
         } catch (e: any) {
           if (!e?.message?.includes('already')) throw e;
         }
 
         // (b) Remove file from old VS (idempotent: ignore if not found)
         try {
-          await openai.beta.vectorStores.files.del(OLD_VS_ID, fileId);
+          await openai.vectorStores.files.delete(fileId, { vector_store_id: OLD_VS_ID });
         } catch (e: any) {
           if (!e?.status || e.status !== 404) throw e;
         }

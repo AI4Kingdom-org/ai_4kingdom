@@ -2,36 +2,13 @@ import { NextRequest, NextResponse } from 'next/server';
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 export const runtime = 'nodejs';
-import OpenAI from 'openai';
 import { updateMonthlyTokenUsage } from '@/app/utils/monthlyTokenUsage';
 import { saveTokenUsage, trySaveTokenUsageOnce } from '@/app/utils/tokenUsage';
+import { getOpenAI } from '@/app/lib/openai/client';
+import { ensureConversation } from '@/app/lib/openai/conversation';
+import { generateResponse, toTokenUsage } from '@/app/lib/openai/responses';
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-
-// Poll a run until it reaches a terminal state or requires action
-async function waitForRunCompletion(threadId: string, runId: string, timeoutMs = 180_000, intervalMs = 1200) {
-  const start = Date.now();
-  while (Date.now() - start < timeoutMs) {
-    const run = await openai.beta.threads.runs.retrieve(threadId, runId);
-
-    if (
-      run.status === 'completed' ||
-      run.status === 'failed' ||
-      run.status === 'cancelled' ||
-      run.status === 'expired'
-    ) {
-      return run;
-    }
-
-    if (run.status === 'requires_action') {
-      // 若有工具需求，交由前端或其他 webhook 接手
-      return run;
-    }
-
-    await new Promise((r) => setTimeout(r, intervalMs));
-  }
-  throw new Error('Run polling timeout');
-}
+const openai = getOpenAI();
 
 export async function POST(req: NextRequest) {
   try {
@@ -51,51 +28,31 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: 'Missing OPENAI_API_KEY' }, { status: 500 });
       }
 
-      // Identify and retrieve usage from either Responses API or Runs API
+      // Identify and retrieve usage from either Responses API or (legacy) Runs API
       let tokenUsage: { prompt_tokens: number; completion_tokens: number; total_tokens: number; retrieval_tokens: number } | null = null;
       let effectiveUserId = userId;
       let uniqueId: string | null = null;
-
-      // Helper to build headers for REST
-      const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-      };
-      if (process.env.OPENAI_ORG_ID) headers['OpenAI-Organization'] = process.env.OPENAI_ORG_ID;
-      if (process.env.OPENAI_PROJECT) headers['OpenAI-Project'] = process.env.OPENAI_PROJECT;
 
       if (responseId) {
         uniqueId = String(responseId);
         // Try up to 3 times in case usage lags
         let resp: any = null;
         for (let i = 0; i < 3; i++) {
-          try {
-            const res = await fetch(`https://api.openai.com/v1/responses/${encodeURIComponent(String(responseId))}`, {
-              method: 'GET',
-              headers,
-              cache: 'no-store',
-            });
-            if (res.ok) resp = await res.json();
-          } catch {}
+          resp = await openai.responses.retrieve(String(responseId)).catch(() => null);
           if (resp?.usage) break;
           await new Promise((r) => setTimeout(r, 600));
         }
         if (resp) {
           effectiveUserId = effectiveUserId || resp?.metadata?.userId || resp?.metadata?.user || undefined;
-          const u: any = resp?.usage;
-          if (u) {
-            const prompt = u.input_tokens ?? u.prompt_tokens ?? 0;
-            const completion = u.output_tokens ?? u.completion_tokens ?? 0;
-            const total = u.total_tokens ?? prompt + completion;
-            tokenUsage = { prompt_tokens: prompt, completion_tokens: completion, total_tokens: total, retrieval_tokens: 0 };
-          }
+          tokenUsage = toTokenUsage(resp?.usage);
         }
       } else if (threadId && runId) {
+        // 舊 Assistants 事件形狀：日落前仍支援
         uniqueId = String(runId);
         let finalRun: any = null;
         for (let i = 0; i < 3; i++) {
           finalRun = await openai.beta.threads.runs
-            .retrieve(String(threadId), String(runId))
+            .retrieve(String(runId), { thread_id: String(threadId) })
             .catch(() => null);
           if (finalRun?.usage) break;
           await new Promise((r) => setTimeout(r, 600));
@@ -182,89 +139,65 @@ export async function POST(req: NextRequest) {
 
     // TODO: 依你專案的認證機制，從 session/cookie 驗證 userId
 
-    // 1) 建立或重用 thread
-    const thread = inputThreadId
-      ? { id: inputThreadId }
-      : await openai.beta.threads.create({
-          metadata: {
-            userId,
-            chatType: chatType ?? 'general',
-            ...(metadata || {}),
-          },
-        });
-
-    // 2) 寫入訊息
-    if (message) {
-      await openai.beta.threads.messages.create(thread.id, {
-        role: 'user',
-        content: message,
-      });
-    }
-    if (Array.isArray(messages) && messages.length > 0) {
-      for (const m of messages) {
-        // Assistants Messages 僅接受 'user' | 'assistant'
-        const role: 'user' | 'assistant' = (m.role === 'system' ? 'user' : m.role);
-        await openai.beta.threads.messages.create(thread.id, {
-          role,
-          content: m.content,
-        });
-      }
-    }
-
-    // 3) 建立 run（可覆寫向量庫）
-    const run = await openai.beta.threads.runs.create(thread.id, {
-      assistant_id: assistantId,
-      ...(vectorStoreIds?.length
-        ? { tool_resources: { file_search: { vector_store_ids: vectorStoreIds } } }
-        : {}),
+    // 1) 建立或重用 conversation（舊 thread_ ID 會被懶遷移）
+    const { conversationId } = await ensureConversation(openai, inputThreadId, {
+      userId,
+      chatType: chatType ?? 'general',
+      ...(metadata || {}),
     });
 
-    // 4) 等待完成或需要動作
-    const finalRun = await waitForRunCompletion(thread.id, run.id);
+    // 2) 組合輸入訊息（Responses input 支援 system 角色，不需再降級為 user）
+    const input: Array<{ role: 'user' | 'assistant' | 'system'; content: string }> = [];
+    if (Array.isArray(messages) && messages.length > 0) {
+      for (const m of messages) {
+        input.push({ role: m.role, content: m.content });
+      }
+    }
+    if (message) {
+      input.push({ role: 'user', content: message });
+    }
+    if (input.length === 0) {
+      return NextResponse.json({ error: 'message or messages is required' }, { status: 400 });
+    }
 
-    // 5) 記帳：run 完成才記
-    if (finalRun.status === 'completed') {
-      const usage: any = (finalRun as any)?.usage ?? null;
-      const tokenUsage = {
-        prompt_tokens: usage?.prompt_tokens ?? 0,
-        completion_tokens: usage?.completion_tokens ?? 0,
-        total_tokens: usage?.total_tokens ?? 0,
-        retrieval_tokens: usage?.retrieval_tokens ?? 0, // 若無則為 0
-      };
+    // 3) 單次生成（取代舊的 run 建立 + 輪詢）
+    const result = await generateResponse(openai, {
+      assistantId,
+      conversationId,
+      input,
+      vectorStoreIds,
+    });
 
+    // 4) 記帳：完成才記
+    if (result.status === 'completed' && result.usage) {
       // 更新月度彙總（CreditContext 依此計算餘額）
       try {
-        await updateMonthlyTokenUsage(userId, tokenUsage);
+        await updateMonthlyTokenUsage(userId, result.usage);
       } catch (e) {
         console.error('[run-proxy] updateMonthlyTokenUsage failed:', e);
       }
 
       // 保存逐次使用記錄，供後台明細查詢
       try {
-        await saveTokenUsage(userId, thread.id, tokenUsage);
+        await saveTokenUsage(userId, conversationId, result.usage);
       } catch (e) {
         console.error('[run-proxy] saveTokenUsage failed:', e);
       }
     }
 
-    // 6) 回收本次 run 的訊息
-    const msgs = await openai.beta.threads.messages.list(thread.id, {
-      run_id: finalRun.id,
-      order: 'desc',
-      limit: 50,
-    });
-
-    const assistantOutputs = msgs.data
-      .filter((m) => m.role === 'assistant')
-      .map((m) => (m.content || []).map((c: any) => (c.type === 'text' ? c.text.value : '')).join('\n'));
-
+    // 5) 回傳（維持舊回應形狀：threadId/runId/status/usage/outputs/messages）
+    const outputs = result.text ? [result.text] : [];
     return NextResponse.json({
-      threadId: thread.id,
-      runId: finalRun.id,
-      status: finalRun.status,
-      usage: (finalRun as any)?.usage ?? null,
-      outputs: assistantOutputs.reverse(),
-      messages: msgs.data.reverse(),
+      threadId: conversationId,
+      runId: result.responseId,
+      status: result.status,
+      usage: result.usage,
+      outputs,
+      messages: outputs.map((text, i) => ({
+        id: `${result.responseId}_${i}`,
+        role: 'assistant',
+        content: [{ type: 'text', text: { value: text } }],
+      })),
     });
   } catch (err: any) {
     console.error('[run-proxy] error:', err);

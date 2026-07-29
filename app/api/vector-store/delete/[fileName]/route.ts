@@ -27,7 +27,7 @@ export async function DELETE(
     }
 
     // 直接删除底层文件对象
-    await openai.files.del(targetFile.id);
+    await openai.files.delete(targetFile.id);
     
     return NextResponse.json({ 
       message: '文件删除成功',

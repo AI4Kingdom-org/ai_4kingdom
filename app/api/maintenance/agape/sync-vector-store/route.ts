@@ -20,7 +20,7 @@ export async function POST() {
 
     // 1. 列出現有 vector store files
     const existingFiles: string[] = [];
-  const list = await openai.beta.vectorStores.files.list(agapeVector);
+  const list = await openai.vectorStores.files.list(agapeVector);
   existingFiles.push(...list.data.map(f => f.id));
 
     // 2. 查 DynamoDB SundayGuide 表取 unitId=agape 記錄
@@ -34,7 +34,7 @@ export async function POST() {
     let removed: string[] = [];
     for (const fileId of toRemove) {
       try {
-        await openai.beta.vectorStores.files.del(agapeVector, fileId);
+        await openai.vectorStores.files.delete(fileId, { vector_store_id: agapeVector });
         removed.push(fileId);
       } catch (e) {
         console.warn('[WARN] 移除失敗', fileId, e);

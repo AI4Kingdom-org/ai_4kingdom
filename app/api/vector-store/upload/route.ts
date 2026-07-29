@@ -9,58 +9,11 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
 });
 
-// 處理文件內容的輔助函數
-async function processDocumentContent(assistantId: string, threadId: string) {
-  try {
-    const message = await openai.beta.threads.messages.create(threadId, {
-      role: 'user',
-      content: '請幫我分析這份文件並產生以下內容：1. 講道摘要 2. 每日靈修指引 3. 查經指南'
-    });
-
-    const run = await openai.beta.threads.runs.create(threadId, {
-      assistant_id: assistantId
-    });
-
-    // 等待處理完成
-    let runStatus = await openai.beta.threads.runs.retrieve(threadId, run.id);
-    while (runStatus.status === 'queued' || runStatus.status === 'in_progress') {
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      runStatus = await openai.beta.threads.runs.retrieve(threadId, run.id);
-    }
-
-    if (runStatus.status === 'completed') {
-      const messages = await openai.beta.threads.messages.list(threadId);
-      const lastMessage = messages.data[0];
-      const content = lastMessage.content[0];
-      
-      if (content.type === 'text') {
-        const text = content.text.value;
-        const sections = text.split('\n\n');
-        
-        return {
-          sermon_summary: sections[0] || '',
-          daily_devotion: sections[1] || '',
-          bible_study_guide: sections[2] || ''
-        };
-      }
-    }
-    
-    throw new Error(`處理失敗：${runStatus.status}`);
-  } catch (error) {
-    console.error('[ERROR] 處理文件內容失敗:', error);
-    return {
-      sermon_summary: '',
-      daily_devotion: '',
-      bible_study_guide: ''
-    };
-  }
-}
-
 // 添加文件狀態檢查函數
 async function waitForFileProcessing(vectorStoreId: string, maxAttempts = 10) {
   try {
     for (let i = 0; i < maxAttempts; i++) {
-      const files = await openai.beta.vectorStores.files.list(vectorStoreId);
+      const files = await openai.vectorStores.files.list(vectorStoreId);
       console.log(`[DEBUG] 檢查文件狀態 (嘗試 ${i + 1}/${maxAttempts}):`, 
         files.data.map(f => ({ id: f.id, status: f.status }))
       );
@@ -214,7 +167,7 @@ export async function POST(request: Request) {
       });
       console.log(`[DEBUG] 文件上傳成功: ${uploadedFile.id}`);      // 2. 添加到 Vector Store
       console.log(`[DEBUG] 添加文件到 Vector Store: ${vectorStoreId}`);
-      await openai.beta.vectorStores.files.create(
+      await openai.vectorStores.files.create(
         vectorStoreId,
         { 
           file_id: uploadedFile.id
@@ -229,7 +182,7 @@ export async function POST(request: Request) {
             agapeVectorStore: VECTOR_STORE_IDS.AGAPE_CHURCH,
             fileId: uploadedFile.id
           });
-          await openai.beta.vectorStores.files.create(
+          await openai.vectorStores.files.create(
             VECTOR_STORE_IDS.AGAPE_CHURCH,
             { file_id: uploadedFile.id }
           );

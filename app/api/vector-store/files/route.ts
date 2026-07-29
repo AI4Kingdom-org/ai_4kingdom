@@ -38,7 +38,7 @@ export async function GET(request: Request) {
 
     // 獲取 vector store 的文件
     console.log('[DEBUG] 請求 OpenAI Vector Store 文件列表');
-    const vectorStoreFiles = await openai.beta.vectorStores.files.list(vectorStoreId);
+    const vectorStoreFiles = await openai.vectorStores.files.list(vectorStoreId);
 
     console.log('[DEBUG] 獲取到文件列表:', {
       總數: vectorStoreFiles.data.length,

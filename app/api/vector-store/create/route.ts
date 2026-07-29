@@ -18,7 +18,7 @@ export async function POST() {
     console.log('創建參數:', params);
     
     try {
-      const vectorStore = await openai.beta.vectorStores.create(params);
+      const vectorStore = await openai.vectorStores.create(params);
       
       console.log('Vector Store 創建成功:', {
         id: vectorStore.id,

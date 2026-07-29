@@ -28,7 +28,7 @@ export async function DELETE(request: Request) {
     // 刪除 OpenAI 檔案
     const deletionPromises = assistantsFiles.map(async (file) => {
       try {
-        await openai.files.del(file.id);
+        await openai.files.delete(file.id);
         console.log(`[SUCCESS] 成功刪除 OpenAI 檔案: ${file.filename} (ID: ${file.id})`);
         return { 
           fileId: file.id, 
