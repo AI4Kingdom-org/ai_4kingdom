@@ -1,5 +1,11 @@
 /* Homeschool — Floating Chat Widget */
 
+.pageBackground {
+  background: #ffffff;
+  min-height: 100vh;
+  width: 100%;
+}
+
 .floatingPanel {
   --chat-bg: #ffffff;
   --chat-sidebar-bg: #f5f5f5;
@@ -17,7 +23,7 @@
   --chat-send-btn-bg: #1a1a1a;
   --chat-send-btn-hover: #333333;
   position: fixed;
-  bottom: 100px;
+  top: 100px;
   right: 28px;
   z-index: 1099;
   width: 712px;
@@ -30,7 +36,7 @@
   flex-direction: column;
   overflow: hidden;
   opacity: 0;
-  transform: translateY(16px) scale(0.97);
+  transform: translateY(-16px) scale(0.97);
   pointer-events: none;
   transition: opacity 0.22s ease, transform 0.22s ease;
 }
@@ -140,6 +146,7 @@
 
 @media (max-width: 768px) {
   .floatingPanel {
+    top: auto;
     bottom: 0;
     right: 0;
     left: 0;
