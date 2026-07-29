@@ -7,6 +7,7 @@ import { useChat } from '@/app/contexts/ChatContext';
 import ConversationList from '@/app/components/ConversationList';
 import MessageList from '@/app/components/Chat/MessageList';
 import ChatInput from '@/app/components/Chat/ChatInput';
+import AIFloatingBubble from '@/app/components/Chat/AIFloatingBubble';
 import styles from './page.module.css';
 
 function ChildMentalContent() {
@@ -23,6 +24,7 @@ function ChildMentalContent() {
     setMessages,
   } = useChat();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [chatOpen, setChatOpen] = useState(false);
   const shouldLoadHistory = useRef(false);
 
   useEffect(() => {
@@ -54,9 +56,11 @@ function ChildMentalContent() {
   if (!user) return null;
 
   return (
-    <div className={styles.container}>
-      <div className={styles.panel}>
+    <>
+      <div className={`${styles.floatingPanel}${chatOpen ? ' ' + styles.panelOpen : ''}`}>
         <div className={styles.panelHeader}>
+          <span className={styles.panelTitle}>🧒 兒童心理 AI 助手</span>
+          <button className={styles.panelClose} onClick={() => setChatOpen(false)}>✕</button>
         </div>
         <div className={styles.chatWrapper}>
           <div className={`${styles.sidebar}${sidebarOpen ? ' ' + styles.sidebarOpen : ''}`}>
@@ -80,7 +84,8 @@ function ChildMentalContent() {
           </div>
         </div>
       </div>
-    </div>
+      <AIFloatingBubble open={chatOpen} onToggle={() => { setChatOpen(v => !v); setSidebarOpen(false); }} />
+    </>
   );
 }
 
