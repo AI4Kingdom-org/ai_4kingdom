@@ -178,7 +178,7 @@ export async function POST(req: NextRequest) {
 
       let finalRun: any = null;
       for (let i = 0; i < 3; i++) {
-        finalRun = await openai.beta.threads.runs.retrieve(String(threadId), String(runId)).catch(() => null);
+        finalRun = await openai.beta.threads.runs.retrieve(String(runId), { thread_id: String(threadId) }).catch(() => null);
         if (finalRun?.usage) break;
         await new Promise(r => setTimeout(r, 600));
       }

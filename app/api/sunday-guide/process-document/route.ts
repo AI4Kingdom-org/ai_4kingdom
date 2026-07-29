@@ -5,7 +5,7 @@ import { PutCommand, ScanCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
 import { getPromptsInBatch, defaultPrompts } from '@/app/utils/aiPrompts';
 import { getSundayGuideUnitConfig } from '@/app/config/constants';
 import { optimizedQuery } from '@/app/utils/dynamodbHelpers';
-import { splitDocumentIfNeeded, createMultiThreadProcessor } from '@/app/utils/documentProcessor';
+import { generateResponse } from '@/app/lib/openai/responses';
 // waitUntil is Vercel-specific; imported conditionally below
 
 export const maxDuration = 300; // 5 minutes max for background processing
@@ -40,9 +40,7 @@ async function waitForFileReady(openaiClient: OpenAI, vectorStoreId: string, fil
   while (Date.now() - start < timeoutMs) {
     try {
       // 檢查特定檔案的狀態
-      // 注意：vectorStores.files.retrieve 可能不支援，需用 list 過濾或直接 retrieve
-      // OpenAI Node SDK 支援 retrieve: client.beta.vectorStores.files.retrieve(vsId, fileId)
-      const file = await openaiClient.beta.vectorStores.files.retrieve(vectorStoreId, fileId);
+      const file = await openaiClient.vectorStores.files.retrieve(fileId, { vector_store_id: vectorStoreId });
       if (file.status === 'completed') {
         console.log(`[DEBUG] 檔案 ${fileId} 在向量庫 ${vectorStoreId} 中索引完成`);
         return true;
@@ -70,7 +68,7 @@ async function prepareEffectiveVectorStore(openaiClient: OpenAI, vectorStoreId: 
   let targetFileId: string | undefined = fileId;
 
   try {
-    const list = await openaiClient.beta.vectorStores.files.list(vectorStoreId);
+    const list = await openaiClient.vectorStores.files.list(vectorStoreId);
     const files = list.data || [];
 
     if (files.length === 0) {
@@ -132,7 +130,7 @@ async function uploadGeneratedContentToVectorStore(
     try {
       const txtFile = new File([content], `${baseName}_${type}.txt`, { type: 'text/plain' });
       const uploaded = await openaiClient.files.create({ file: txtFile, purpose: 'assistants' });
-      await openaiClient.beta.vectorStores.files.create(unitVectorStoreId, { file_id: uploaded.id });
+      await openaiClient.vectorStores.files.create(unitVectorStoreId, { file_id: uploaded.id });
       uploadedFileIds.push(uploaded.id);
       console.log(`[DEBUG] 已上傳 ${type} 至向量庫 ${unitVectorStoreId}: ${uploaded.id}`);
     } catch (e) {
@@ -292,20 +290,20 @@ async function processDocumentAsync(params: {
       const maxRuns = 2; // 最多重試 2 次，搭配 MAX_POLLS=20 確保總時間 < 300s
 
       for (let attempt = 1; attempt <= maxRuns; attempt++) {
-        // 建立新執行緒
-        const typeThread = await openai.beta.threads.create();
-        console.log(`[DEBUG] 為 ${type} 建立執行緒 ID: ${typeThread.id} (嘗試 ${attempt}/${maxRuns})`);
+        console.log(`[DEBUG] 開始生成 ${type} 內容 (嘗試 ${attempt}/${maxRuns})`);
+
+        const inputMessages: Array<{ role: 'user'; content: string }> = [];
 
         // 若已有 summary，且本次為 devotional 或 bibleStudy，則將 summary 注入並強調經文優先規則與標籤
         if (type !== 'summary' && summaryText) {
-          await openai.beta.threads.messages.create(typeThread.id, {
+          inputMessages.push({
             role: 'user',
             content: `Here is the sermon summary already generated:\n---\n${summaryText}\n---\n\nWhen selecting and quoting Bible verses for this ${type}, you MUST:\n1) FIRST prioritize verses already identified in the summary and label them [From Summary];\n2) SECOND use verses directly present in the sermon file and label them [In Sermon];\n3) ONLY THEN, if fewer than required, add supplemental verses labeled [Supplemental: reason] with a short justification.\n\nAlways paste the exact verse text (CUV for Chinese; NIV for English). Avoid duplication unless the sermon itself repeats the verse.`
           });
         }
 
         // 主要 prompt - 確保格式要求清晰
-        await openai.beta.threads.messages.create(typeThread.id, {
+        inputMessages.push({
           role: 'user',
           content: `請基於文件 "${fileName}" 的內容執行以下任務：
 
@@ -345,50 +343,40 @@ ${type === 'devotional' ?
           bibleStudy: 14000    // 查經：包含多個完整段落
         };
 
-        const run = await (openai.beta.threads.runs.create as any)(
-          typeThread.id,
-          {
-            assistant_id: assistantId,
-            // 在 run 級別綁定 vector store，避免修改 assistant 本體
-            tool_resources: { file_search: { vector_store_ids: [effectiveVectorStoreId] } },
-            // 控制隨機性與一致性，並強制使用檢索工具
-            max_completion_tokens: tokenConfig[type as keyof typeof tokenConfig] || 60000,
+        // 單次 Responses 呼叫（instructions 覆寫 assistant 原設定，語意同舊 run 級 instructions）
+        let result;
+        try {
+          result = await generateResponse(openai, {
+            assistantId,
+            input: inputMessages,
+            vectorStoreId: effectiveVectorStoreId,
+            requireFileSearch: true,
+            maxOutputTokens: tokenConfig[type as keyof typeof tokenConfig] || 60000,
             temperature: 0.3, // 降低隨機性，增加結構一致性
-            top_p: 0.9,
-            tool_choice: 'required',
+            topP: 0.9,
             instructions: `STRICT MODE:
 - Only use the sermon file (and the provided summary for verse priority when present).
 - For every Bible verse: paste full text and append one of [From Summary] / [In Sermon] / [Supplemental: reason].
 - Follow the exact format structure requested in the prompt.
 - For ${type}, ensure ALL required sections are included with proper formatting.
 - If uncertain about content, write "[MISSING]" rather than guessing.`
-          } as any
-        );
-
-        // 輪詢狀態（固定 4s 間隔，最多 20 次 = 80s 上限）
-        let runStatus = await openai.beta.threads.runs.retrieve(typeThread.id, run.id);
-        let poll = 0;
-        const POLL_INTERVAL = 4000;
-        const MAX_POLLS = 20;
-        while ((runStatus.status === 'queued' || runStatus.status === 'in_progress') && poll < MAX_POLLS) {
-          await new Promise(r => setTimeout(r, POLL_INTERVAL));
-          runStatus = await openai.beta.threads.runs.retrieve(typeThread.id, run.id);
-          poll++;
+          });
+        } catch (genErr) {
+          console.warn(`[WARN] ${type} 生成呼叫失敗；嘗試 ${attempt}`, genErr);
+          if (attempt === maxRuns) throw new Error(`處理 ${type} 內容失敗: ${genErr instanceof Error ? genErr.message : genErr}`);
+          await new Promise(r => setTimeout(r, 600));
+          continue;
         }
-        if (runStatus.status !== 'completed') {
-          console.warn(`[WARN] ${type} 執行未完成狀態=${runStatus.status}；嘗試 ${attempt}`);
-          if (attempt === maxRuns) throw new Error(`處理 ${type} 內容失敗: ${runStatus.status}`);
+
+        if (result.status !== 'completed') {
+          console.warn(`[WARN] ${type} 執行未完成狀態=${result.status}；嘗試 ${attempt}`);
+          if (attempt === maxRuns) throw new Error(`處理 ${type} 內容失敗: ${result.status}`);
           // 輕量回退後重試
           await new Promise(r => setTimeout(r, 600));
           continue;
         }
 
-        const messages = await openai.beta.threads.messages.list(typeThread.id, { limit: 1 });
-        const lastMessage = messages.data[0];
-        const content = lastMessage.content
-          .filter(c => c.type === 'text')
-          .map(c => (c.type === 'text' ? c.text.value : ''))
-          .join('\n');
+        const content = result.text;
 
         const invalid = failurePhrases.some(p => content.includes(p)) || content.trim().length < 50;
         console.log(`[DEBUG] ${type} 嘗試 ${attempt} 完成，長度=${content.length}，invalid=${invalid}`);
@@ -686,7 +674,7 @@ export async function POST(request: Request) {
     // 檢查 Vector Store 中的文件（僅在 fileId 仍未解析時才呼叫，節省 API 往返）
     if (!fileId) {
       try {
-        const filesInVectorStore = await openai.beta.vectorStores.files.list(vectorStoreId);
+        const filesInVectorStore = await openai.vectorStores.files.list(vectorStoreId);
         console.log(`[DEBUG] Vector Store 中的文件:`, 
           filesInVectorStore.data.map(f => ({ id: f.id, status: f.status, created_at: f.created_at })));
         

@@ -1,10 +1,10 @@
 import { NextResponse } from 'next/server';
-import OpenAI from 'openai';
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY
-});
-
+// ⚠️ 已棄用：Assistants API 移除後不再有「assistant 本體綁定向量庫」的概念。
+// 現在所有生成/聊天呼叫都在 Responses API 呼叫層級以
+// tools: [{ type: 'file_search', vector_store_ids: [...] }] 綁定向量庫
+// （見 app/lib/openai/responses.ts 與 /api/chat）。
+// 此端點保留為相容用的 no-op，僅回傳成功。
 export async function POST(
   request: Request,
   { params }: { params: { assistantId: string } }
@@ -13,48 +13,28 @@ export async function POST(
     const { assistantId } = params;
     const { vectorStoreId } = await request.json();
 
-    // 更新 Assistant
-    const assistant = await openai.beta.assistants.update(
-      assistantId,
-      {
-        tools: [{ type: "file_search" }],
-        tool_resources: {
-          file_search: {
-            vector_store_ids: [vectorStoreId]
-          }
-        },
-        metadata: {
-          vector_store_id: vectorStoreId
-        }
-      }
-    );
-
-    // 验证更新是否成功
-    if (
-      (assistant.metadata as any)?.vector_store_id !== vectorStoreId ||
-      !assistant.tool_resources?.file_search?.vector_store_ids?.includes(vectorStoreId)
-    ) {
-      throw new Error('Vector Store 绑定验证失败');
+    if (!vectorStoreId) {
+      return NextResponse.json({ error: '未提供 vectorStoreId' }, { status: 400 });
     }
 
-    return NextResponse.json({ 
+    console.log('[INFO] bind-vector-store 已棄用（Responses API 為呼叫層級綁定），no-op:', { assistantId, vectorStoreId });
+
+    return NextResponse.json({
       success: true,
-      message: 'Vector Store 绑定成功',
+      message: 'Vector Store 綁定已改為呼叫層級（Responses API），此端點為相容性 no-op',
       assistant: {
-        id: assistant.id,
+        id: assistantId,
         vectorStoreId,
-        metadata: assistant.metadata,
-        toolResources: assistant.tool_resources
       }
     });
   } catch (error) {
     console.error('绑定失败:', error);
     return NextResponse.json(
-      { 
+      {
         error: '绑定失败',
         details: error instanceof Error ? error.message : '未知错误'
       },
       { status: 500 }
     );
   }
-} 
+}

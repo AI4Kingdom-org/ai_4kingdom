@@ -1,13 +1,13 @@
 import { NextResponse } from 'next/server';
 import { DynamoDBDocumentClient, GetCommand, PutCommand } from '@aws-sdk/lib-dynamodb';
-import OpenAI from 'openai';
 import { createDynamoDBClient } from '../../utils/dynamodb';
 import { ASSISTANT_IDS } from '../../config/constants';
 import { HomeschoolPromptData, getConcernLabel } from '../../types/homeschool';
+import { getOpenAI } from '../../lib/openai/client';
+import { ensureConversation, isConversationId, isLegacyThreadId } from '../../lib/openai/conversation';
+import { generateResponse } from '../../lib/openai/responses';
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY
-});
+const openai = getOpenAI();
 
 // 由于统一使用 utils/dynamodb.ts 中的客户端
 const getDocClient = async () => {
@@ -130,8 +130,16 @@ export async function POST(request: Request) {
     }
 
     const docClient = await getDocClient();
-    
-    // 保存到 DynamoDB
+
+    // 先讀取既有的 threadId（必須在 Put 覆寫整個 item 之前讀，否則會遺失）
+    const getCommand = new GetCommand({
+      TableName: 'HomeschoolPrompts',
+      Key: { UserId: String(userId) }
+    });
+    const existingData = await docClient.send(getCommand);
+    let threadId = existingData.Item?.threadId;
+
+    // 保存到 DynamoDB（保留既有 threadId，避免覆寫遺失）
     const putCommand = new PutCommand({
       TableName: 'HomeschoolPrompts',
       Item: {
@@ -144,6 +152,7 @@ export async function POST(request: Request) {
         basicInfo,
         recentChanges,
         assistantId: ASSISTANT_IDS.HOMESCHOOL,
+        ...(threadId ? { threadId } : {}),
         updatedAt: new Date().toISOString()
       }
     });
@@ -164,17 +173,20 @@ export async function POST(request: Request) {
 
     console.log('[DEBUG] 系统消息已构建:', systemMessage.substring(0, 100) + '...');
 
-    // 檢查是否已有 threadId，如果有則更新 Thread，否則創建新 Thread
-    const getCommand = new GetCommand({
-      TableName: 'HomeschoolPrompts',
-      Key: { UserId: String(userId) }
-    });
-    const existingData = await docClient.send(getCommand);
-    let threadId = existingData.Item?.threadId;
+    // 舊 thread_ ID 懶遷移為 conversation；conv_ ID 直接沿用
+    if (threadId && isLegacyThreadId(threadId)) {
+      const { conversationId } = await ensureConversation(openai, threadId, {
+        userId: String(userId),
+        type: 'homeschool',
+        assistantId: ASSISTANT_IDS.HOMESCHOOL,
+      });
+      console.log('[DEBUG] 舊 homeschool thread 已遷移:', { threadId, conversationId });
+      threadId = conversationId;
+    }
 
     if (threadId) {
-      // 更新現有 Thread：構建更新訊息（與初始格式一致）
-      console.log('[DEBUG] 更新現有 Thread:', threadId);
+      // 更新現有 Conversation：構建更新訊息（與初始格式一致）
+      console.log('[DEBUG] 更新現有 Conversation:', threadId);
       console.log('[DEBUG] 收到的資料:', { age, gender, concerns, otherConcern, childName });
       
       // 構建學生資料摘要
@@ -213,22 +225,42 @@ export async function POST(request: Request) {
       
       console.log('[DEBUG] 準備發送的更新訊息:', updateMsg);
       
-      await openai.beta.threads.messages.create(threadId, {
-        role: 'assistant',
-        content: updateMsg
+      await openai.conversations.items.create(threadId, {
+        items: [
+          {
+            type: 'message',
+            role: 'assistant',
+            content: [{ type: 'output_text', text: updateMsg }]
+          },
+          // 也加入詳細的內部參考資料
+          {
+            type: 'message',
+            role: 'user',
+            content: [{ type: 'input_text', text: `[內部參考資料]\n${systemMessage}` }]
+          }
+        ] as any
       });
-      console.log('[DEBUG] Thread 訊息已更新，包含學生資料摘要');
-      
-      // 也加入詳細的內部參考資料
-      await openai.beta.threads.messages.create(threadId, {
-        role: 'user',
-        content: `[內部參考資料]\n${systemMessage}`
-      });
+      console.log('[DEBUG] Conversation 訊息已更新，包含學生資料摘要');
+
+      // 前面的 PutCommand 已重寫整個 item，需把（可能已遷移的）threadId 寫回
+      await docClient.send(new PutCommand({
+        TableName: 'HomeschoolPrompts',
+        Item: {
+          ...putCommand.input.Item,
+          threadId: threadId
+        }
+      }));
     } else {
-      // 創建新 Thread 並加入系統訊息作為 assistant 的第一條訊息
-      console.log('[DEBUG] 創建新 Thread');
-      const thread = await openai.beta.threads.create();
-      threadId = thread.id;
+      // 創建新 Conversation 並生成初始建議
+      console.log('[DEBUG] 創建新 Conversation');
+      const conversation = await openai.conversations.create({
+        metadata: {
+          userId: String(userId),
+          type: 'homeschool',
+          assistantId: ASSISTANT_IDS.HOMESCHOOL,
+        }
+      });
+      threadId = conversation.id;
       
       // 構建學生資料摘要（與後續回覆格式一致）
       const summaryParts: string[] = [];
@@ -259,32 +291,16 @@ export async function POST(request: Request) {
       initialPrompt += `請根據以上資料，為家長提供初步的教育建議和輔導方向。`;
       
       console.log('[DEBUG] 準備發送初始提示給 AI:', initialPrompt.substring(0, 150) + '...');
-      
-      // 加入 user 訊息（讓 AI 回應）
-      await openai.beta.threads.messages.create(threadId, {
-        role: 'user',
-        content: initialPrompt
+
+      // 單次呼叫：把初始提示寫入 conversation 並生成初始建議（取代舊的 messages.create + run + 輪詢）
+      const result = await generateResponse(openai, {
+        assistantId: ASSISTANT_IDS.HOMESCHOOL,
+        conversationId: threadId,
+        input: [{ role: 'user', content: initialPrompt }],
       });
-      console.log('[DEBUG] 初始提示已發送');
-      
-      // 運行 assistant 生成初始建議
-      const run = await openai.beta.threads.runs.create(threadId, {
-        assistant_id: ASSISTANT_IDS.HOMESCHOOL
-      });
-      console.log('[DEBUG] Assistant 開始運行, run ID:', run.id);
-      
-      // 等待運行完成
-      let runStatus = await openai.beta.threads.runs.retrieve(threadId, run.id);
-      let attempts = 0;
-      while (runStatus.status === 'queued' || runStatus.status === 'in_progress') {
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        runStatus = await openai.beta.threads.runs.retrieve(threadId, run.id);
-        attempts++;
-        if (attempts > 30) break; // 30秒超時
-      }
-      console.log('[DEBUG] Assistant 運行完成, status:', runStatus.status);
-      
-      console.log('[DEBUG] 新 Thread 已創建:', threadId);
+      console.log('[DEBUG] 初始建議生成完成, status:', result.status);
+
+      console.log('[DEBUG] 新 Conversation 已創建:', threadId);
 
       // 將 threadId 保存回 DynamoDB
       const updateCommand = new PutCommand({

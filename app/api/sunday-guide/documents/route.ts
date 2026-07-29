@@ -268,7 +268,7 @@ export async function POST(request: Request) {
       stepStartTime = Date.now();
       console.log(`[DEBUG] 步驟 1: 開始${currentStep}`);
       
-      const vectorStore = await openai.beta.vectorStores.create({
+      const vectorStore = await openai.vectorStores.create({
         name: `Vector Store ${new Date().toISOString()}`
       });
       
@@ -291,7 +291,7 @@ export async function POST(request: Request) {
       stepStartTime = Date.now();
       console.log(`[DEBUG] 步驟 3: 開始${currentStep}`);
       
-      await openai.beta.vectorStores.files.create(
+      await openai.vectorStores.files.create(
         vectorStore.id,
         { file_id: openaiFile.id }
       );

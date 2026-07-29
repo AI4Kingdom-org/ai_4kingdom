@@ -1,55 +1,23 @@
-import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
-import { DynamoDBDocumentClient, PutCommand, QueryCommand, GetCommand } from "@aws-sdk/lib-dynamodb";
-import OpenAI from 'openai';
+import { DynamoDBDocumentClient, GetCommand } from "@aws-sdk/lib-dynamodb";
 import { NextResponse } from 'next/server';
 import { updateMonthlyTokenUsage } from '../../utils/monthlyTokenUsage';
 import { getConcernLabel } from '../../types/homeschool';
 import { createDynamoDBClient } from '../../utils/dynamodb';
+import { getOpenAI } from '../../lib/openai/client';
+import { resolveAssistantProfile, AssistantNotFoundError } from '../../lib/openai/profiles';
+import { ensureConversation, isConversationId } from '../../lib/openai/conversation';
+import { toTokenUsage, extractResponseText } from '../../lib/openai/responses';
+import { acquireConversationLock, releaseConversationLock } from '../../lib/openai/conversationLock';
 
 // Ensure dynamic behavior on Amplify/Next.js App Router
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 export const runtime = 'nodejs';
 
-// 统一环境变量配置
-const CONFIG = {
-  region: process.env.NEXT_PUBLIC_AWS_REGION || process.env.NEXT_PUBLIC_REGION || "us-east-2",
-  identityPoolId: process.env.NEXT_PUBLIC_IDENTITY_POOL_ID!,
-  userPoolId: process.env.NEXT_PUBLIC_USER_POOL_ID!,
-  userPoolClientId: process.env.NEXT_PUBLIC_USER_POOL_CLIENT_ID!,
-  tableName: process.env.NEXT_PUBLIC_DYNAMODB_TABLE_NAME || "ChatHistory",
-  isDev: process.env.NODE_ENV === 'development'
-};
-
 // 获取 DynamoDB 客户端函数
 const getDocClient = async (): Promise<DynamoDBDocumentClient> => {
   return await createDynamoDBClient();
 };
-
-// ---------------- 新增：活躍 run 檢查與記憶體鎖 (單一實例) ----------------
-async function findActiveRun(openai: OpenAI, threadId: string) {
-  try {
-    const runs = await openai.beta.threads.runs.list(threadId, { limit: 5 });
-    return runs.data.find(r => ['queued','in_progress','requires_action','cancelling'].includes(r.status));
-  } catch (e) {
-    console.warn('[WARN] findActiveRun 失敗，忽略並視為無活躍 run', e);
-    return undefined;
-  }
-}
-
-const threadLocks = new Map<string, number>(); // threadId -> expiry timestamp(ms)
-const LOCK_TTL_MS = 120000;
-function acquireLock(threadId: string): boolean {
-  const now = Date.now();
-  const exp = threadLocks.get(threadId) || 0;
-  if (exp > now) return false; // still locked
-  threadLocks.set(threadId, now + LOCK_TTL_MS);
-  return true;
-}
-function releaseLock(threadId: string) {
-  threadLocks.delete(threadId);
-}
-// -------------------------------------------------------------------------
 
 // CORS 配置
 const ALLOWED_ORIGINS = [
@@ -107,270 +75,14 @@ async function buildHomeschoolInstructions(userId?: string) {
   }
 }
 
-// 修改现有的 getUserActiveThread 函数
-async function getUserActiveThread(
-  userId: string, 
-  openai: OpenAI,
-  assistantId: string  // 新增参数
-): Promise<string> {
-  try {
-    const docClient = await getDocClient();
-    const command = new QueryCommand({
-      TableName: CONFIG.tableName,
-      IndexName: 'UserTypeIndex',
-      KeyConditionExpression: 'UserId = :userId AND #type = :type',
-      ExpressionAttributeNames: {
-        '#type': 'Type'
-      },
-      ExpressionAttributeValues: {
-        ':userId': String(userId),
-        ':type': 'thread'
-      }
-    });
-
-    const response = await docClient.send(command);
-    const latestThread = response.Items?.[0];
-    const threadId = latestThread?.threadId;
-    
-    if (!threadId) {
-      // 创建新线程时关联 assistantId
-      const newThread = await openai.beta.threads.create();
-      
-      // 创建 run 来关联 assistant
-      await openai.beta.threads.runs.create(newThread.id, {
-        assistant_id: assistantId
-      });
-      
-      await docClient.send(new PutCommand({
-        TableName: CONFIG.tableName,
-        Item: {
-          UserId: String(userId),
-          Type: 'thread',
-          threadId: newThread.id,
-          assistantId: assistantId,  // 保存 assistantId
-          Timestamp: new Date().toISOString()
-        }
-      }));
-      return newThread.id;
-    }
-
-    return threadId;
-  } catch (error) {
-    console.error('[ERROR] 获取用户线程失败:', error);
-    throw error;
-  }
-}
-
-// 修改等待完成函数的超时策略
-async function waitForCompletion(openai: OpenAI, threadId: string, runId: string, maxAttempts = 30) {
-  let attempts = 0;
-  let runStatus = await openai.beta.threads.runs.retrieve(threadId, runId);
-  
-  console.log('[DEBUG] OpenAI Run 配置详情:', {
-    threadId,
-    runId,
-    assistant: {
-      id: runStatus.assistant_id,
-      model: runStatus.model,
-      instructions: runStatus.instructions,
-      tools: runStatus.tools?.map(t => t.type)
-    },
-    metadata: {
-      status: runStatus.status,
-      startTime: new Date(runStatus.created_at * 1000).toISOString(),
-      completionTime: runStatus.completed_at ? new Date(runStatus.completed_at * 1000).toISOString() : null
-    }
-  });
-
-  while (runStatus.status !== 'completed' && attempts < maxAttempts) {
-    if (runStatus.status === 'failed') {
-      throw new Error('Assistant run failed');
-    }
-    
-    // 使用渐进式延迟策略
-    const delay = Math.min(1000 * Math.pow(1.2, attempts), 3000);
-    await new Promise(resolve => setTimeout(resolve, delay));
-    
-    attempts++;
-    runStatus = await openai.beta.threads.runs.retrieve(threadId, runId);
-    console.log(`[DEBUG] Run status: ${runStatus.status}, attempt: ${attempts}`);
-  }
-  
-  if (runStatus.status === 'completed') {
-
-    // 获取运行步骤以检查检索操作
-    const steps = await openai.beta.threads.runs.steps.list(threadId, runId);
-    const retrievalSteps = steps.data.filter(step => 
-      (step.step_details as any).type === 'retrieval'
-    );
-  }
-  
-  if (attempts >= maxAttempts) {
-    throw new Error('请求处理超时，请稍后重试');
-  }
-  
-  return runStatus;
-}
-
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY
-});
-
-// 函數用於提取文檔引用
-async function extractDocumentReferences(toolCall: any, currentUserId?: string, opts?: { agapeOnly?: boolean; agapeSet?: Set<string> }): Promise<any[]> {
-  try {
-    if (toolCall?.type !== 'file_search' || !toolCall?.output) {
-      return [];
-    }
-    
-    const parsedOutput = JSON.parse(toolCall.output);
-    
-    if (parsedOutput?.citations && Array.isArray(parsedOutput.citations)) {
-      console.log('[DEBUG] 檢索到文檔引用:', parsedOutput.citations.length);
-      
-      // 對於johnsung和sunday-guide的文件，這些是共享資源，所以不需要檢查擁有者
-      // 將所有文件都視為系統資源，而不是私人資源
-      let cites = parsedOutput.citations;
-      if (opts?.agapeOnly && opts.agapeSet) {
-        cites = cites.filter((c: any) => opts.agapeSet!.has(c.file_id || c.fileId));
-      }
-      return cites.map((citation: any) => ({
-        fileName: citation.file_name || citation.fileName || '未知檔案',
-        filePath: citation.file_path || citation.filePath || '',
-        pageNumber: citation.page_number || citation.pageNumber || null,
-        text: citation.text || '',
-        fileId: citation.file_id || citation.fileId || '',
-        isCurrentUserFile: false,
-        uploadedBy: '系統資源'
-      }));
-    }
-    
-    return [];
-  } catch (error) {
-    console.error('[ERROR] 解析文檔引用失敗:', error);
-    return [];
-  }
-}
-
-// 流式傳輸響應的函數
-async function* streamRunResults(
-  openai: OpenAI,
-  threadId: string,
-  runId: string,
-  userId?: string,
-  opts?: { agapeOnly?: boolean }
-) {
-  let runStatus = await openai.beta.threads.runs.retrieve(threadId, runId);
-  let lastMessageId: string | null = null;
-  
-  console.log('[DEBUG] 開始流式傳輸, 使用:', {
-    threadId, 
-    runId,
-    assistantId: runStatus.assistant_id,
-    userId: userId || 'anonymous'
-  });
-  
-  // 循環檢查運行狀態
-  while (runStatus.status !== 'completed' && runStatus.status !== 'failed' && runStatus.status !== 'cancelled' && runStatus.status !== 'expired') {
-    // 如果仍在處理中，返回狀態更新
-    yield JSON.stringify({ status: runStatus.status });
-    
-    // 等待一段時間再檢查
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    runStatus = await openai.beta.threads.runs.retrieve(threadId, runId);
-  }
-  
-  // 如果運行失敗，返回錯誤
-  if (runStatus.status !== 'completed') {
-    yield JSON.stringify({ error: `Assistant run failed with status: ${runStatus.status}` });
-    return;
-  }
-  
-  // 檢索運行結果
-  const messages = await openai.beta.threads.messages.list(threadId);
-  const latestMessage = messages.data[0];
-  
-  // 返回消息內容
-  if (latestMessage) {
-    let references: any[] = [];
-    
-    // 提取文檔引用
-  const agapeSet: Set<string> | undefined = opts?.agapeOnly ? await (async () => {
-      try {
-        const docClient = await getDocClient();
-        const table = process.env.NEXT_PUBLIC_SUNDAY_GUIDE_TABLE || 'SundayGuide';
-        const { ScanCommand } = await import('@aws-sdk/lib-dynamodb');
-        const res = await docClient.send(new ScanCommand({ TableName: table, FilterExpression: 'unitId = :u', ExpressionAttributeValues: { ':u': 'agape' } }));
-        return new Set((res.Items || []).map(r => r.fileId).filter(Boolean));
-      } catch { return new Set(); }
-    })() : undefined;
-
-    if (runStatus.required_action?.type === 'submit_tool_outputs') {
-      const toolCalls = runStatus.required_action.submit_tool_outputs.tool_calls;
-      for (const call of toolCalls) {
-        if (call.function.name === 'file_search') {
-          const callReferences = await extractDocumentReferences(call, userId, { agapeOnly: opts?.agapeOnly, agapeSet });
-          references = [...references, ...callReferences];
-        }
-      }
-    }
-    
-    // 提取步驟中的檢索操作
-    try {
-      const steps = await openai.beta.threads.runs.steps.list(threadId, runId);
-      const retrievalSteps = steps.data.filter(step => 
-        (step.step_details as any).type === 'retrieval'
-      );
-      
-      for (const step of retrievalSteps) {
-        const toolOutputs = (step.step_details as any).retrieval_tool_calls || [];
-        for (const tool of toolOutputs) {
-          const toolReferences = await extractDocumentReferences(tool, userId, { agapeOnly: opts?.agapeOnly, agapeSet });
-          references = [...references, ...toolReferences];
-        }
-      }
-    } catch (e) {
-      console.error('[ERROR] 獲取運行步驟失敗:', e);
-    }
-    
-    // 如果有文檔引用，先傳送引用資訊
-    if (references.length > 0) {
-      yield JSON.stringify({ references });
-    }
-    
-    // 傳送消息內容
-    for (const content of latestMessage.content) {
-      if (content.type === 'text') {
-        yield JSON.stringify({ content: content.text.value });
-      }
-    }
-    
-    // 記錄 token 使用量
-    if (userId && runStatus.usage) {
-      try {
-        const tokenUsage = {
-          prompt_tokens: runStatus.usage.prompt_tokens || 0,
-          completion_tokens: runStatus.usage.completion_tokens || 0,
-          total_tokens: runStatus.usage.total_tokens || 0,
-          retrieval_tokens: 0
-        };
-        
-        await updateMonthlyTokenUsage(userId, tokenUsage);
-        yield JSON.stringify({ 
-          usage: tokenUsage,
-          done: true 
-        });
-      } catch (usageError) {
-        console.error('[ERROR] 記錄 token 使用量失敗:', usageError);
-        yield JSON.stringify({ done: true });
-      }
-    } else {
-      yield JSON.stringify({ done: true });
-    }
-  }
+// 將 Responses API 串流事件轉譯為前端既有的 Assistants 事件格式（維持 SSE 合約不變）
+function sseEncode(payload: unknown): string {
+  return `data: ${JSON.stringify(payload)}\n\n`;
 }
 
 export async function POST(request: Request) {
+  const openai = getOpenAI();
+  let lockedConversationId: string | null = null;
   try {
     console.log('[DEBUG] 接收到聊天請求:', {
       method: request.method,
@@ -393,16 +105,16 @@ export async function POST(request: Request) {
       console.error('[ERROR] 解析請求體失敗:', parseError);
       const origin = request.headers.get('origin');
       const headers = setCORSHeaders(origin);
-      return NextResponse.json({ 
+      return NextResponse.json({
         error: '請求格式無效',
         details: '無法解析請求體'
-      }, { 
+      }, {
         status: 400,
-        headers 
+        headers
       });
     }
 
-  const { message, threadId, userId, config, unitId } = requestBody;
+    const { message, threadId, userId, config, unitId } = requestBody;
 
     // 驗證必要參數
     if (!message || !config || !config.assistantId) {
@@ -413,12 +125,12 @@ export async function POST(request: Request) {
       });
       const origin = request.headers.get('origin');
       const headers = setCORSHeaders(origin);
-      return NextResponse.json({ 
+      return NextResponse.json({
         error: '缺少必要參數',
         details: '需要 message, config 和 assistantId'
-      }, { 
+      }, {
         status: 400,
-        headers 
+        headers
       });
     }
 
@@ -437,219 +149,171 @@ export async function POST(request: Request) {
       }
     }
 
-    // 验证助手
+    // 解析 assistant 對應的 model/instructions（沿用舊行為：無效 assistantId 直接回 400）
+    let profile;
     try {
-      const assistant = await openai.beta.assistants.retrieve(config.assistantId);
+      profile = await resolveAssistantProfile(openai, config.assistantId);
     } catch (error) {
-      console.error('[ERROR] 助手验证失败:', {
-        error,
-        assistantId: config?.assistantId,
-        errorType: error instanceof Error ? error.name : typeof error,
-        errorMessage: error instanceof Error ? error.message : String(error),
-        statusCode: (error as any)?.status || 'unknown'
-      });
-      
-      // 獲取 origin 並設置 CORS 標頭
-      const origin = request.headers.get('origin');
-      const headers = setCORSHeaders(origin);
-      
-      return NextResponse.json({ 
-        error: '助手ID无效',
-        details: {
-          message: error instanceof Error ? error.message : '未知错误',
-          assistantId: config?.assistantId,
-          type: error instanceof Error ? error.name : typeof error
-        }
-      }, { 
-        status: 400,
-        headers 
-      });
+      if (error instanceof AssistantNotFoundError) {
+        console.error('[ERROR] 助手验证失败:', { assistantId: config.assistantId, error });
+        const origin = request.headers.get('origin');
+        const headers = setCORSHeaders(origin);
+        return NextResponse.json({
+          error: '助手ID无效',
+          details: {
+            message: error.message,
+            assistantId: config.assistantId,
+          }
+        }, { status: 400, headers });
+      }
+      throw error;
     }
 
-    let activeThreadId = threadId;
-    let thread;
-
-    // 如果提供了现有线程ID，先尝试获取
-    if (threadId) {
+    // 取得或建立 conversation；舊 thread_ ID 會被懶遷移為 conversation
+    let existingId: string | undefined = threadId;
+    if (isConversationId(threadId)) {
+      // 與舊行為一致：先驗證仍存在，失敗則建立新的
       try {
-        thread = await openai.beta.threads.retrieve(threadId);
-        activeThreadId = threadId;
+        await openai.conversations.retrieve(threadId);
       } catch (error) {
-        console.warn('[WARN] 获取现有线程失败，将创建新线程:', error);
+        console.warn('[WARN] 取得現有 conversation 失敗，將建立新的:', error);
+        existingId = undefined;
       }
+    }
+    const { conversationId, migrated } = await ensureConversation(openai, existingId, {
+      userId,
+      type: config.type,
+      assistantId: config.assistantId,
+      vectorStoreId: config.vectorStoreId
+    });
+    if (migrated) {
+      console.log('[INFO] 舊 thread 已遷移:', { threadId, conversationId });
     }
 
-    // 如果没有现有线程或获取失败，创建新线程
-    if (!thread) {
-      thread = await openai.beta.threads.create({
-        metadata: {
-          userId,
-          type: config.type,
-          assistantId: config.assistantId,
-          vectorStoreId: config.vectorStoreId
-        }
-      });
-      activeThreadId = thread.id;
+    // 併發保護：同一對話僅允許一個進行中的請求（DynamoDB 條件寫入，跨 instance 安全）
+    if (!(await acquireConversationLock(conversationId))) {
+      const originBusy = request.headers.get('origin');
+      const headersBusy = setCORSHeaders(originBusy);
+      return NextResponse.json({
+        error: 'ThreadBusy',
+        message: '上一輪回覆尚未完成，請稍候再發送。',
+        threadId: conversationId
+      }, { status: 409, headers: headersBusy });
     }
-    // 在加入訊息前檢查是否已有活躍 run
-    if (activeThreadId) {
-      const activeRun = await findActiveRun(openai, activeThreadId);
-      if (activeRun) {
-        const originBusy = request.headers.get('origin');
-        const headersBusy = setCORSHeaders(originBusy);
-        return NextResponse.json({
-          error: 'ThreadBusy',
-          message: '上一輪回覆尚未完成，請稍候再發送。',
-          activeRunId: activeRun.id,
-          status: activeRun.status,
-          threadId: activeThreadId
-        }, { status: 409, headers: headersBusy });
-      }
-      // 嘗試鎖（避免同毫秒第二請求）
-      if (!acquireLock(activeThreadId)) {
-        const originBusy = request.headers.get('origin');
-        const headersBusy = setCORSHeaders(originBusy);
-        return NextResponse.json({
-          error: 'ThreadLocked',
-          message: '該對話正在處理中，請稍候。',
-          threadId: activeThreadId
-        }, { status: 409, headers: headersBusy });
-      }
-    }
+    lockedConversationId = conversationId;
 
-    await openai.beta.threads.messages.create(activeThreadId, {
-      role: 'user',
-      content: message
-    });    // 检查是否請求流式輸出
+    // Homeschool 指令覆寫（沿用舊 run 級 instructions 覆寫語意）
+    const homeschoolInstructions = config.type === 'homeschool' ? await buildHomeschoolInstructions(userId) : undefined;
+    const instructions = homeschoolInstructions ?? profile.instructions;
+
+    const baseParams = {
+      model: profile.model,
+      ...(instructions ? { instructions } : {}),
+      conversation: conversationId,
+      input: [{ role: 'user' as const, content: String(message) }],
+      max_output_tokens: 2500,
+      ...(config.vectorStoreId ? {
+        tools: [{ type: 'file_search' as const, vector_store_ids: [config.vectorStoreId] }]
+      } : {})
+    };
+
+    // 检查是否請求流式輸出
     if (config.stream) {
       console.log('[DEBUG] 處理流式請求:', {
         userId,
         assistantId: config.assistantId,
+        model: profile.model,
+        conversationId,
         vectorStoreId: config.vectorStoreId || 'none'
-      });        // 使用 OpenAI SDK 的 stream 功能 - 暫時移除不相容參數
-      const runStream = openai.beta.threads.runs.stream(activeThreadId, {
-        assistant_id: config.assistantId,
-        max_completion_tokens: 2500,     // 保留：增加回應長度
-        ...(config.type === 'homeschool' ? { instructions: await buildHomeschoolInstructions(userId) } : {}),
-        // 暫時註解掉可能不相容的參數進行測試
-        // max_prompt_tokens: 15000,        // 可能不相容：控制輸入上下文
-        // temperature: 0.1,                // 可能不相容：降低隨機性
-        // truncation_strategy: {           // 可能不相容：智能截斷策略
-        //   type: 'auto'
-        // },
-        ...(config.vectorStoreId ? {
-          tool_resources: {
-            file_search: {
-              vector_store_ids: [config.vectorStoreId]
-            }
-          }
-        } : {})
       });
-        // 记录设置 - 臨時移除不相容參數模式
-      console.log('[DEBUG] 臨時移除不相容參數設置:', {
-        assistantId: config.assistantId,
-        vectorStoreId: config.vectorStoreId ? config.vectorStoreId : '未設置',
-        maxCompletionTokens: 2500,
-        note: '已暫時移除 temperature, max_prompt_tokens, truncation_strategy'
-      });
-      
-      // 将 OpenAI 的事件流直接管道到 Next.js 的响应流
+
+      const responseStream = await openai.responses.create({ ...baseParams, stream: true });
+
+      // 將 Responses 事件轉譯為前端沿用的 Assistants 事件形狀後下發
       const stream = new ReadableStream({
         async start(controller) {
           const encoder = new TextEncoder();
-          let runIdForUsage: string | null = null;
-          
-          console.log('[DEBUG] 開始流式處理，準備記錄 token 使用量:', {
-            userId: userId || 'NO_USER_ID',
-            threadId: activeThreadId,
-            assistantId: config.assistantId,
-            timestamp: new Date().toISOString()
-          });
-          
+          let responseId: string | null = null;
+
           try {
-            for await (const event of runStream) {
-              // 捕獲 run ID 以便後續查詢
-              if (event.event === 'thread.run.created' && (event as any)?.data?.id) {
-                runIdForUsage = (event as any).data.id;
-                console.log('[DEBUG] 捕獲到 runId:', runIdForUsage);
-              }
-              
-              // 發送所有事件，不只是包含 data 的事件
-              controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
-              
-              // 檢查是否為最終事件
-              if (event.event === 'thread.run.completed' || 
-                  event.event === 'thread.run.failed' || 
-                  event.event === 'thread.run.cancelled' || 
-                  event.event === 'thread.run.expired') {
-                
-                console.log('[DEBUG] 收到運行完成事件:', {
-                  event: event.event,
-                  hasUserId: !!userId,
-                  userId: userId || 'NO_USER_ID',
-                  timestamp: new Date().toISOString()
-                });
-                
-                // 嘗試在 completed 時寫入使用量（stream 分支原本未記帳）
-                if (event.event === 'thread.run.completed') {
-                  if (!userId) {
-                    console.warn('[WARN] stream 完成但缺少 userId，無法記錄 token 使用量');
-                  } else {
-                    try {
-                      const runId = (event as any)?.data?.id || runIdForUsage;
-                      console.log('[DEBUG] 嘗試記錄 token 使用量:', { runId, userId, threadId: activeThreadId });
-                      
-                      if (runId) {
-                        const finalRun = await openai.beta.threads.runs.retrieve(activeThreadId, runId);
-                        console.log('[DEBUG] 獲取到 run 資料:', {
-                          runId,
-                          status: finalRun.status,
-                          hasUsage: !!(finalRun as any)?.usage,
-                          usage: (finalRun as any)?.usage
+            for await (const event of responseStream as AsyncIterable<any>) {
+              switch (event.type) {
+                case 'response.created': {
+                  responseId = event.response?.id || null;
+                  controller.enqueue(encoder.encode(sseEncode({
+                    event: 'thread.run.created',
+                    data: { id: responseId, thread_id: conversationId }
+                  })));
+                  break;
+                }
+                case 'response.output_text.delta': {
+                  controller.enqueue(encoder.encode(sseEncode({
+                    event: 'thread.message.delta',
+                    data: { delta: { content: [{ type: 'text', text: { value: event.delta } }] } }
+                  })));
+                  break;
+                }
+                case 'response.completed': {
+                  // 記錄 token 使用量（Responses usage → 內部 Run usage 形狀）
+                  const tokenUsage = toTokenUsage(event.response?.usage);
+                  if (tokenUsage) {
+                    if (userId) {
+                      try {
+                        await updateMonthlyTokenUsage(userId, tokenUsage);
+                        console.log('[SUCCESS] ✅ 已成功記錄用戶 token 使用量:', { userId, tokenUsage });
+                        controller.enqueue(encoder.encode(sseEncode({ event: 'usage.recorded', usage: tokenUsage })));
+                      } catch (usageErr: any) {
+                        console.error('[ERROR] stream 分支記錄 token 使用量失敗:', {
+                          error: usageErr?.message || String(usageErr),
+                          userId,
+                          conversationId
                         });
-                        
-                        const u: any = (finalRun as any)?.usage;
-                        if (u && (u.total_tokens > 0 || u.prompt_tokens > 0 || u.completion_tokens > 0)) {
-                          const tokenUsage = {
-                            prompt_tokens: u.prompt_tokens || 0,
-                            completion_tokens: u.completion_tokens || 0,
-                            total_tokens: u.total_tokens || 0,
-                            retrieval_tokens: u.retrieval_tokens || 0
-                          };
-                          
-                          console.log('[DEBUG] 開始記錄 token 使用量到 DynamoDB:', { userId, tokenUsage });
-                          await updateMonthlyTokenUsage(userId, tokenUsage);
-                          console.log('[SUCCESS] ✅ 已成功記錄用戶 token 使用量:', { userId, tokenUsage });
-                          
-                          // 回送一筆 usage 給前端
-                          controller.enqueue(encoder.encode(`data: ${JSON.stringify({ event: 'usage.recorded', usage: tokenUsage })}\n\n`));
-                        } else {
-                          console.warn('[WARN] run 完成但沒有 usage 資料:', { runId, userId, usage: u });
-                        }
-                      } else {
-                        console.error('[ERROR] 無法取得 runId，無法記錄 token 使用量');
                       }
-                    } catch (usageErr: any) {
-                      console.error('[ERROR] stream 分支記錄 token 使用量失敗:', {
-                        error: usageErr?.message || String(usageErr),
-                        stack: usageErr?.stack,
-                        userId,
-                        threadId: activeThreadId
-                      });
+                    } else {
+                      console.warn('[WARN] stream 完成但缺少 userId，無法記錄 token 使用量');
                     }
                   }
+                  controller.enqueue(encoder.encode(sseEncode({
+                    event: 'thread.run.completed',
+                    data: { id: responseId || event.response?.id, thread_id: conversationId }
+                  })));
+                  controller.enqueue(encoder.encode(sseEncode({ event: 'done' })));
+                  break;
                 }
-                // 發送流結束標誌
-                controller.enqueue(encoder.encode(`data: ${JSON.stringify({event: 'done'})}\n\n`));
-                break;
+                case 'response.failed':
+                case 'response.incomplete': {
+                  console.error('[ERROR] Responses 串流未正常完成:', event.type, event.response?.error || event.response?.incomplete_details);
+                  controller.enqueue(encoder.encode(sseEncode({
+                    event: 'thread.run.failed',
+                    data: {
+                      id: responseId,
+                      thread_id: conversationId,
+                      last_error: event.response?.error || event.response?.incomplete_details || null
+                    }
+                  })));
+                  controller.enqueue(encoder.encode(sseEncode({ event: 'done' })));
+                  break;
+                }
+                case 'error': {
+                  console.error('[ERROR] Responses 串流錯誤事件:', event);
+                  controller.enqueue(encoder.encode(sseEncode({
+                    event: 'thread.run.failed',
+                    data: { id: responseId, thread_id: conversationId, last_error: { message: event.message || '串流錯誤' } }
+                  })));
+                  controller.enqueue(encoder.encode(sseEncode({ event: 'done' })));
+                  break;
+                }
+                default:
+                  // 其他事件（file_search 進度等）前端不需要，略過
+                  break;
               }
             }
           } catch (error) {
             console.error('[ERROR] 流式處理錯誤:', error);
-            controller.enqueue(encoder.encode(`data: ${JSON.stringify({
+            controller.enqueue(encoder.encode(sseEncode({
               event: 'error',
               error: error instanceof Error ? error.message : '流式處理失敗'
-            })}\n\n`));
+            })));
           } finally {
             try {
               controller.close();
@@ -657,19 +321,19 @@ export async function POST(request: Request) {
               console.warn('[WARN] 流關閉時發生錯誤:', e);
             }
             // 無論成功或錯誤釋放鎖
-            try { releaseLock(activeThreadId); } catch {}
+            await releaseConversationLock(conversationId);
           }
         },
-        cancel() {
+        async cancel() {
           console.log('[DEBUG] 客戶端斷開連接，串流已取消');
-          try { releaseLock(activeThreadId); } catch {}
+          await releaseConversationLock(conversationId);
         }
       });
-      
+
       // 設置 CORS 標頭
       const origin = request.headers.get('origin');
       const corsHeaders = setCORSHeaders(origin);
-      
+
       // 返回流式响应
       return new Response(stream, {
         headers: {
@@ -679,137 +343,77 @@ export async function POST(request: Request) {
           ...Object.fromEntries(corsHeaders.entries())
         }
       });
-    }      // 非流式请求的处理 - 暫時移除不相容參數
-    const run = await openai.beta.threads.runs.create(activeThreadId, {
-      assistant_id: config.assistantId,
-      max_completion_tokens: 2500,       // 保留：增加回應長度
-      ...(config.type === 'homeschool' ? { instructions: await buildHomeschoolInstructions(userId) } : {}),
-      // 暫時註解掉可能不相容的參數進行測試
-      // max_prompt_tokens: 15000,          // 可能不相容：控制輸入上下文
-      // temperature: 0.1,                  // 可能不相容：降低隨機性
-      // truncation_strategy: {             // 可能不相容：智能截斷策略
-      //   type: 'auto'
-      // },
-      ...(config.vectorStoreId ? {
-        tool_resources: {
-          file_search: {
-            vector_store_ids: [config.vectorStoreId]
-          }
-        }
-      } : {})
-    });
-      console.log('[DEBUG] 非流式臨時移除不相容參數設置:', {
-        assistantId: config.assistantId,
-        vectorStoreId: config.vectorStoreId ? config.vectorStoreId : '未設置',
-        maxCompletionTokens: 2500,
-        note: '已暫時移除 temperature, max_prompt_tokens, truncation_strategy'
-      });
-
-    // 等待运行完成
-    let runStatus = await openai.beta.threads.runs.retrieve(
-      activeThreadId,
-      run.id
-    );
-
-    while (runStatus.status === 'in_progress' || runStatus.status === 'queued') {
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      runStatus = await openai.beta.threads.runs.retrieve(
-        activeThreadId,
-        run.id
-      );
     }
 
-    if (runStatus.status !== 'completed') {
-      console.error('[ERROR] 助手运行失败:', runStatus);
-      throw new Error(`Assistant run failed with status: ${runStatus.status}`);
+    // 非流式请求：單次呼叫即完成（不再需要輪詢）
+    const response = await openai.responses.create(baseParams);
+
+    if ((response as any).status && (response as any).status !== 'completed') {
+      console.error('[ERROR] 助手回應未完成:', (response as any).status, (response as any).error);
+      throw new Error(`Assistant response failed with status: ${(response as any).status}`);
     }
 
-    // 获取助手的回复
-    const messages = await openai.beta.threads.messages.list(activeThreadId);
-    const lastMessage = messages.data[0];
-    const assistantReply = lastMessage.content
-      .filter(content => content.type === 'text')
-      .map(content => (content.type === 'text' ? content.text.value : ''))
-      .join('\n');
-    
+    const assistantReply = extractResponseText(response);
+
     // 添加 token 使用量记录
-    console.log('[DEBUG] 非流式模式 - 檢查 token 使用量:', {
-      hasUserId: !!userId,
-      userId: userId || 'NO_USER_ID',
-      hasUsage: !!runStatus.usage,
-      usage: runStatus.usage,
-      runId: run.id,
-      threadId: activeThreadId
-    });
-    
+    const tokenUsage = toTokenUsage((response as any).usage);
     if (!userId) {
       console.warn('[WARN] 非流式模式完成但缺少 userId，無法記錄 token 使用量');
-    } else if (!runStatus.usage) {
+    } else if (!tokenUsage) {
       console.warn('[WARN] 非流式模式完成但缺少 usage 資料，無法記錄 token 使用量');
-    } else if (userId && runStatus.usage) {
+    } else {
       try {
-        // 从 runStatus 中提取 token 使用量
-        const tokenUsage = {
-          prompt_tokens: runStatus.usage.prompt_tokens || 0,
-          completion_tokens: runStatus.usage.completion_tokens || 0,
-          total_tokens: runStatus.usage.total_tokens || 0,
-          retrieval_tokens: (runStatus.usage as any).retrieval_tokens || 0
-        };
-        
-        console.log('[DEBUG] 開始記錄 token 使用量到 DynamoDB (非流式):', { userId, tokenUsage });
-        // 更新用户的月度 token 使用统计
         await updateMonthlyTokenUsage(userId, tokenUsage);
-        
         console.log(`[SUCCESS] ✅ 已成功記錄用戶 ${userId} 的聊天 token 使用量 (非流式):`, tokenUsage);
       } catch (usageError: any) {
         // 记录错误但不中断请求
         console.error('[ERROR] 記錄 token 使用量失敗:', {
           error: usageError?.message || String(usageError),
-          stack: usageError?.stack,
           userId,
-          threadId: activeThreadId
+          conversationId
         });
       }
     }
-    
+
+    await releaseConversationLock(conversationId);
+    lockedConversationId = null;
+
     // 設置 CORS 標頭
     const origin = request.headers.get('origin');
     const headers = setCORSHeaders(origin);
-    
+
     return NextResponse.json({
       success: true,
       reply: assistantReply,
-      threadId: activeThreadId,
+      threadId: conversationId,
       debug: {
-        runStatus: runStatus.status,
-        messageCount: messages.data.length
+        responseId: response.id,
+        status: (response as any).status || 'completed'
       }
     }, { headers });
 
   } catch (error) {
-    // 發生錯誤時嘗試釋放鎖（若有 threadId 可用）
-    try {
-      const body = await request.clone().text();
-      const maybe = JSON.parse(body);
-      if (maybe?.threadId) releaseLock(maybe.threadId);
-    } catch {}
+    // 發生錯誤時釋放鎖
+    if (lockedConversationId) {
+      await releaseConversationLock(lockedConversationId);
+    }
     console.error('[ERROR] 聊天API错误:', {
       error,
       type: error instanceof Error ? error.name : typeof error,
       message: error instanceof Error ? error.message : String(error),
       stack: error instanceof Error ? error.stack : undefined
     });
-    
+
     // 獲取 origin 並設置 CORS 標頭
     const origin = request.headers.get('origin');
     const headers = setCORSHeaders(origin);
-    
-    return NextResponse.json({ 
+
+    return NextResponse.json({
       error: error instanceof Error ? error.message : '未知错误',
       details: error instanceof Error ? error.stack : undefined
-    }, { 
+    }, {
       status: 500,
-      headers 
+      headers
     });
   }
 }
@@ -818,7 +422,7 @@ export async function POST(request: Request) {
 export async function OPTIONS(request: Request) {
   const origin = request.headers.get('origin');
   const headers = setCORSHeaders(origin);
-  
+
   return new Response(null, {
     status: 204,
     headers

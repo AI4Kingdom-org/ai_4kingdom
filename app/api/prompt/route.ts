@@ -1,12 +1,7 @@
 import { NextResponse } from 'next/server';
 import { DynamoDBDocumentClient, GetCommand, PutCommand } from "@aws-sdk/lib-dynamodb";
-import OpenAI from 'openai';
 import { ASSISTANT_IDS, VECTOR_STORE_IDS } from "@/app/config/constants";
 import { createDynamoDBClient } from '../../utils/dynamodb';
-
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY
-});
 
 // 使用統一的 DynamoDB 客戶端
 const getDocClient = async () => {
@@ -74,18 +69,10 @@ export async function PUT(request: Request) {
         finalContent = zhHint + "\n" + content;
       }
     }
-    // 1. 更新 OpenAI Assistant 的 instructions
-    try {
-      await openai.beta.assistants.update(
-        assistantId,
-        {
-          // instructions: finalContent // 統一由後端 system instructions 主導，不在此處覆寫
-        }
-      );
-    } catch (error) {
-      console.error('[ERROR] 更新 OpenAI Assistant 失败:', error);
-      throw error;
-    }// 2. 更新 DynamoDB
+    // 提示詞統一存於 DynamoDB，由後端在 Responses 呼叫時帶入 instructions；
+    // 不再回寫 OpenAI（Assistants API 已棄用，且原呼叫本就是空更新）。
+    void assistantId;
+    // 更新 DynamoDB
     const docClient = await getDocClient();
     const command = new PutCommand({
       TableName: "AIPrompts",

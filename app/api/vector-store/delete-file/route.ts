@@ -23,7 +23,7 @@ export async function DELETE(request: Request) {
 
     // 1. 首先刪除 OpenAI 平台上的檔案
     try {
-      await openai.files.del(fileId);
+      await openai.files.delete(fileId);
       console.log(`[SUCCESS] 成功刪除 OpenAI 檔案 ID: ${fileId}`);
     } catch (error) {
       console.error(`[ERROR] 刪除 OpenAI 檔案失敗 ID: ${fileId}`, error);

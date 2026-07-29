@@ -1,11 +1,8 @@
 import { DeleteCommand, QueryCommand } from "@aws-sdk/lib-dynamodb";
 import { createDynamoDBClient } from '../../../utils/dynamodb';
 import { NextResponse } from 'next/server';
-import OpenAI from 'openai';
-
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY
-});
+import { getOpenAI } from '../../../lib/openai/client';
+import { isConversationId, isLegacyThreadId } from '../../../lib/openai/conversation';
 
 export async function DELETE(
   request: Request,
@@ -14,7 +11,7 @@ export async function DELETE(
   try {
     const userId = request.headers.get('user-id');
     const { threadId } = context.params;
-    
+
     console.log('[DEBUG] 开始删除对话:', { userId, threadId });
 
     if (!userId) {
@@ -38,11 +35,17 @@ export async function DELETE(
       throw new Error('找不到对应的对话记录');
     }
 
-    // 2. 删除 OpenAI thread
+    // 2. 删除 OpenAI conversation（或舊 Assistants thread）
+    const openai = getOpenAI();
     try {
-      await openai.beta.threads.del(threadId);
+      if (isConversationId(threadId)) {
+        await openai.conversations.delete(threadId);
+      } else if (isLegacyThreadId(threadId)) {
+        // 舊資料：Assistants API 日落前仍可清除；日落後刪除失敗僅記 log
+        await openai.beta.threads.delete(threadId);
+      }
     } catch (error) {
-      console.error('[ERROR] OpenAI thread 删除失败:', error);
+      console.error('[ERROR] OpenAI 對話删除失败:', error);
     }
 
     // 3. 使用正确的主键组合删除 DynamoDB 记录
