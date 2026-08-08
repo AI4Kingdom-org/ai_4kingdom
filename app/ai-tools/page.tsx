@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import styles from './page.module.css';
-import type { AiToolRecord, AiToolsCategoryGroup } from '@/app/types/aiTools';
+import type { AiToolRecord, AiToolsCategoryGroup, AiToolsSubcategoryGroup } from '@/app/types/aiTools';
 
 interface DirectoryResponse {
   success: boolean;
@@ -14,11 +14,15 @@ interface DirectoryResponse {
   };
 }
 
+interface ActiveFilter {
+  category: string;
+  subcategory: string;
+}
+
 export default function AiToolsDirectoryPage() {
   const [categories, setCategories] = useState<AiToolsCategoryGroup[]>([]);
-  const [selectedCategory, setSelectedCategory] = useState('');
-  const [selectedSubcategory, setSelectedSubcategory] = useState('');
-  const [expandedCategory, setExpandedCategory] = useState('');
+  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
+  const [activeFilter, setActiveFilter] = useState<ActiveFilter | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -40,12 +44,7 @@ export default function AiToolsDirectoryPage() {
         if (cancelled) return;
         const nextCategories = payload.data?.categories || [];
         setCategories(nextCategories);
-
-        if (nextCategories.length) {
-          setSelectedCategory((current) => current || nextCategories[0].name);
-          setSelectedSubcategory((current) => current || nextCategories[0].subcategories[0]?.name || '');
-          setExpandedCategory((current) => current || nextCategories[0].name);
-        }
+        setExpandedCategories(new Set(nextCategories.map((category) => category.name)));
       } catch (err) {
         if (!cancelled) {
           setError(err instanceof Error ? err.message : '无法载入工具资料。');
@@ -61,23 +60,37 @@ export default function AiToolsDirectoryPage() {
     };
   }, []);
 
-  const activeCategory = useMemo(
-    () => categories.find((category) => category.name === selectedCategory) || categories[0],
-    [categories, selectedCategory]
+  const totalToolsCount = useMemo(
+    () =>
+      categories.reduce(
+        (sum, category) => sum + category.subcategories.reduce((subSum, subcategory) => subSum + subcategory.tools.length, 0),
+        0
+      ),
+    [categories]
   );
 
-  const visibleTools = useMemo(() => {
-    if (!activeCategory) return [];
-    const activeSubcategory =
-      activeCategory.subcategories.find((subcategory) => subcategory.name === selectedSubcategory) ||
-      activeCategory.subcategories[0];
-    return activeSubcategory?.tools || [];
-  }, [activeCategory, selectedSubcategory]);
+  const activeFilterGroup = useMemo(() => {
+    if (!activeFilter) return null;
+    const category = categories.find((item) => item.name === activeFilter.category);
+    const subcategory = category?.subcategories.find((item) => item.name === activeFilter.subcategory);
+    return category && subcategory ? { category, subcategory } : null;
+  }, [categories, activeFilter]);
 
   const handleCategoryClick = (category: AiToolsCategoryGroup) => {
-    setSelectedCategory(category.name);
-    setSelectedSubcategory(category.subcategories[0]?.name || '');
-    setExpandedCategory((current) => (current === category.name ? '' : category.name));
+    setExpandedCategories((current) => {
+      const next = new Set(current);
+      if (next.has(category.name)) {
+        next.delete(category.name);
+      } else {
+        next.add(category.name);
+      }
+      return next;
+    });
+    setActiveFilter(null);
+  };
+
+  const handleSubcategoryClick = (category: AiToolsCategoryGroup, subcategory: AiToolsSubcategoryGroup) => {
+    setActiveFilter({ category: category.name, subcategory: subcategory.name });
   };
 
   return (
@@ -102,7 +115,7 @@ export default function AiToolsDirectoryPage() {
                 <button
                   type="button"
                   className={`${styles.categoryButton} ${
-                    activeCategory?.name === category.name ? styles.categoryButtonActive : ''
+                    expandedCategories.has(category.name) ? styles.categoryButtonActive : ''
                   }`}
                   onClick={() => handleCategoryClick(category)}
                 >
@@ -110,16 +123,18 @@ export default function AiToolsDirectoryPage() {
                   <small>{category.subcategories.reduce((sum, item) => sum + item.tools.length, 0)}</small>
                 </button>
 
-                {expandedCategory === category.name && (
+                {expandedCategories.has(category.name) && (
                   <div className={styles.subcategoryList}>
                     {category.subcategories.map((subcategory) => (
                       <button
                         type="button"
                         key={`${category.name}-${subcategory.name}`}
-                        className={`${styles.subcategoryButton} ${
-                          selectedSubcategory === subcategory.name ? styles.subcategoryButtonActive : ''
+                        className={`${styles.subcategoryItem} ${
+                          activeFilter?.category === category.name && activeFilter?.subcategory === subcategory.name
+                            ? styles.subcategoryItemActive
+                            : ''
                         }`}
-                        onClick={() => setSelectedSubcategory(subcategory.name)}
+                        onClick={() => handleSubcategoryClick(category, subcategory)}
                       >
                         <span>{subcategory.name}</span>
                         <small>{subcategory.tools.length}</small>
@@ -135,10 +150,10 @@ export default function AiToolsDirectoryPage() {
         <section className={styles.contentPanel}>
           <div className={styles.contentHeader}>
             <div>
-              <p>{activeCategory?.name || '目录'}</p>
-              <h2>{selectedSubcategory || 'AI 工具'}</h2>
+              <p>{activeFilterGroup ? activeFilterGroup.category.name : '目录'}</p>
+              <h2>{activeFilterGroup ? activeFilterGroup.subcategory.name : '全部 AI 工具'}</h2>
             </div>
-            <span>{visibleTools.length} 个工具</span>
+            <span>{(activeFilterGroup ? activeFilterGroup.subcategory.tools.length : totalToolsCount)} 个工具</span>
           </div>
 
           {loading ? (
@@ -152,14 +167,14 @@ export default function AiToolsDirectoryPage() {
               <strong>资料载入失败</strong>
               <p>{error}</p>
             </div>
-          ) : visibleTools.length === 0 ? (
+          ) : totalToolsCount === 0 ? (
             <div className={styles.stateBox}>
-              <strong>这个分类还没有工具</strong>
+              <strong>尚未建立任何工具</strong>
               <p>请稍后再回来查看，或到后台新增工具资料。</p>
             </div>
-          ) : (
+          ) : activeFilterGroup ? (
             <div className={styles.toolGrid}>
-              {visibleTools.map((tool) => (
+              {activeFilterGroup.subcategory.tools.map((tool) => (
                 <Link key={tool.id} className={styles.toolCard} href={`/ai-tools/${tool.id}`}>
                   <img className={styles.toolIcon} src={tool.iconUrl} alt={`${tool.name} 图标`} />
                   <div className={styles.toolBody}>
@@ -173,6 +188,35 @@ export default function AiToolsDirectoryPage() {
                 </Link>
               ))}
             </div>
+          ) : (
+            categories.map((category) => (
+              <div key={category.name} className={styles.categoryBlock}>
+                <h2 className={styles.categoryDivider}>{category.name}</h2>
+                {category.subcategories.map((subcategory) => (
+                  <section key={`${category.name}-${subcategory.name}`} className={styles.toolSection}>
+                    <div className={styles.toolSectionHeading}>
+                      <h3>{subcategory.name}</h3>
+                      <span>{subcategory.tools.length} 个工具</span>
+                    </div>
+                    <div className={styles.toolGrid}>
+                      {subcategory.tools.map((tool) => (
+                        <Link key={tool.id} className={styles.toolCard} href={`/ai-tools/${tool.id}`}>
+                          <img className={styles.toolIcon} src={tool.iconUrl} alt={`${tool.name} 图标`} />
+                          <div className={styles.toolBody}>
+                            <div className={styles.toolTitleRow}>
+                              <h3>{tool.name}</h3>
+                              {tool.featured && <span>精选</span>}
+                            </div>
+                            <p className={styles.shortTitle}>{tool.shortTitle}</p>
+                            <p className={styles.description}>{tool.description}</p>
+                          </div>
+                        </Link>
+                      ))}
+                    </div>
+                  </section>
+                ))}
+              </div>
+            ))
           )}
         </section>
       </section>

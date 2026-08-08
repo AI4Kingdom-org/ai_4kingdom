@@ -1,11 +1,10 @@
-import { mkdir, writeFile } from 'fs/promises';
-import path from 'path';
 import { NextRequest, NextResponse } from 'next/server';
 import { canManageAiTools, sanitizeText } from '@/app/utils/aiToolsDirectory';
+import { getWordPressMediaConfig, uploadToWordPressMedia } from '@/app/utils/wordpressMedia';
 
 export const runtime = 'nodejs';
 
-const MAX_ICON_BYTES = 1024 * 1024;
+const MAX_ICON_BYTES = 3 * 1024 * 1024;
 const ALLOWED_TYPES: Record<string, string> = {
   'image/png': '.png',
   'image/jpeg': '.jpg',
@@ -44,8 +43,17 @@ export async function POST(request: NextRequest) {
 
     if (file.size > MAX_ICON_BYTES) {
       return NextResponse.json(
-        { success: false, error: '图标文件大小不能超过 1MB。' },
+        { success: false, error: '图标文件大小不能超过 3MB。' },
         { status: 400 }
+      );
+    }
+
+    const { siteUrl, username, appPassword } = getWordPressMediaConfig();
+    if (!siteUrl || !username || !appPassword) {
+      console.error('[AiToolsDirectory] Icon upload failed: WordPress media credentials are not configured.');
+      return NextResponse.json(
+        { success: false, error: '图标储存尚未设定，请联系管理员设定 WORDPRESS_MEDIA_USERNAME / WORDPRESS_MEDIA_APP_PASSWORD。' },
+        { status: 500 }
       );
     }
 
@@ -53,16 +61,17 @@ export async function POST(request: NextRequest) {
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/^-|-$/g, '') || 'icon';
-    const fileName = `${originalName}-${crypto.randomUUID()}${extension}`;
-    const uploadDir = path.join(process.cwd(), 'public', 'uploads', 'ai-tools');
-    const filePath = path.join(uploadDir, fileName);
+    const fileName = `ai-tools-${originalName}-${crypto.randomUUID()}${extension}`;
 
-    await mkdir(uploadDir, { recursive: true });
-    await writeFile(filePath, Buffer.from(await file.arrayBuffer()));
+    const { url: iconUrl } = await uploadToWordPressMedia({
+      buffer: Buffer.from(await file.arrayBuffer()),
+      fileName,
+      contentType: file.type,
+    });
 
     return NextResponse.json({
       success: true,
-      iconUrl: `/uploads/ai-tools/${fileName}`,
+      iconUrl,
     });
   } catch (error) {
     console.error('[AiToolsDirectory] Icon upload failed:', error);
