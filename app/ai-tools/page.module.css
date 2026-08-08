@@ -77,26 +77,29 @@
   gap: 8px;
   padding: 12px;
   max-height: calc(100vh - 36px);
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 .categoryGroup {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 6px;
 }
 
 .categoryButton,
-.subcategoryButton {
+.subcategoryItem {
   display: flex;
   justify-content: space-between;
   align-items: center;
   gap: 12px;
   width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
   border: 0;
   border-radius: 8px;
   background: transparent;
   color: #334155;
-  cursor: pointer;
   font: inherit;
   text-align: left;
 }
@@ -104,16 +107,18 @@
 .categoryButton {
   padding: 12px 12px;
   font-weight: 800;
+  cursor: pointer;
 }
 
-.subcategoryButton {
+.subcategoryItem {
   padding: 9px 12px 9px 22px;
   font-size: 14px;
   background: #ffffff;
+  cursor: pointer;
 }
 
 .categoryButton small,
-.subcategoryButton small {
+.subcategoryItem small {
   color: #64748b;
   font-size: 12px;
 }
@@ -124,14 +129,15 @@
   color: #9a3412;
 }
 
-.subcategoryButton:hover,
-.subcategoryButtonActive {
-  background: #ffffff;
+.subcategoryItem:hover,
+.subcategoryItemActive {
+  background: #fff7ed;
   color: #9a3412;
 }
 
 .subcategoryList {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 4px;
   margin-left: 12px;
 }
@@ -171,6 +177,52 @@
   color: #1e40af;
   font-size: 12px;
   font-weight: 800;
+}
+
+.categoryBlock {
+  margin-bottom: 28px;
+}
+
+.categoryBlock:last-child {
+  margin-bottom: 0;
+}
+
+.categoryDivider {
+  margin: 0 0 16px;
+  color: #9a3412;
+  font-size: 15px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.toolSection {
+  margin-bottom: 20px;
+}
+
+.toolSection:last-child {
+  margin-bottom: 0;
+}
+
+.toolSectionHeading {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  margin: 0 0 10px;
+}
+
+.toolSectionHeading h3 {
+  margin: 0;
+  color: #0f172a;
+  font-size: 16px;
+}
+
+.toolSectionHeading span {
+  flex: 0 0 auto;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 700;
 }
 
 .toolGrid {

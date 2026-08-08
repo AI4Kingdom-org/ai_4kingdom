@@ -33,6 +33,8 @@ const emptyForm: FormState = {
   featured: false,
 };
 
+const NEW_CATEGORY_OPTION = '__new_category__';
+
 interface AdminResponse {
   success: boolean;
   error?: string;
@@ -49,6 +51,7 @@ export default function AdminAiToolsPage() {
   const { user, loading: authLoading } = useAuth();
   const [tools, setTools] = useState<AiToolRecord[]>([]);
   const [form, setForm] = useState<FormState>(emptyForm);
+  const [showNewCategoryInput, setShowNewCategoryInput] = useState(false);
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
@@ -106,6 +109,28 @@ export default function AdminAiToolsPage() {
     [tools]
   );
 
+  const subcategoriesByCategory = useMemo(() => {
+    const map = new Map<string, Set<string>>();
+    for (const tool of tools) {
+      if (!tool.category || !tool.subcategory) continue;
+      if (!map.has(tool.category)) map.set(tool.category, new Set());
+      map.get(tool.category)!.add(tool.subcategory);
+    }
+    return map;
+  }, [tools]);
+
+  const subcategorySuggestions = useMemo(() => {
+    const subcategories = subcategoriesByCategory.get(form.category.trim());
+    return subcategories ? Array.from(subcategories).sort((a, b) => a.localeCompare(b)) : [];
+  }, [subcategoriesByCategory, form.category]);
+
+  const isNewCategory = Boolean(form.category.trim()) && !categories.includes(form.category.trim());
+
+  const existingSubcategoryNames = useMemo(
+    () => new Set(tools.filter((tool) => tool.id !== form.id).map((tool) => tool.subcategory).filter(Boolean)),
+    [tools, form.id]
+  );
+
   const filteredTools = useMemo(() => {
     const normalizedSearch = search.trim().toLowerCase();
 
@@ -126,8 +151,13 @@ export default function AdminAiToolsPage() {
     setForm((current) => ({ ...current, [field]: value }));
   };
 
+  const setCategoryField = (value: string) => {
+    setForm((current) => (current.category === value ? current : { ...current, category: value, subcategory: '' }));
+  };
+
   const resetForm = () => {
     setForm(emptyForm);
+    setShowNewCategoryInput(false);
     setMessage(null);
   };
 
@@ -145,6 +175,7 @@ export default function AdminAiToolsPage() {
       status: tool.status,
       featured: Boolean(tool.featured),
     });
+    setShowNewCategoryInput(false);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -191,6 +222,11 @@ export default function AdminAiToolsPage() {
     const missingField = requiredFields.find((field) => !String(form[field]).trim());
     if (missingField) {
       setMessage({ type: 'error', text: '请填写所有必填栏位。' });
+      return;
+    }
+
+    if (isNewCategory && existingSubcategoryNames.has(form.subcategory.trim())) {
+      setMessage({ type: 'error', text: '新增分类时，子分类必须是全新名称，不可以跟既有子分类重复。' });
       return;
     }
 
@@ -316,21 +352,52 @@ export default function AdminAiToolsPage() {
 
           <label>
             <span>分类 *</span>
-            <input
-              value={form.category}
-              list="ai-tool-categories"
-              onChange={(event) => setField('category', event.target.value)}
-            />
-            <datalist id="ai-tool-categories">
+            <select
+              value={showNewCategoryInput ? NEW_CATEGORY_OPTION : form.category}
+              onChange={(event) => {
+                const value = event.target.value;
+                if (value === NEW_CATEGORY_OPTION) {
+                  setShowNewCategoryInput(true);
+                  setCategoryField('');
+                } else {
+                  setShowNewCategoryInput(false);
+                  setCategoryField(value);
+                }
+              }}
+            >
+              <option value="" disabled>
+                请选择既有分类
+              </option>
               {categories.map((category) => (
-                <option key={category} value={category} />
+                <option key={category} value={category}>
+                  {category}
+                </option>
               ))}
-            </datalist>
+              <option value={NEW_CATEGORY_OPTION}>+ 新增分类...</option>
+            </select>
+            {showNewCategoryInput && (
+              <input
+                value={form.category}
+                placeholder="输入新分类名称"
+                onChange={(event) => setCategoryField(event.target.value)}
+              />
+            )}
           </label>
 
           <label>
             <span>子分类 *</span>
-            <input value={form.subcategory} onChange={(event) => setField('subcategory', event.target.value)} />
+            <input
+              value={form.subcategory}
+              list="ai-tool-subcategories"
+              placeholder={isNewCategory ? '新分类，请输入全新的子分类' : '选择既有子分类，或输入新子分类'}
+              onChange={(event) => setField('subcategory', event.target.value)}
+            />
+            <datalist id="ai-tool-subcategories">
+              {subcategorySuggestions.map((subcategory) => (
+                <option key={subcategory} value={subcategory} />
+              ))}
+            </datalist>
+            {isNewCategory && <small>新增分类时，子分类必须是全新名称，不可以跟既有子分类重复。</small>}
           </label>
 
           <label>
@@ -386,7 +453,7 @@ export default function AdminAiToolsPage() {
                     event.currentTarget.value = '';
                   }}
                 />
-                <small>{uploading ? '图标上传中...' : '支持 PNG、JPG、WEBP、GIF，大小不超过 1MB。'}</small>
+                <small>{uploading ? '图标上传中...' : '支持 PNG、JPG、WEBP、GIF，大小不超过 3MB。'}</small>
               </div>
             </div>
           </div>
