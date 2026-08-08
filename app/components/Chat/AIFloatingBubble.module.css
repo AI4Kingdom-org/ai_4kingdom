@@ -5,9 +5,9 @@
   bottom: 28px;
   right: 28px;
   z-index: 1100;
-  width: 64px;
-  height: 64px;
-  border-radius: 50%;
+  height: 56px;
+  padding: 0 20px;
+  border-radius: 28px;
   background: #2563eb;
   box-shadow: 0 4px 20px rgba(37, 99, 235, 0.45), 0 2px 8px rgba(0, 0, 0, 0.18);
   border: none;
@@ -17,6 +17,7 @@
   justify-content: center;
   transition: transform 0.2s ease, box-shadow 0.2s ease;
   user-select: none;
+  white-space: nowrap;
 }
 
 .topRight {
@@ -34,7 +35,7 @@
 }
 
 .bubbleLabel {
-  font-size: 1.25rem;
+  font-size: 1rem;
   font-weight: 800;
   color: #ffffff;
   letter-spacing: 0.02em;
