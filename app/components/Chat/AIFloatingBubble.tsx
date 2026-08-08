@@ -17,7 +17,7 @@ export default function AIFloatingBubble({ open, onToggle, title = 'AI 對話助
       title={title}
       aria-label={title}
     >
-      <span className={styles.bubbleLabel}>AI</span>
+      <span className={styles.bubbleLabel}>国度AI解答</span>
     </button>
   );
 }
