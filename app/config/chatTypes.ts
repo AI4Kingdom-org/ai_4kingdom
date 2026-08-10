@@ -146,8 +146,8 @@ export const CHAT_TYPE_CONFIGS: Record<ChatType, ChatTypeConfig> = {
   },
   'kou-shih-yuan': {
     type: 'kou-shih-yuan',
-    title: '口試院',
-    description: '口試院 AI 助手',
+    title: '寇世遠AI助手',
+    description: '寇世遠AI助手',
     assistantId: ASSISTANT_IDS.KOU_SHIH_YUAN,
     vectorStoreId: VECTOR_STORE_IDS.KOU_SHIH_YUAN
   },
@@ -226,8 +226,8 @@ export const CHAT_CONFIGS: Record<ChatType, ChatConfig> = {
     description: '人生導師 AI 助手'
   },
   'kou-shih-yuan': {
-    title: '口試院',
-    description: '口試院 AI 助手'
+    title: '寇世遠AI助手',
+    description: '寇世遠AI助手'
   },
 
 };

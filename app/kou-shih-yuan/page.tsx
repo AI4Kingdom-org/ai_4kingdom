@@ -60,7 +60,7 @@ function KouShihYuanContent() {
     <div className={styles.pageBackground}>
       <div className={`${styles.floatingPanel}${chatOpen ? ' ' + styles.panelOpen : ''}`}>
         <div className={styles.panelHeader}>
-          <span className={styles.panelTitle}>口試院 AI 助手</span>
+          <span className={styles.panelTitle}>寇世遠AI助手</span>
           <button className={styles.panelClose} onClick={() => setChatOpen(false)}>✕</button>
         </div>
         <div className={styles.chatWrapper}>
