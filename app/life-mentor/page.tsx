@@ -1,39 +1,103 @@
 "use client";
 
-import { useEffect, useState } from 'react';
-import { useAuth } from '@/app/contexts/AuthContext';
+import { useState, useEffect, useRef } from 'react';
 import WithChat from '@/app/components/layouts/WithChat';
-import ChatkitEmbed from '@/app/components/ChatkitEmbed';
+import { useAuth } from '@/app/contexts/AuthContext';
+import { useChat } from '@/app/contexts/ChatContext';
+import ConversationList from '@/app/components/ConversationList';
+import MessageList from '@/app/components/Chat/MessageList';
+import ChatInput from '@/app/components/Chat/ChatInput';
+import AIFloatingBubble from '@/app/components/Chat/AIFloatingBubble';
 import { CHAT_TYPES } from '@/app/config/chatTypes';
-import Script from 'next/script';
+import styles from './LifeMentor.module.css';
 
-export default function LifeMentorPage() {
-  const { user, loading } = useAuth();
-  const [ready, setReady] = useState(false);
+function LifeMentorContent() {
+  const { user } = useAuth();
+  const {
+    messages,
+    currentThreadId,
+    setCurrentThreadId,
+    sendMessage,
+    isLoading,
+    error,
+    setError,
+    loadChatHistory,
+    setMessages,
+  } = useChat();
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [chatOpen, setChatOpen] = useState(false);
+  const shouldLoadHistory = useRef(false);
 
   useEffect(() => {
-    if (!loading) setReady(true);
-  }, [loading]);
+    if (currentThreadId && user && shouldLoadHistory.current) {
+      shouldLoadHistory.current = false;
+      loadChatHistory(user.user_id);
+    }
+  }, [currentThreadId]);
 
-  if (!ready) return <div>Loading…</div>;
-  if (!user) return <div>請先登入</div>;
+  const handleCreateNewThread = () => {
+    setCurrentThreadId(null);
+    setMessages([]);
+  };
+
+  const handleSelectThread = (threadId: string) => {
+    if (threadId === currentThreadId) return;
+    shouldLoadHistory.current = true;
+    setError('');
+    setMessages([]);
+    setCurrentThreadId(threadId);
+    setSidebarOpen(false);
+  };
+
+  const handleSendMessage = async (message: string) => {
+    await sendMessage(message);
+    window.dispatchEvent(new CustomEvent('refreshConversations'));
+  };
+
+  if (!user) return null;
 
   return (
-    <WithChat chatType={CHAT_TYPES.SUNDAY_GUIDE} disableChatContext>
-      <div style={{ padding: 16, color: '#000' }}>
-        {/* ChatKit 前端 SDK 腳本（必要） */}
-        <Script src="https://cdn.platform.openai.com/deployments/chatkit/chatkit.js" strategy="afterInteractive" />
-        {/* 外層容器：與 user-sunday-guide 一致的置中與最大寬度 */}
-        <div style={{ maxWidth: 1200, margin: '0 auto' }}>
-          {/* 內層內容寬度：90% 並限制最大寬度 900px，與 user-sunday-guide 的 contentWrapper 一致 */}
-          <div style={{ width: '90%', maxWidth: 900, margin: '0 auto' }}>
-            {/* 聊天區塊寬度 100% 並固定高度，視覺與 user-sunday-guide 的 chatSection 一致 */}
-            <div style={{ width: '100%', height: 450, borderRadius: 12, overflow: 'hidden', boxShadow: '0 4px 10px rgba(0,0,0,0.1)' }}>
-              <ChatkitEmbed userId={user.user_id} module="life-mentor" />
-            </div>
+    <div className={styles.pageBackground}>
+      <div className={`${styles.floatingPanel}${chatOpen ? ' ' + styles.panelOpen : ''}`}>
+        <div className={styles.panelHeader}>
+          <span className={styles.panelTitle}>人生導師 AI 助手</span>
+          <button className={styles.panelClose} onClick={() => setChatOpen(false)}>✕</button>
+        </div>
+        <div className={styles.chatWrapper}>
+          <div className={`${styles.sidebar}${sidebarOpen ? ' ' + styles.sidebarOpen : ''}`}>
+            <button className={styles.sidebarToggle} onClick={() => setSidebarOpen(v => !v)}>
+              <span>📋 對話記錄</span><span>{sidebarOpen ? '▲' : '▼'}</span>
+            </button>
+            <ConversationList
+              userId={user.user_id}
+              type={CHAT_TYPES.LIFE_MENTOR}
+              currentThreadId={currentThreadId}
+              onSelectThread={handleSelectThread}
+              isCreating={false}
+              onCreateNewThread={handleCreateNewThread}
+              sidebarMode={true}
+            />
+          </div>
+          <div className={styles.main}>
+            <MessageList messages={messages} isLoading={isLoading} />
+            {error && <div className={styles.errorBanner}>{error}</div>}
+            <ChatInput onSend={handleSendMessage} isLoading={isLoading} />
           </div>
         </div>
       </div>
+      <AIFloatingBubble
+        open={chatOpen}
+        onToggle={() => { setChatOpen(v => !v); setSidebarOpen(false); }}
+        position="top-right"
+      />
+    </div>
+  );
+}
+
+export default function LifeMentorPage() {
+  return (
+    <WithChat chatType={CHAT_TYPES.LIFE_MENTOR}>
+      <LifeMentorContent />
     </WithChat>
   );
 }

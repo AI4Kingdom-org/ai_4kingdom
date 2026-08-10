@@ -15,10 +15,12 @@ export const CHAT_TYPES: Record<string, ChatType> = {
   CFSC_CHURCH: 'cfsc-church',
   CHINESE_PASTOR_NETWORK: 'chinese-pastor-network',
   ZHIMING_YUAN: 'zhiming-yuan',
+  JIAN_ZHU: 'jian-zhu',
+  LIFE_MENTOR: 'life-mentor',
 } as const;
 
 
-export type ChatType = 'general' | 'sunday-guide' | 'bible-study' | 'homeschool' | 'spiritual-partner' | 'children-mental' | 'johnsung' | 'teen-console' | 'home-console' | 'agape-church' | 'east-christ-home' | 'cfsc-church' | 'chinese-pastor-network' | 'zhiming-yuan';
+export type ChatType = 'general' | 'sunday-guide' | 'bible-study' | 'homeschool' | 'spiritual-partner' | 'children-mental' | 'johnsung' | 'teen-console' | 'home-console' | 'agape-church' | 'east-christ-home' | 'cfsc-church' | 'chinese-pastor-network' | 'zhiming-yuan' | 'jian-zhu' | 'life-mentor';
 
 
 export interface ChatTypeConfig {
@@ -127,6 +129,20 @@ export const CHAT_TYPE_CONFIGS: Record<ChatType, ChatTypeConfig> = {
     assistantId: ASSISTANT_IDS.ZHIMING_YUAN,
     vectorStoreId: VECTOR_STORE_IDS.ZHIMING_YUAN
   },
+  'jian-zhu': {
+    type: 'jian-zhu',
+    title: '祝建牧師助手',
+    description: '祝建牧師專用 AI 助手',
+    assistantId: ASSISTANT_IDS.JIAN_ZHU,
+    vectorStoreId: VECTOR_STORE_IDS.JIAN_ZHU
+  },
+  'life-mentor': {
+    type: 'life-mentor',
+    title: '人生導師',
+    description: '人生導師 AI 助手',
+    assistantId: ASSISTANT_IDS.LIFE_MENTOR,
+    vectorStoreId: VECTOR_STORE_IDS.LIFE_MENTOR
+  },
 
 };
 
@@ -192,6 +208,14 @@ export const CHAT_CONFIGS: Record<ChatType, ChatConfig> = {
   'zhiming-yuan': {
     title: '遠志明耶穌頌 AI 助手',
     description: '遠志明神學問答集牧者助手'
+  },
+  'jian-zhu': {
+    title: '祝建牧師助手',
+    description: '祝建牧師專用 AI 助手'
+  },
+  'life-mentor': {
+    title: '人生導師',
+    description: '人生導師 AI 助手'
   },
 
 };
