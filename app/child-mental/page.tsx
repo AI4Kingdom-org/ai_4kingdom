@@ -56,7 +56,7 @@ function ChildMentalContent() {
   if (!user) return null;
 
   return (
-    <>
+    <div className={styles.pageBackground}>
       <div className={`${styles.floatingPanel}${chatOpen ? ' ' + styles.panelOpen : ''}`}>
         <div className={styles.panelHeader}>
           <span className={styles.panelTitle}>🧒 兒童心理 AI 助手</span>
@@ -84,8 +84,12 @@ function ChildMentalContent() {
           </div>
         </div>
       </div>
-      <AIFloatingBubble open={chatOpen} onToggle={() => { setChatOpen(v => !v); setSidebarOpen(false); }} />
-    </>
+      <AIFloatingBubble
+        open={chatOpen}
+        onToggle={() => { setChatOpen(v => !v); setSidebarOpen(false); }}
+        position="top-right"
+      />
+    </div>
   );
 }
 

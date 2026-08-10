@@ -1,4 +1,4 @@
-/* Child Mental — Floating Chat Widget */
+/* Life Mentor — Floating Chat Widget (styled after agape-church) */
 
 .pageBackground {
   background: #ffffff;
@@ -22,6 +22,10 @@
   --chat-new-btn-color: #ffffff;
   --chat-send-btn-bg: #1a1a1a;
   --chat-send-btn-hover: #333333;
+}
+
+/* ── Floating chat panel ── */
+.floatingPanel {
   position: fixed;
   top: 100px;
   right: 28px;
@@ -47,6 +51,7 @@
   pointer-events: auto;
 }
 
+/* ── Panel header ── */
 .panelHeader {
   display: flex;
   align-items: center;
@@ -82,6 +87,7 @@
   background: rgba(255,255,255,0.35);
 }
 
+/* ── Inner chat layout ── */
 .chatWrapper {
   display: flex;
   flex-direction: column;
@@ -90,14 +96,17 @@
   position: relative;
 }
 
+/* ── Sidebar (overlay on both desktop & mobile) ── */
 .sidebar {
   width: 100%;
+  min-width: unset;
   height: 44px;
   max-height: 44px;
   flex-shrink: 0;
   overflow: hidden;
-  background: #f5f5f5;
-  border-bottom: 1px solid #e0e0e0;
+  background: var(--chat-sidebar-bg);
+  border-bottom: 1px solid var(--chat-border-color);
+  transition: max-height 0.25s ease, height 0.25s ease;
 }
 
 .sidebar.sidebarOpen {
@@ -118,12 +127,12 @@
   justify-content: space-between;
   padding: 0 14px;
   height: 44px;
-  background: #f5f5f5;
+  background: var(--chat-sidebar-bg, #f5f5f5);
   border: none;
   width: 100%;
   cursor: pointer;
   font-size: 0.85rem;
-  color: #1a1a1a;
+  color: var(--chat-text-color, #1a1a1a);
   font-weight: 500;
   flex-shrink: 0;
 }
@@ -133,7 +142,7 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  background: #ffffff;
+  background: var(--chat-bg);
   min-height: 0;
 }
 
@@ -144,6 +153,7 @@
   font-size: 0.85rem;
 }
 
+/* ── Mobile: full-width bottom sheet ── */
 @media (max-width: 768px) {
   .floatingPanel {
     top: auto;

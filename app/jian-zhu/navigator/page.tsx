@@ -1,35 +1,102 @@
 'use client';
 
+import { useState, useEffect, useRef } from 'react';
+import WithChat from '../../components/layouts/WithChat';
 import { useAuth } from '../../contexts/AuthContext';
-import ChatkitEmbed from '../../components/ChatkitEmbed';
-import Script from 'next/script';
+import { useChat } from '../../contexts/ChatContext';
+import ConversationList from '../../components/ConversationList';
+import MessageList from '../../components/Chat/MessageList';
+import ChatInput from '../../components/Chat/ChatInput';
+import AIFloatingBubble from '../../components/Chat/AIFloatingBubble';
+import styles from './JianZhuNavigator.module.css';
 
-export default function JianZhuChatkitPage() {
-  const { user, loading } = useAuth();
+function JianZhuNavigatorContent() {
+  const { user } = useAuth();
+  const {
+    messages,
+    currentThreadId,
+    setCurrentThreadId,
+    sendMessage,
+    isLoading,
+    error,
+    setError,
+    loadChatHistory,
+    setMessages,
+  } = useChat();
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [chatOpen, setChatOpen] = useState(false);
+  const shouldLoadHistory = useRef(false);
 
-  if (loading) return <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', fontSize: 16 }}>Loading...</div>;
-  if (!user) return <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', fontSize: 16 }}>請先登入</div>;
+  useEffect(() => {
+    if (currentThreadId && user && shouldLoadHistory.current) {
+      shouldLoadHistory.current = false;
+      loadChatHistory(user.user_id);
+    }
+  }, [currentThreadId]);
+
+  const handleCreateNewThread = () => {
+    setCurrentThreadId(null);
+    setMessages([]);
+  };
+
+  const handleSelectThread = (threadId: string) => {
+    if (threadId === currentThreadId) return;
+    shouldLoadHistory.current = true;
+    setError('');
+    setMessages([]);
+    setCurrentThreadId(threadId);
+    setSidebarOpen(false);
+  };
+
+  const handleSendMessage = async (message: string) => {
+    await sendMessage(message);
+    window.dispatchEvent(new CustomEvent('refreshConversations'));
+  };
+
+  if (!user) return null;
 
   return (
-    <>
-      <Script src="https://cdn.platform.openai.com/deployments/chatkit/chatkit.js" strategy="afterInteractive" />
-      <div style={{ padding: 16 }}>
-        <div style={{ maxWidth: 1200, margin: '0 auto' }}>
-          <div style={{ width: '90%', maxWidth: 900, margin: '0 auto' }}>
-            <div style={{
-              width: '100%',
-              height: '80vh',
-              minHeight: 600,
-              borderRadius: 12,
-              overflow: 'hidden',
-              boxShadow: '0 4px 10px rgba(0,0,0,0.1)',
-              backgroundColor: '#fff',
-            }}>
-              <ChatkitEmbed userId={user.user_id} module="jian-zhu-navigator" className="jian-zhu-chatkit" />
-            </div>
+    <div className={styles.pageBackground}>
+      <div className={`${styles.floatingPanel}${chatOpen ? ' ' + styles.panelOpen : ''}`}>
+        <div className={styles.panelHeader}>
+          <span className={styles.panelTitle}>祝建牧師 AI 助手</span>
+          <button className={styles.panelClose} onClick={() => setChatOpen(false)}>✕</button>
+        </div>
+        <div className={styles.chatWrapper}>
+          <div className={`${styles.sidebar}${sidebarOpen ? ' ' + styles.sidebarOpen : ''}`}>
+            <button className={styles.sidebarToggle} onClick={() => setSidebarOpen(v => !v)}>
+              <span>📋 對話記錄</span><span>{sidebarOpen ? '▲' : '▼'}</span>
+            </button>
+            <ConversationList
+              userId={user.user_id}
+              type="jian-zhu"
+              currentThreadId={currentThreadId}
+              onSelectThread={handleSelectThread}
+              isCreating={false}
+              onCreateNewThread={handleCreateNewThread}
+              sidebarMode={true}
+            />
+          </div>
+          <div className={styles.main}>
+            <MessageList messages={messages} isLoading={isLoading} />
+            {error && <div className={styles.errorBanner}>{error}</div>}
+            <ChatInput onSend={handleSendMessage} isLoading={isLoading} />
           </div>
         </div>
       </div>
-    </>
+      <AIFloatingBubble
+        open={chatOpen}
+        onToggle={() => { setChatOpen(v => !v); setSidebarOpen(false); }}
+        position="top-right"
+      />
+    </div>
+  );
+}
+
+export default function JianZhuNavigatorPage() {
+  return (
+    <WithChat chatType="jian-zhu">
+      <JianZhuNavigatorContent />
+    </WithChat>
   );
 }

@@ -1,18 +1,22 @@
 'use client';
 
-import Script from 'next/script';
 import { useState, useEffect, useRef } from 'react';
 import SermonInputTabs from '../components/SermonInputTabs';
 import WithChat from '../components/layouts/WithChat';
-import ChatkitEmbed from '../components/ChatkitEmbed';
 import UserIdDisplay from '../components/UserIdDisplay';
 import PromoSegmentEditor from '../components/PromoSegmentEditor';
 import { useCredit } from '../contexts/CreditContext';
 import { useAuth } from '../contexts/AuthContext';
+import { useChat } from '../contexts/ChatContext';
+import ConversationList from '../components/ConversationList';
+import MessageList from '../components/Chat/MessageList';
+import ChatInput from '../components/Chat/ChatInput';
+import AIFloatingBubble from '../components/Chat/AIFloatingBubble';
 import { ASSISTANT_IDS, VECTOR_STORE_IDS } from '../config/constants';
 import { CHAT_TYPES } from '../config/chatTypes';
 import ReactMarkdown from 'react-markdown';
 import styles from './SundayGuide.module.css';
+import chatStyles from './navigator/chat.module.css';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -129,6 +133,24 @@ function SundayGuideContent() {
   const segmentPollingTimersRef = useRef<Record<number, ReturnType<typeof setInterval>>>({});
   const contentRef = useRef<HTMLDivElement>(null);
   const promoPollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // ---- Chat bubble states ----
+  const [chatOpen, setChatOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  // ---- Chat context (provided by WithChat) ----
+  const {
+    messages,
+    currentThreadId,
+    setCurrentThreadId,
+    sendMessage,
+    isLoading: chatLoading,
+    error: chatError,
+    setError: setChatError,
+    setMessages,
+    loadChatHistory,
+  } = useChat();
+  const shouldLoadHistory = useRef(false);
 
   const devSkip = process.env.NEXT_PUBLIC_DEV_SKIP_AUTH === 'true';
   const enablePromo = process.env.NEXT_PUBLIC_ENABLE_PROMO === 'true';
@@ -291,6 +313,40 @@ function SundayGuideContent() {
   useEffect(() => {
     setIsUploadDisabled(remainingCredits <= 0);
   }, [remainingCredits, hasInsufficientTokens]);
+
+  // ---- Chat error auto-clear ----
+  useEffect(() => {
+    if (chatError) {
+      const t = setTimeout(() => setChatError(''), 8000);
+      return () => clearTimeout(t);
+    }
+  }, [chatError, setChatError]);
+
+  useEffect(() => {
+    if (currentThreadId && user && shouldLoadHistory.current) {
+      shouldLoadHistory.current = false;
+      loadChatHistory(user.user_id);
+    }
+  }, [currentThreadId]);
+
+  const handleCreateNewThread = () => {
+    setCurrentThreadId(null);
+    setMessages([]);
+  };
+
+  const handleSelectThread = (threadId: string) => {
+    if (threadId === currentThreadId) return;
+    shouldLoadHistory.current = true;
+    setChatError('');
+    setMessages([]);
+    setCurrentThreadId(threadId);
+    setSidebarOpen(false);
+  };
+
+  const handleSendMessage = async (message: string) => {
+    await sendMessage(message);
+    window.dispatchEvent(new CustomEvent('refreshConversations'));
+  };
 
   // ---- Fetch browsable documents (all at once, client-side pagination) ----
   const fetchAllFileRecords = async () => {
@@ -721,7 +777,6 @@ function SundayGuideContent() {
   // =========================================================================
   return (
     <div className={styles.container}>
-      <Script src="https://cdn.platform.openai.com/deployments/chatkit/chatkit.js" strategy="afterInteractive" />
       <UserIdDisplay />
 
       {/* =============== 1. Upload Section =============== */}
@@ -907,12 +962,6 @@ function SundayGuideContent() {
             </div>
           ) : null}
 
-          {/* ChatKit */}
-          {user && (
-            <div className={styles.chatSection}>
-              <ChatkitEmbed userId={user.user_id} />
-            </div>
-          )}
         </section>
         ) : (
           <div className={styles.guidePlaceholder}>
@@ -923,6 +972,33 @@ function SundayGuideContent() {
           </div>
         )}
       </div>{/* end mainLayout */}
+
+      {/* ── Floating chat bubble + panel ── */}
+      {user && (
+        <>
+          <div className={`${chatStyles.floatingPanel}${chatOpen ? ' ' + chatStyles.panelOpen : ''}`}>
+            <div className={chatStyles.panelHeader}>
+              <span className={chatStyles.panelTitle}>牧者助手 AI</span>
+              <button className={chatStyles.panelClose} onClick={() => setChatOpen(false)}>✕</button>
+            </div>
+            <div className={chatStyles.chatWrapper}>
+              <div className={`${chatStyles.sidebar}${sidebarOpen ? ' ' + chatStyles.sidebarOpen : ''}`}>
+                <button className={chatStyles.sidebarToggle} onClick={() => setSidebarOpen(v => !v)}>
+                  <span>📋 對話記錄</span><span>{sidebarOpen ? '▲' : '▼'}</span>
+                </button>
+                <ConversationList userId={user.user_id} type={CHAT_TYPES.SUNDAY_GUIDE} currentThreadId={currentThreadId}
+                  onSelectThread={handleSelectThread} isCreating={false} onCreateNewThread={handleCreateNewThread} sidebarMode={true} />
+              </div>
+              <div className={chatStyles.main}>
+                <MessageList messages={messages} isLoading={chatLoading} />
+                {chatError && <div style={{ color: '#f55', padding: '6px 16px', background: '#3a0000' }}>{chatError}</div>}
+                <ChatInput onSend={handleSendMessage} isLoading={chatLoading} />
+              </div>
+            </div>
+          </div>
+          <AIFloatingBubble open={chatOpen} onToggle={() => { setChatOpen(v => !v); setSidebarOpen(false); }} />
+        </>
+      )}
     </div>
   );
 }
@@ -956,7 +1032,7 @@ export default function SundayGuideV2() {
   }
 
   return (
-    <WithChat chatType={CHAT_TYPES.SUNDAY_GUIDE} disableChatContext>
+    <WithChat chatType={CHAT_TYPES.SUNDAY_GUIDE}>
       <SundayGuideContent />
     </WithChat>
   );

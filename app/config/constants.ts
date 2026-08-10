@@ -13,6 +13,7 @@ export const ASSISTANT_IDS = {
   JIAN_ZHU: 'asst_bGYjfmBTbjuF0tCGbJ0yEa8I', // 祝建牧師助手（獨立）
   CFSC_CHURCH: 'asst_6JH0Gph4Mmdwskp56YkQVIh5', // CFSC Church 專用牧者助手
   CHINESE_PASTOR_NETWORK: 'asst_EF1jZ1CtvMdM6nqSdwAs4kAy', // 华牧网络教会事工联盟專用牧者助手
+  LIFE_MENTOR: 'asst_I6mMhEhyXTsgoy0LRkOxlISv', // 人生導師助手
   // ... 其他类型的助手
 
 };
@@ -31,6 +32,7 @@ export const VECTOR_STORE_IDS = {
   JIAN_ZHU: 'vs_6853c96fdfb88191a8421097e5bea232', // 祝建牧師助手向量庫
   CFSC_CHURCH: 'vs_6a033b3feb8c8191a802c848539322a1', // CFSC Church 專用向量庫
   CHINESE_PASTOR_NETWORK: 'vs_6853c96fdfb88191a8421097e5bea232', // 华牧网络教会事工联盟專用向量庫
+  LIFE_MENTOR: 'vs_67b28ec53da48191863817002d79222b', // 人生導師助手，沿用 CHILDREN_MENTAL 相同的向量存儲 ID
   // ... 其他类型的向量存储
 };
 
@@ -81,6 +83,12 @@ export const SUNDAY_GUIDE_UNITS = {
     assistantId: ASSISTANT_IDS.CHINESE_PASTOR_NETWORK,
     vectorStoreId: VECTOR_STORE_IDS.CHINESE_PASTOR_NETWORK,
     allowedUploaders: ['1', '24', '22', '6'] as string[],
+    accessType: 'public' as const,
+  },
+  'zhiming-yuan': {
+    assistantId: ASSISTANT_IDS.SUNDAY_GUIDE,
+    vectorStoreId: VECTOR_STORE_IDS.ZHIMING_YUAN,
+    allowedUploaders: ['1', '24'] as string[],
     accessType: 'public' as const,
   },
   zhimingYuan: {
