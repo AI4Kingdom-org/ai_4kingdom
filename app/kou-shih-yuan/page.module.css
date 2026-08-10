@@ -1,101 +1,166 @@
-.container {
-  display: flex;
-  flex-direction: column;
+/* Kou Shih Yuan — Floating Chat Widget (styled after homeschool) */
+
+.pageBackground {
+  background: #ffffff;
   min-height: 100vh;
-  padding: 20px;
-  max-width: 1200px;
-  margin: 0 auto;
-  align-items: center; /* 置中對齊 */
+  width: 100%;
 }
 
-.title {
-  text-align: center;
-  margin-bottom: 20px;
-  color: #333;
-}
-
-.chatSection {
-  width: 100%; /* 確保 100% 寬度 */
-  max-width: 100%; /* 確保不會超出父容器寬度 */
-  height: 450px; /* 稍微增加高度以提供更好的聊天體驗 */
-  margin-bottom: 20px; /* 下方邊距，與按鈕區域分隔 */
-  margin-left: 0;
-  border-radius: 12px; /* 添加圓角 */
-  overflow: hidden; /* 確保內容不會溢出 */
-  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1); /* 增加陰影效果 */
-  transition: opacity 0.3s ease, transform 0.3s ease;
-  box-sizing: border-box;
-}
-
-.chatSection > div {
-  width: 100% !important; /* 確保直接子元素也是100%寬度 */
-}
-
-.buttonGroup {
-  display: flex;
-  justify-content: center;
-  gap: 10px;
-  margin-bottom: 20px;
-  flex-wrap: wrap;
-}
-
-/* 文檔列表樣式 */
-.fileListSection {
-  width: 90%;
-  max-width: 900px;
-  margin: 0 auto 20px auto;
+.floatingPanel {
+  --chat-bg: #ffffff;
+  --chat-sidebar-bg: #f5f5f5;
+  --chat-input-bg: #eeeeee;
+  --chat-input-field-bg: #ffffff;
+  --chat-text-color: #1a1a1a;
+  --chat-secondary-text: #666666;
+  --chat-border-color: #e0e0e0;
+  --chat-item-hover-bg: rgba(0, 0, 0, 0.06);
+  --chat-item-active-bg: rgba(0, 0, 0, 0.12);
+  --chat-bot-msg-bg: #f0f0f0;
+  --chat-bot-msg-color: #1a1a1a;
+  --chat-new-btn-bg: #1a1a1a;
+  --chat-new-btn-color: #ffffff;
+  --chat-send-btn-bg: #1a1a1a;
+  --chat-send-btn-hover: #333333;
+  position: fixed;
+  top: 100px;
+  right: 28px;
+  z-index: 1099;
+  width: 712px;
+  height: 520px;
+  border-radius: 16px;
+  background: var(--chat-bg);
+  box-shadow: 0 8px 40px rgba(15, 23, 42, 0.18), 0 2px 12px rgba(0,0,0,0.1);
+  border: 1px solid #e2e8f0;
   display: flex;
   flex-direction: column;
-  align-items: center;
+  overflow: hidden;
+  opacity: 0;
+  transform: translateY(-16px) scale(0.97);
+  pointer-events: none;
+  transition: opacity 0.22s ease, transform 0.22s ease;
 }
 
-.fileListHeader {
-  display: flex;
-  align-items: center;
-  margin-bottom: 12px;
-  width: 100%;
-  justify-content: center;
+.floatingPanel.panelOpen {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  pointer-events: auto;
 }
 
-.fileListTitle {
-  margin: 0;
-  font-size: 14px;
-  color: #333;
-  font-weight: 600;
-  white-space: nowrap;
-}
-
-.fileListContainer {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-  width: 100%;
-  justify-content: center;
-  align-items: flex-start;
-}
-
-.fileItem {
+.panelHeader {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px;
-  background: white;
-  border: 2px solid #e1e4e8;
-  border-radius: 6px;
+  padding: 12px 16px;
+  background: linear-gradient(135deg, #3b82f6 0%, #6366f1 100%);
+  flex-shrink: 0;
+}
+
+.panelTitle {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #ffffff;
+  margin: 0;
+}
+
+.panelClose {
+  background: rgba(255,255,255,0.2);
+  border: none;
+  color: #ffffff;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
   cursor: pointer;
-  transition: all 0.3s ease;
+  font-size: 0.85rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s;
+}
+
+.panelClose:hover {
+  background: rgba(255,255,255,0.35);
+}
+
+.chatWrapper {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+}
+
+.sidebar {
   width: 100%;
-  max-width: 280px;
+  height: 44px;
+  max-height: 44px;
+  flex-shrink: 0;
+  overflow: hidden;
+  background: #f5f5f5;
+  border-bottom: 1px solid #e0e0e0;
 }
 
-.fileItem:hover {
-  border-color: #0070f3;
-  background-color: #f7f9fc;
-  box-shadow: 0 2px 8px rgba(0, 112, 243, 0.1);
+.sidebar.sidebarOpen {
+  position: absolute;
+  top: 44px;
+  left: 0;
+  right: 0;
+  z-index: 10;
+  height: auto;
+  max-height: calc(100% - 44px - 70px);
+  overflow-y: auto;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 
-.fileItemSelected {
-  border-color: #0070f3;
-  background-color: #f0f6ff;
-  box-shadow: 0 2px 8px rgba(0, 112, 243, 0.2);
+.sidebarToggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 14px;
+  height: 44px;
+  background: #f5f5f5;
+  border: none;
+  width: 100%;
+  cursor: pointer;
+  font-size: 0.85rem;
+  color: #1a1a1a;
+  font-weight: 500;
+  flex-shrink: 0;
+}
+
+.main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: #ffffff;
+  min-height: 0;
+}
+
+.errorBanner {
+  color: #f55;
+  padding: 6px 16px;
+  background: #3a0000;
+  font-size: 0.85rem;
+}
+
+@media (max-width: 768px) {
+  .floatingPanel {
+    top: auto;
+    bottom: 0;
+    right: 0;
+    left: 0;
+    width: 100%;
+    height: 72vh;
+    border-radius: 20px 20px 0 0;
+    transform: translateY(24px) scale(1);
+  }
+
+  .floatingPanel.panelOpen {
+    transform: translateY(0) scale(1);
+  }
+
+  .sidebar.sidebarOpen {
+    max-height: calc(72vh - 44px - 70px);
+  }
 }
