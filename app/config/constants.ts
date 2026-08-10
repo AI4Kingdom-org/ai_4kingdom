@@ -14,7 +14,7 @@ export const ASSISTANT_IDS = {
   CFSC_CHURCH: 'asst_6JH0Gph4Mmdwskp56YkQVIh5', // CFSC Church 專用牧者助手
   CHINESE_PASTOR_NETWORK: 'asst_EF1jZ1CtvMdM6nqSdwAs4kAy', // 华牧网络教会事工联盟專用牧者助手
   LIFE_MENTOR: 'asst_I6mMhEhyXTsgoy0LRkOxlISv', // 人生導師助手
-  KOU_SHIH_YUAN: 'asst_Tt2yw5WfPXNck2NAEny2kgYU', // 口試院助手
+  KOU_SHIH_YUAN: 'asst_Tt2yw5WfPXNck2NAEny2kgYU', // 寇世遠AI助手
   // ... 其他类型的助手
 
 };
@@ -34,7 +34,7 @@ export const VECTOR_STORE_IDS = {
   CFSC_CHURCH: 'vs_6a033b3feb8c8191a802c848539322a1', // CFSC Church 專用向量庫
   CHINESE_PASTOR_NETWORK: 'vs_6853c96fdfb88191a8421097e5bea232', // 华牧网络教会事工联盟專用向量庫
   LIFE_MENTOR: 'vs_67b28ec53da48191863817002d79222b', // 人生導師助手，沿用 CHILDREN_MENTAL 相同的向量存儲 ID
-  KOU_SHIH_YUAN: 'vs_6953c93da50081919fe31dbfef84dbb4', // 口試院助手向量庫
+  KOU_SHIH_YUAN: 'vs_6953c93da50081919fe31dbfef84dbb4', // 寇世遠AI助手向量庫
   // ... 其他类型的向量存储
 };
 
