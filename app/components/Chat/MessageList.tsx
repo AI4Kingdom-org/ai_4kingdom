@@ -15,14 +15,15 @@ interface MessageListProps {
 }
 
 export default function MessageList({ messages }: MessageListProps) {
-  const chatEndRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    const el = containerRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
   }, [messages]);
 
   return (
-    <div className={styles.messageList}>
+    <div className={styles.messageList} ref={containerRef}>
       {messages.map((message, index) => (
         <div
           key={index}
@@ -41,7 +42,6 @@ export default function MessageList({ messages }: MessageListProps) {
           )}
         </div>
       ))}
-      <div ref={chatEndRef} />
     </div>
   );
 }
