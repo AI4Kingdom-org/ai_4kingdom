@@ -108,6 +108,30 @@ export default function SermonInputTabs({
     return [h, m, s].map((v) => String(v).padStart(2, '0')).join(':');
   };
 
+  /**
+   * 輸入遮罩：使用者只需輸入數字，自動補上冒號組成 HH:MM:SS。
+   * 分鐘/秒鐘超過 59 時自動夾在 59；刪除冒號時視同刪除前一位數字，讓 backspace 體感自然。
+   */
+  const formatTimeMask = (raw: string, prevValue: string): string => {
+    const isDeleting = raw.length < prevValue.length;
+    let digits = raw.replace(/\D/g, '');
+    if (isDeleting && digits.length === prevValue.replace(/\D/g, '').length) {
+      // 使用者刪除的是自動補上的冒號本身，一併刪除前一位數字
+      digits = digits.slice(0, -1);
+    }
+    digits = digits.slice(0, 6);
+
+    const clamp59 = (pair: string) => (pair.length === 2 && Number(pair) > 59 ? '59' : pair);
+
+    const hh = digits.slice(0, 2);
+    const mm = clamp59(digits.slice(2, 4));
+    const ss = clamp59(digits.slice(4, 6));
+
+    if (digits.length <= 2) return hh;
+    if (digits.length <= 4) return `${hh}:${mm}`;
+    return `${hh}:${mm}:${ss}`;
+  };
+
   // =========================================================================
   // YouTube: fetch captions → fallback to audio extraction + Whisper
   // =========================================================================
@@ -734,10 +758,13 @@ export default function SermonInputTabs({
                 <span className={styles.ytSegmentLabel}>開始</span>
                 <input
                   type="text"
+                  inputMode="numeric"
+                  autoComplete="off"
+                  maxLength={8}
                   className={styles.ytSegmentInput}
                   placeholder="00:00:00"
                   value={ytStartTime}
-                  onChange={(e) => setYtStartTime(e.target.value)}
+                  onChange={(e) => setYtStartTime(formatTimeMask(e.target.value, ytStartTime))}
                   disabled={
                     disabled ||
                     ytTranscription.status === 'loading' ||
@@ -748,10 +775,13 @@ export default function SermonInputTabs({
                 <span className={styles.ytSegmentLabel}>結束</span>
                 <input
                   type="text"
+                  inputMode="numeric"
+                  autoComplete="off"
+                  maxLength={8}
                   className={styles.ytSegmentInput}
                   placeholder="00:00:00"
                   value={ytEndTime}
-                  onChange={(e) => setYtEndTime(e.target.value)}
+                  onChange={(e) => setYtEndTime(formatTimeMask(e.target.value, ytEndTime))}
                   disabled={
                     disabled ||
                     ytTranscription.status === 'loading' ||
