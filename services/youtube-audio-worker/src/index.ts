@@ -347,7 +347,9 @@ async function splitAudio(
   // Re-encode to 16kHz mono mp3 — ensures clean splits at any boundary (not limited to keyframes).
   // -c copy on webm/opus silently drops audio at cluster boundaries, causing missing sections.
   const pattern = join(outputDir, `chunk_%03d.mp3`);
-  const cmd = `"${ffmpeg}" -i "${inputPath}" -f segment -segment_time ${chunkSec} -c:a libmp3lame -q:a 5 -ar 16000 -ac 1 -reset_timestamps 1 "${pattern}"`;
+  // -vn: drop any video stream — muxed fallback downloads (best[height<=360]) carry
+  // a video track that the mp3 segment muxer can't accept, which fails the whole command.
+  const cmd = `"${ffmpeg}" -i "${inputPath}" -vn -f segment -segment_time ${chunkSec} -c:a libmp3lame -q:a 5 -ar 16000 -ac 1 -reset_timestamps 1 "${pattern}"`;
   await execAsync(cmd, { timeout: 180_000, maxBuffer: 50 * 1024 * 1024 });
   const files = await readdir(outputDir);
   return files.filter((f) => /^chunk_\d+\.mp3$/.test(f)).sort().map((f) => join(outputDir, f));
