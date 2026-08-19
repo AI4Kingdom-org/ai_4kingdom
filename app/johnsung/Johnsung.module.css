@@ -1,0 +1,166 @@
+/* Johnsung — Floating Chat Widget */
+
+.pageBackground {
+  background: #ffffff;
+  min-height: 100vh;
+  width: 100%;
+}
+
+.floatingPanel {
+  --chat-bg: #ffffff;
+  --chat-sidebar-bg: #f5f5f5;
+  --chat-input-bg: #eeeeee;
+  --chat-input-field-bg: #ffffff;
+  --chat-text-color: #1a1a1a;
+  --chat-secondary-text: #666666;
+  --chat-border-color: #e0e0e0;
+  --chat-item-hover-bg: rgba(0, 0, 0, 0.06);
+  --chat-item-active-bg: rgba(0, 0, 0, 0.12);
+  --chat-bot-msg-bg: #f0f0f0;
+  --chat-bot-msg-color: #1a1a1a;
+  --chat-new-btn-bg: #1a1a1a;
+  --chat-new-btn-color: #ffffff;
+  --chat-send-btn-bg: #1a1a1a;
+  --chat-send-btn-hover: #333333;
+  position: fixed;
+  top: 100px;
+  right: 28px;
+  z-index: 1099;
+  width: 712px;
+  height: 520px;
+  border-radius: 16px;
+  background: var(--chat-bg);
+  box-shadow: 0 8px 40px rgba(15, 23, 42, 0.18), 0 2px 12px rgba(0,0,0,0.1);
+  border: 1px solid #e2e8f0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  opacity: 0;
+  transform: translateY(-16px) scale(0.97);
+  pointer-events: none;
+  transition: opacity 0.22s ease, transform 0.22s ease;
+}
+
+.floatingPanel.panelOpen {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  pointer-events: auto;
+}
+
+.panelHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  background: linear-gradient(135deg, #3b82f6 0%, #6366f1 100%);
+  flex-shrink: 0;
+}
+
+.panelTitle {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #ffffff;
+  margin: 0;
+}
+
+.panelClose {
+  background: rgba(255,255,255,0.2);
+  border: none;
+  color: #ffffff;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 0.85rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s;
+}
+
+.panelClose:hover {
+  background: rgba(255,255,255,0.35);
+}
+
+.chatWrapper {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+}
+
+.sidebar {
+  width: 100%;
+  height: 44px;
+  max-height: 44px;
+  flex-shrink: 0;
+  overflow: hidden;
+  background: #f5f5f5;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.sidebar.sidebarOpen {
+  position: absolute;
+  top: 44px;
+  left: 0;
+  right: 0;
+  z-index: 10;
+  height: auto;
+  max-height: calc(100% - 44px - 70px);
+  overflow-y: auto;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.sidebarToggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 14px;
+  height: 44px;
+  background: #f5f5f5;
+  border: none;
+  width: 100%;
+  cursor: pointer;
+  font-size: 0.85rem;
+  color: #1a1a1a;
+  font-weight: 500;
+  flex-shrink: 0;
+}
+
+.main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: #ffffff;
+  min-height: 0;
+}
+
+.errorBanner {
+  color: #f55;
+  padding: 6px 16px;
+  background: #3a0000;
+  font-size: 0.85rem;
+}
+
+@media (max-width: 768px) {
+  .floatingPanel {
+    top: auto;
+    bottom: 0;
+    right: 0;
+    left: 0;
+    width: 100%;
+    height: 72vh;
+    border-radius: 20px 20px 0 0;
+    transform: translateY(24px) scale(1);
+  }
+
+  .floatingPanel.panelOpen {
+    transform: translateY(0) scale(1);
+  }
+
+  .sidebar.sidebarOpen {
+    max-height: calc(72vh - 44px - 70px);
+  }
+}

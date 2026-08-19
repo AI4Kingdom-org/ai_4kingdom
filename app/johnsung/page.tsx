@@ -1,36 +1,102 @@
 'use client';
 
-import { useAuth } from '../contexts/AuthContext';
+import { useState, useEffect, useRef } from 'react';
 import WithChat from '../components/layouts/WithChat';
-import Chat from '../components/Chat/Chat';
-import { ASSISTANT_IDS, VECTOR_STORE_IDS } from '../config/constants';
-import styles from './page.module.css';  // 导入样式
+import { useAuth } from '../contexts/AuthContext';
+import { useChat } from '../contexts/ChatContext';
+import ConversationList from '../components/ConversationList';
+import MessageList from '../components/Chat/MessageList';
+import ChatInput from '../components/Chat/ChatInput';
+import AIFloatingBubble from '../components/Chat/AIFloatingBubble';
+import styles from './Johnsung.module.css';
 
-export default function NewChatPage() {
-  const { user, loading } = useAuth();
+function JohnsungContent() {
+  const { user } = useAuth();
+  const {
+    messages,
+    currentThreadId,
+    setCurrentThreadId,
+    sendMessage,
+    isLoading,
+    error,
+    setError,
+    loadChatHistory,
+    setMessages,
+  } = useChat();
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [chatOpen, setChatOpen] = useState(false);
+  const shouldLoadHistory = useRef(false);
 
-  if (loading) {
-    return <div>Loading, please wait...</div>;
-  }
+  useEffect(() => {
+    if (currentThreadId && user && shouldLoadHistory.current) {
+      shouldLoadHistory.current = false;
+      loadChatHistory(user.user_id);
+    }
+  }, [currentThreadId]);
 
-  if (!user) {
-    return <div>请先登录</div>;
-  }
-  
+  const handleCreateNewThread = () => {
+    setCurrentThreadId(null);
+    setMessages([]);
+  };
+
+  const handleSelectThread = (threadId: string) => {
+    if (threadId === currentThreadId) return;
+    shouldLoadHistory.current = true;
+    setError('');
+    setMessages([]);
+    setCurrentThreadId(threadId);
+    setSidebarOpen(false);
+  };
+
+  const handleSendMessage = async (message: string) => {
+    await sendMessage(message);
+    window.dispatchEvent(new CustomEvent('refreshConversations'));
+  };
+
+  if (!user) return null;
+
   return (
-    <div className={styles.container}>
-      <div className={styles.content}>
-        <div className={styles.chatContainer}>
-          <WithChat chatType="johnsung">
-            <Chat
-              type="johnsung"
-              assistantId={ASSISTANT_IDS.JOHNSUNG}
-              vectorStoreId={VECTOR_STORE_IDS.JOHNSUNG}
+    <div className={styles.pageBackground}>
+      <div className={`${styles.floatingPanel}${chatOpen ? ' ' + styles.panelOpen : ''}`}>
+        <div className={styles.panelHeader}>
+          <span className={styles.panelTitle}>📖 宋尚节牧师 AI 助手</span>
+          <button className={styles.panelClose} onClick={() => setChatOpen(false)}>✕</button>
+        </div>
+        <div className={styles.chatWrapper}>
+          <div className={`${styles.sidebar}${sidebarOpen ? ' ' + styles.sidebarOpen : ''}`}>
+            <button className={styles.sidebarToggle} onClick={() => setSidebarOpen(v => !v)}>
+              <span>📋 對話記錄</span><span>{sidebarOpen ? '▲' : '▼'}</span>
+            </button>
+            <ConversationList
               userId={user.user_id}
+              type="johnsung"
+              currentThreadId={currentThreadId}
+              onSelectThread={handleSelectThread}
+              isCreating={false}
+              onCreateNewThread={handleCreateNewThread}
+              sidebarMode={true}
             />
-          </WithChat>
+          </div>
+          <div className={styles.main}>
+            <MessageList messages={messages} isLoading={isLoading} />
+            {error && <div className={styles.errorBanner}>{error}</div>}
+            <ChatInput onSend={handleSendMessage} isLoading={isLoading} />
+          </div>
         </div>
       </div>
+      <AIFloatingBubble
+        open={chatOpen}
+        onToggle={() => { setChatOpen(v => !v); setSidebarOpen(false); }}
+        position="top-right"
+      />
     </div>
+  );
+}
+
+export default function JohnsungPage() {
+  return (
+    <WithChat chatType="johnsung">
+      <JohnsungContent />
+    </WithChat>
   );
 }
