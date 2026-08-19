@@ -449,6 +449,35 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ success: false, error: '紀錄缺少主鍵 (assistantId / Timestamp)' }, { status: 500 });
     }
 
+    // 清理 OpenAI 端資源（best-effort，不阻斷 DynamoDB 刪除）：
+    // 1) 原始上傳檔案本身（item.fileId）
+    // 2) process-document 生成後回存的 summary/devotional/bibleStudy 檔案（item.generatedFileIds）
+    // vectorStoreId 為該單位共用向量庫，僅移除檔案關聯 + 刪除檔案物件，絕不刪除向量庫本身
+    const openaiFileRefs = new Map<string, string>(); // fileId -> vectorStoreId
+    for (const item of items) {
+      if (item.fileId && item.vectorStoreId) openaiFileRefs.set(item.fileId, item.vectorStoreId);
+      if (Array.isArray(item.generatedFileIds) && item.vectorStoreId) {
+        for (const genId of item.generatedFileIds) {
+          if (genId) openaiFileRefs.set(genId, item.vectorStoreId);
+        }
+      }
+    }
+
+    await Promise.all(
+      Array.from(openaiFileRefs.entries()).map(async ([openaiFileId, vsId]) => {
+        try {
+          await openai.vectorStores.files.delete(openaiFileId, { vector_store_id: vsId });
+        } catch (e) {
+          console.warn(`[WARN] 移除向量庫檔案關聯失敗（可能已不存在）: ${openaiFileId}`, e);
+        }
+        try {
+          await openai.files.delete(openaiFileId);
+        } catch (e) {
+          console.warn(`[WARN] 刪除 OpenAI 檔案失敗（可能已不存在）: ${openaiFileId}`, e);
+        }
+      })
+    );
+
     // 刪除所有同 fileId 的紀錄（可能因重傳/重試產生多筆，一次清乾淨）
     await Promise.all(
       items
@@ -460,8 +489,6 @@ export async function DELETE(request: Request) {
           }))
         )
     );
-
-    // TODO: 若需連動刪除 OpenAI vector store 或文件，於此擴充（需要保存 vectorStoreId / openai file id）
 
     return NextResponse.json({ success: true, message: '刪除成功', fileId });
   } catch (error) {

@@ -32,6 +32,7 @@ export async function GET(request: Request) {
     const vectorStoreId = url.searchParams.get('vectorStoreId');
     const fileName = url.searchParams.get('fileName');
     const unitId = url.searchParams.get('unitId');
+    const fileId = url.searchParams.get('fileId');
 
     if (!vectorStoreId || !fileName) {
       return NextResponse.json(
@@ -40,16 +41,20 @@ export async function GET(request: Request) {
       );
     }
 
-    console.log('[DEBUG] 檢查文件處理結果:', { vectorStoreId, fileName, unitId });
-    
+    console.log('[DEBUG] 檢查文件處理結果:', { vectorStoreId, fileName, unitId, fileId });
+
     const docClient = await createDynamoDBClient();
-    
+
     // 查詢處理結果 - 修改為使用 generationStatus 或 completed
     // Check for completed records
-    const filterExpr = unitId 
-      ? "vectorStoreId = :vectorStoreId AND fileName = :fileName AND unitId = :unitId AND (generationStatus = :completed OR (attribute_not_exists(generationStatus) AND completed = :completedFlag))"
-      : "vectorStoreId = :vectorStoreId AND fileName = :fileName AND (generationStatus = :completed OR (attribute_not_exists(generationStatus) AND completed = :completedFlag))";
-    
+    // 若提供 fileId，必須精確匹配該次上傳的記錄，避免同檔名的舊記錄（已完成）
+    // 誤判為本次上傳已完成，導致前端過早顯示「處理完成」而內容其實仍在生成中
+    const filterParts = ["vectorStoreId = :vectorStoreId", "fileName = :fileName"];
+    if (unitId) filterParts.push("unitId = :unitId");
+    if (fileId) filterParts.push("fileId = :fileId");
+    filterParts.push("(generationStatus = :completed OR (attribute_not_exists(generationStatus) AND completed = :completedFlag))");
+    const filterExpr = filterParts.join(" AND ");
+
     const completedParams: any = {
       TableName: SUNDAY_GUIDE_TABLE,
       FilterExpression: filterExpr,
@@ -60,9 +65,12 @@ export async function GET(request: Request) {
         ":completedFlag": true
       }
     };
-    
+
     if (unitId) {
       completedParams.ExpressionAttributeValues[":unitId"] = unitId;
+    }
+    if (fileId) {
+      completedParams.ExpressionAttributeValues[":fileId"] = fileId;
     }
 
     const completedItems = await scanAllPages(docClient, completedParams);
@@ -84,13 +92,16 @@ export async function GET(request: Request) {
     }
 
     // Check for failed records
+    const failedFilterParts = ["vectorStoreId = :vectorStoreId", "fileName = :fileName", "generationStatus = :failed"];
+    if (fileId) failedFilterParts.push("fileId = :fileId");
     const failedParams = {
       TableName: SUNDAY_GUIDE_TABLE,
-      FilterExpression: "vectorStoreId = :vectorStoreId AND fileName = :fileName AND generationStatus = :failed",
+      FilterExpression: failedFilterParts.join(" AND "),
       ExpressionAttributeValues: {
         ":vectorStoreId": vectorStoreId,
         ":fileName": fileName,
-        ":failed": "failed"
+        ":failed": "failed",
+        ...(fileId ? { ":fileId": fileId } : {})
       }
     };
     const failedItems = await scanAllPages(docClient, failedParams);
