@@ -392,7 +392,7 @@ export default function AssistantManager({
           return;
         }
         try {
-          const resultResponse = await fetch(`/api/sunday-guide/check-result?vectorStoreId=${vectorStoreId}&fileName=${encodeURIComponent(uploadedFileName)}`);
+          const resultResponse = await fetch(`/api/sunday-guide/check-result?vectorStoreId=${vectorStoreId}&fileName=${encodeURIComponent(uploadedFileName)}${uploadedFileId ? `&fileId=${encodeURIComponent(uploadedFileId)}` : ''}`);
           if (!resultResponse.ok) {
             setTimeout(checkResult, 5000);
             return;
