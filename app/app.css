@@ -20,6 +20,14 @@ body {
     overflow-y: auto;
   }
   
+  /* 由 IframeAutoHeight 在 WordPress 自動高度 iframe 內加上：高度改由內容決定，不再撐滿 iframe */
+  html.a4k-autoheight,
+  html.a4k-autoheight body,
+  html.a4k-autoheight main {
+    min-height: 0;
+    overflow-y: hidden;
+  }
+
   button {
     border-radius: 8px;
     border: 1px solid transparent;

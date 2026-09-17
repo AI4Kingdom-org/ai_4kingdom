@@ -9,6 +9,7 @@ import ConversationList from '../components/ConversationList';
 import MessageList from '../components/Chat/MessageList';
 import ChatInput from '../components/Chat/ChatInput';
 import AIFloatingBubble from '../components/Chat/AIFloatingBubble';
+import IframeAutoHeight from '../components/IframeAutoHeight';
 import ReactMarkdown from 'react-markdown';
 import type { Components } from 'react-markdown';
 import styles from '../sunday-guide-v2/SundayGuide.module.css';
@@ -390,7 +391,7 @@ function ZhimingYuanContent() {
 
           <div className={styles.contentWrapper}>
             {sermonContent ? (
-              <div className={`${styles.contentArea} ${styles.hasContent}`} style={{ maxHeight: 'none', overflowY: 'visible' }}>
+              <div className={`${styles.contentArea} ${styles.hasContent}`}>
                 {renderNavContent()}
               </div>
             ) : (
@@ -450,6 +451,7 @@ function ZhimingYuanContent() {
           />
         </>
       )}
+      <IframeAutoHeight />
     </div>
   );
 }

@@ -2,7 +2,8 @@
 
 .bubble {
   position: fixed;
-  bottom: 28px;
+  /* --a4k-vp-*：嵌在自動高度 iframe 時，使用者可視範圍的偏移（見 IframeAutoHeight） */
+  bottom: calc(28px + var(--a4k-vp-bottom, 0px));
   right: 28px;
   z-index: 1100;
   height: 100px;
@@ -21,7 +22,7 @@
 }
 
 .topRight {
-  top: 28px;
+  top: calc(28px + var(--a4k-vp-top, 0px));
   bottom: auto;
 }
 

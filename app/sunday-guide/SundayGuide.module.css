@@ -208,8 +208,6 @@
   list-style: none;
   padding: 0.25rem 0;
   margin: 0;
-  max-height: 260px;
-  overflow-y: auto;
   background: #ffffff;
   border-radius: 10px;
 }

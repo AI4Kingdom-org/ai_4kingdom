@@ -11,6 +11,10 @@
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
 }
 
+:global(html.a4k-autoheight) .container {
+  min-height: 0;
+}
+
 /* ==================== Upload Hero Section ==================== */
 .uploadHero {
   display: flex;
@@ -114,10 +118,6 @@
   padding: 1rem 0.75rem 0.75rem;
   border: 1px solid rgba(99, 102, 241, 0.12);
   box-shadow: 0 8px 30px rgba(15, 23, 42, 0.06);
-  position: sticky;
-  top: 1.5rem;
-  max-height: calc(100vh - 3rem);
-  overflow-y: auto;
   flex-shrink: 0;
 }
 
@@ -468,8 +468,7 @@
 .contentArea {
   width: 100%;
   min-height: 300px;
-  max-height: 70vh;
-  overflow-y: auto;
+  overflow-wrap: anywhere;
   border: 1px solid #e2e8f0;
   border-radius: 10px;
   padding: 1.5rem 1.75rem;
@@ -929,11 +928,6 @@
     position: static;
     max-height: none;
     overflow-y: visible;
-  }
-
-  .docsListScrollable {
-    max-height: 220px;
-    overflow-y: auto;
   }
 
   .docsSectionHint {
