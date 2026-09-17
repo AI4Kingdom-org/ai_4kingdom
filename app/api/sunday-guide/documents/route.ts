@@ -303,9 +303,11 @@ export async function POST(request: Request) {
       stepStartTime = Date.now();
       console.log(`[DEBUG] 步驟 4: 開始${currentStep}`);
       // 呼叫內部 API 處理內容（用 request.url 取得 origin，避免 serverless 相對路徑失效）
-      // 步驟 4: fire-and-forget 呼叫 process-document，不 await，避免 CloudFront 30s 超時
+      // 步驟 4: 呼叫 process-document。生產環境它會轉交 Fly.io worker 並在數秒內回 202，
+      // 因此要 await：Amplify 回應後會凍結 Lambda，fire-and-forget 的請求可能根本沒送出。
+      // 設逾時是為了本機開發（無 worker 時 process-document 會同步跑完整流程），不擋住上傳回應。
       const apiOrigin = new URL(request.url).origin;
-      fetch(`${apiOrigin}/api/sunday-guide/process-document`, {
+      await fetch(`${apiOrigin}/api/sunday-guide/process-document`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -315,10 +317,10 @@ export async function POST(request: Request) {
           userId: parsedUserId,
           fileId: openaiFile.id,
           unitId: unitId || undefined
-        })
-      }).catch(e => console.log(`[documents] process-document kick failed: ${e.message}`));
-      console.log(`[DEBUG] 步驟 4: process-document 已觸發（fire-and-forget）`);
-      // 立即回傳，Lambda 繼續在背景執行 process-document
+        }),
+        signal: AbortSignal.timeout(20_000),
+      }).catch(e => console.log(`[documents] process-document kick: ${e.message}`));
+      console.log(`[DEBUG] 步驟 4: process-document 已觸發`);
       return NextResponse.json({
         success: true,
         vectorStoreId: vectorStore.id,

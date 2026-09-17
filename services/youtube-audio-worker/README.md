@@ -58,6 +58,25 @@ fly deploy
 | `YOUTUBE_WORKER_URL` | `https://youtube-audio-worker.fly.dev` | Fly.io 服務 URL |
 | `YOUTUBE_WORKER_SECRET` | `your-shared-secret-here` | 與 Fly.io 共用的驗證金鑰 |
 
+## 講章內容生成（process-document）
+
+牧者助手上傳講章後的 summary / devotional / bibleStudy 生成也在這個 worker 執行
+（`POST /api/sunday-guide/process-document`，收到即回 202，結果寫回 DynamoDB，前端輪詢 check-result）。
+原因：Amplify 在 28 秒回應逾時後會凍結 Lambda，生成常卡在半路、跑完也寫不回資料庫。
+
+- 核心程式碼在主專案 `app/lib/sunday-guide/processDocument.ts`，由 `npm run bundle:shared`
+  打包成 `generated/process-document.cjs`（需提交）。**改了主專案那邊的生成邏輯或提示詞處理，都要重新打包並部署 worker。**
+- 部署一律用 `npm run deploy`（= 打包 + `fly deploy`）。
+- 額外需要的 secrets（DynamoDB 存取）：
+
+```bash
+fly secrets set NEXT_PUBLIC_ACCESS_KEY_ID=... NEXT_PUBLIC_SECRET_ACCESS_KEY=... NEXT_PUBLIC_REGION=us-east-2
+```
+
+- Amplify 的 process-document 路由在 worker 無法連線或回非 2xx 時會退回本地執行（舊行為），因此部署順序不影響可用性。
+- 查看某台機器上正在跑的講章：`GET /api/sunday-guide/jobs`（需 `x-worker-secret`）。
+- 部署或重啟時，進行中的講章會被標記為 failed（前端立即顯示「請重新點擊開始處理」）。
+
 ## 本地開發
 
 ```bash

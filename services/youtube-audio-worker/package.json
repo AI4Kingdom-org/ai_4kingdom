@@ -3,9 +3,11 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
+    "bundle:shared": "node scripts/bundle-shared.mjs",
     "build": "tsc",
     "start": "node dist/index.js",
-    "dev": "tsx watch src/index.ts"
+    "dev": "tsx watch src/index.ts",
+    "deploy": "npm run bundle:shared && fly deploy"
   },
   "dependencies": {
     "express": "^4.21.0",
