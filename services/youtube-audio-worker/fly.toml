@@ -5,6 +5,9 @@
 
 app = 'youtube-audio-worker-summer-bush-3058'
 primary_region = 'nrt'
+# Leave time to mark in-flight sermon jobs as failed on shutdown (src/sundayGuide.ts)
+kill_signal = 'SIGINT'
+kill_timeout = 30
 
 [build]
 

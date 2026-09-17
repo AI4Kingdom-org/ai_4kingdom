@@ -16,6 +16,7 @@ import os from 'os';
 import { randomUUID } from 'crypto';
 import OpenAI from 'openai';
 import { ProxyAgent, fetch as undiciFetch } from 'undici';
+import { registerSundayGuideRoutes, failRunningJobsOnShutdown } from './sundayGuide';
 
 const app = express();
 app.use(express.json());
@@ -941,6 +942,15 @@ app.get('/api/youtube-audio/status/:jobId', authMiddleware, (req: express.Reques
   }
   res.json({ status: 'done', httpStatus: job.httpStatus, result: job.body });
 });
+
+// Sermon content generation, moved off Amplify (which freezes the Lambda after its 28s timeout)
+registerSundayGuideRoutes(app, authMiddleware);
+
+for (const signal of ['SIGINT', 'SIGTERM'] as const) {
+  process.once(signal, () => {
+    failRunningJobsOnShutdown(signal).finally(() => process.exit(0));
+  });
+}
 
 // Health check
 app.get('/health', (_req: express.Request, res: express.Response) => {
