@@ -50,10 +50,37 @@
 .welcomeSectionCompact {
   flex: 0 0 auto;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
   padding: 0 24px 8px;
   border-bottom: none;
+}
+
+.hero {
+  margin-top: 12px;
+  max-width: 640px;
+  font-family: 'PingFang SC', 'Microsoft YaHei', 'Noto Sans SC', 'Hiragino Sans GB', sans-serif;
+  color: #6b7280;
+}
+
+.heroTitle {
+  font-size: 19.6px;
+  font-weight: 400;
+  font-family: inherit;
+  color: inherit;
+  text-shadow: none;
+  margin: 0;
+  line-height: 1.3;
+  letter-spacing: 0.5px;
+}
+
+.heroSubtitle {
+  font-size: 16px;
+  font-weight: 400;
+  color: inherit;
+  margin: 8px 0 0;
+  line-height: 1.6;
 }
 
 .tapHint {
@@ -436,6 +463,14 @@
 
   .welcomeTitle {
     font-size: 24px;
+  }
+
+  .heroTitle {
+    font-size: 15.4px;
+  }
+
+  .heroSubtitle {
+    font-size: 14px;
   }
 
   .messagesContainer {
