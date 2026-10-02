@@ -11,6 +11,7 @@ import ConversationList from '../components/ConversationList';
 import MessageList from '../components/Chat/MessageList';
 import ChatInput from '../components/Chat/ChatInput';
 import AIFloatingBubble from '../components/Chat/AIFloatingBubble';
+import IframeAutoHeight from '../components/IframeAutoHeight';
 import ReactMarkdown from 'react-markdown';
 import styles from '../sunday-guide-v2/SundayGuide.module.css';
 import chatStyles from './navigator/chat.module.css';
@@ -538,6 +539,7 @@ function AgapeChurchContent() {
           <AIFloatingBubble open={chatOpen} onToggle={() => { setChatOpen(v => !v); setSidebarOpen(false); }} />
         </>
       )}
+      <IframeAutoHeight />
     </div>
   );
 }

@@ -12,6 +12,7 @@ import ConversationList from '../components/ConversationList';
 import MessageList from '../components/Chat/MessageList';
 import ChatInput from '../components/Chat/ChatInput';
 import AIFloatingBubble from '../components/Chat/AIFloatingBubble';
+import IframeAutoHeight from '../components/IframeAutoHeight';
 import { ASSISTANT_IDS, VECTOR_STORE_IDS } from '../config/constants';
 import { CHAT_TYPES } from '../config/chatTypes';
 import ReactMarkdown from 'react-markdown';
@@ -999,6 +1000,7 @@ function SundayGuideContent() {
           <AIFloatingBubble open={chatOpen} onToggle={() => { setChatOpen(v => !v); setSidebarOpen(false); }} />
         </>
       )}
+      <IframeAutoHeight />
     </div>
   );
 }
