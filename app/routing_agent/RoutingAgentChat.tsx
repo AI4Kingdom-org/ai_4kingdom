@@ -146,6 +146,12 @@ export default function RoutingAgentChat({ userId }: RoutingAgentChatProps) {
             style={{ objectFit: 'contain' }}
             priority
           />
+          <div className={styles.hero}>
+            <h1 className={styles.heroTitle}>让 AI 成为教会与信徒的属灵助手</h1>
+            <p className={styles.heroSubtitle}>
+              为教会、牧者与家庭打造，以圣经为根基，回应每一个信仰需要
+            </p>
+          </div>
         </div>
       )}
 

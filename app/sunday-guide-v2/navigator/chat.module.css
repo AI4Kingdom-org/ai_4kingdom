@@ -23,7 +23,7 @@
 .floatingPanel {
   position: fixed;
   /* 100px icon (bottom:28 → 頂緣 128px) + 12px 間距，讓面板底緣剛好在 icon 上方不擋住 */
-  bottom: 140px;
+  bottom: calc(140px + var(--a4k-vp-bottom, 0px));
   right: 28px;
   z-index: 1099;
   width: 712px;
@@ -145,11 +145,11 @@
 /* ── Mobile: full-width bottom sheet ── */
 @media (max-width: 768px) {
   .floatingPanel {
-    bottom: 0;
+    bottom: var(--a4k-vp-bottom, 0px);
     right: 0;
     left: 0;
     width: 100%;
-    height: 72vh;
+    height: calc(var(--a4k-vp-height, 100vh) * 0.72);
     border-radius: 20px 20px 0 0;
     transform: translateY(24px) scale(1);
   }
@@ -159,6 +159,6 @@
   }
 
   .sidebar.sidebarOpen {
-    max-height: calc(72vh - 44px - 70px);
+    max-height: calc(var(--a4k-vp-height, 100vh) * 0.72 - 44px - 70px);
   }
 }
