@@ -3,20 +3,21 @@ import { createDynamoDBClient } from '../../../utils/dynamodb';
 import { NextResponse } from 'next/server';
 import { getOpenAI } from '../../../lib/openai/client';
 import { isConversationId, isLegacyThreadId } from '../../../lib/openai/conversation';
+import { getRequestIdentity, unauthorized } from '../../../lib/identity/server';
 
 export async function DELETE(
   request: Request,
   context: { params: { threadId: string } }
 ) {
+  const identity = getRequestIdentity(request);
+  if (!identity) return unauthorized();
+
   try {
-    const userId = request.headers.get('user-id');
+    // 只能刪自己的對話：以簽章身分查詢，不再相信 user-id 標頭
+    const userId = identity.id;
     const { threadId } = context.params;
 
     console.log('[DEBUG] 开始删除对话:', { userId, threadId });
-
-    if (!userId) {
-      throw new Error('未提供用户ID');
-    }
 
     const docClient = await createDynamoDBClient();
 

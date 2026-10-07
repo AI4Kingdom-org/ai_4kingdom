@@ -2,16 +2,17 @@ import { NextResponse } from 'next/server';
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocumentClient, QueryCommand } from "@aws-sdk/lib-dynamodb";
 import { getDynamoDBConfig } from "@/app/utils/dynamodb";
+import { requireMember } from "@/app/lib/identity/server";
 
 export async function GET(request: Request) {
+  // 只能查自己的用量
+  const auth = requireMember(request);
+  if ('response' in auth) return auth.response;
+
   try {
     const { searchParams } = new URL(request.url);
-    const userId = searchParams.get("userId");
+    const userId = auth.identity.userId;
     const year = searchParams.get("year") || new Date().getFullYear();
-    
-    if (!userId) {
-      return NextResponse.json({ error: "UserId is required" }, { status: 400 });
-    }
 
     const config = await getDynamoDBConfig();
     const client = new DynamoDBClient(config);

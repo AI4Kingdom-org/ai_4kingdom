@@ -1,5 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
+import { getRequestIdentity, unauthorized } from '@/app/lib/identity/server';
+import { checkCredits, recordUsage, type TokenUsage } from '@/app/lib/credits';
+
+const GUEST_MAX_MESSAGE_CHARS = 2000;
+
+function toUsage(u?: OpenAI.CompletionUsage | null): TokenUsage | null {
+  if (!u) return null;
+  return {
+    prompt_tokens: u.prompt_tokens || 0,
+    completion_tokens: u.completion_tokens || 0,
+    total_tokens: u.total_tokens || 0,
+    retrieval_tokens: 0,
+  };
+}
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -25,8 +39,8 @@ const PAGE_MAP: Record<IntentCategory, PageInfo> = {
   start_here:                  { title: 'Homepage',                  primary_url: 'https://ai4kingdom.org/',                       description: '從這裡開始，告訴我們你想找什麼。' },
   pricing:                     { title: 'Membership / Pricing',      primary_url: 'https://ai4kingdom.org/pricing-2/',              description: '會員方案、收費與使用方式說明。' },
   donation:                    { title: 'Donation',                  primary_url: 'https://ai4kingdom.org/donation/',               description: '支持 AI4Kingdom 的異象與事工。' },
-  login:                       { title: 'Login',                     primary_url: 'https://ai4kingdom.org/login/',                  description: '登入以使用 AI 助理與功能。' },
-  register:                    { title: 'Register',                  primary_url: 'https://ai4kingdom.org/register/',               description: '建立帳號開始使用平台。' },
+  login:                       { title: 'Login',                     primary_url: 'https://ai4kingdom.org/login/',                  description: '所有 AI 助理皆可免登入試用；登入後每月享有 300 點額度。' },
+  register:                    { title: 'Register',                  primary_url: 'https://ai4kingdom.org/register/',               description: '免費註冊即可獲得每月 300 點額度（訪客僅有 50 點試用）。' },
   homeschool:                  { title: 'Homeschool / 家長助手',      primary_url: 'https://ai4kingdom.org/homeschool/',             description: '為家長與在家教育提供的 AI 輔助工具。' },
   faith_family_counseling:     { title: '信仰與家庭属灵辅导助手',     primary_url: 'https://ai4kingdom.org/信仰與家庭属灵辅导助手/',  description: '以信仰為核心的家庭與屬靈成長輔導。' },
   aishu_children_sundayschool: { title: '愛修基督教會ai儿童主日学',  primary_url: 'https://ai4kingdom.org/愛修基督教會ai儿童主日学/', description: '兒童主日學與 AI 輔助學習資源。' },
@@ -146,17 +160,21 @@ function buildAnswerAndRoutePrompt(page: PageInfo): string {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { message, userId, history = [] } = body;
+    const { message, history = [] } = body;
 
     if (!message || typeof message !== 'string' || !message.trim()) {
       return NextResponse.json({ error: '訊息不能為空' }, { status: 400 });
     }
-    if (!userId || typeof userId !== 'string') {
-      return NextResponse.json({ error: '未授權' }, { status: 401 });
+    const identity = getRequestIdentity(req);
+    if (!identity) return unauthorized();
+    if (identity.kind === 'guest' && message.length > GUEST_MAX_MESSAGE_CHARS) {
+      return NextResponse.json({ error: `訪客單則訊息上限為 ${GUEST_MAX_MESSAGE_CHARS} 字` }, { status: 400 });
     }
     if (!process.env.OPENAI_API_KEY) {
       return NextResponse.json({ error: 'Missing OPENAI_API_KEY' }, { status: 500 });
     }
+    const creditError = await checkCredits(identity, req);
+    if (creditError) return creditError;
 
     // ── Step 1: 意圖分類（非串流）────────────────────────────────────────────
     const classifyRes = await openai.chat.completions.create({
@@ -182,15 +200,19 @@ export async function POST(req: NextRequest) {
     }
 
     console.log('[routing-agent] category:', category);
+    const classifyUsage = toUsage(classifyRes.usage);
+    if (classifyUsage) await recordUsage(identity, classifyUsage, req);
 
     // ── Step 2: 組合對話歷史 ──────────────────────────────────────────────────
-    const historyMessages: OpenAI.Chat.ChatCompletionMessageParam[] = history
+    // 歷史由前端送來、可被任意塞長；只取最近 10 則並截斷，避免單次請求成本失控
+    const historyMessages: OpenAI.Chat.ChatCompletionMessageParam[] = (Array.isArray(history) ? history : [])
       .filter((m: { role: string; content: string }) =>
         (m.role === 'user' || m.role === 'assistant') && m.content,
       )
+      .slice(-10)
       .map((m: { role: string; content: string }) => ({
         role: m.role as 'user' | 'assistant',
-        content: m.content,
+        content: String(m.content).slice(0, 4000),
       }));
 
     // ── Step 3: 選擇 system prompt 並串流回應 ────────────────────────────────
@@ -206,6 +228,8 @@ export async function POST(req: NextRequest) {
     const stream = await openai.chat.completions.create({
       model: 'gpt-5.6-terra',
       stream: true,
+      // 最後一個 chunk 會附上 usage，用來記帳
+      stream_options: { include_usage: true },
       // gpt-5.6-terra 為推理模型：max_tokens 改用 max_completion_tokens（含推理 token），不支援 temperature。
       // 串流對話用 low effort，兼顧回答品質與首字延遲。
       reasoning_effort: 'low',
@@ -226,6 +250,8 @@ export async function POST(req: NextRequest) {
             if (content) {
               controller.enqueue(encoder.encode(JSON.stringify({ content }) + '\n'));
             }
+            const streamUsage = toUsage(chunk.usage);
+            if (streamUsage) await recordUsage(identity, streamUsage, req);
           }
         } catch (err) {
           controller.error(err);

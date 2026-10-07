@@ -235,7 +235,8 @@ export function ChatProvider({
         type: initialConfig?.type,
         assistantId: initialConfig?.assistantId || ASSISTANT_IDS[initialConfig?.type.toUpperCase().replace(/-/g, '_') as keyof typeof ASSISTANT_IDS],
         vectorStoreId: initialConfig?.vectorStoreId || VECTOR_STORE_IDS[initialConfig?.type.toUpperCase().replace(/-/g, '_') as keyof typeof VECTOR_STORE_IDS],
-        userId: user?.user_id || authUser?.user_id
+        // 訪客沒有 user，改用 WithChat 傳入的身分 id（guest_<hex>）
+        userId: initialConfig?.userId || user?.user_id || authUser?.user_id
       });
     }
   }, [initialConfig?.type, user, authUser]);
@@ -479,6 +480,16 @@ export function ChatProvider({
         setIsLoading(false);
         return; // 結束本次 send
       }
+      if (response.status === 402) {
+        // 額度用完（訪客 50 點試用 / 會員本月額度）：移除這輪的暫存訊息並顯示伺服器給的說明
+        let info: any = {};
+        try { info = await response.json(); } catch {}
+        setMessages(prev => prev.filter((m, i) => i !== insertedUserIndex && m.id !== assistantTempId));
+        setError(info.error || '额度不足，无法发送消息');
+        window.dispatchEvent(new CustomEvent('refreshCredits'));
+        setIsLoading(false);
+        return;
+      }
             let errorData: any = {};
             try {
                 const responseText = await response.text();
@@ -621,6 +632,9 @@ export function ChatProvider({
                           }
                         }
                       }
+                    } else if (eventType === 'usage.recorded') {
+                      // 伺服器已扣點，更新額度顯示
+                      window.dispatchEvent(new CustomEvent('refreshCredits'));
                     } else if (eventType === 'thread.run.completed' || evt.event === 'done') {
                       // 確保最終內容正確顯示
                       if ((SHOW_THINKING_ONLY || SMART_FILTERING) && textBuffer) {

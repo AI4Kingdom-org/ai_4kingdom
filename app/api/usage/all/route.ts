@@ -4,6 +4,7 @@ import { DynamoDBDocumentClient, ScanCommand } from "@aws-sdk/lib-dynamodb";
 import { getDynamoDBConfig } from "@/app/utils/dynamodb";
 import type { Subscription } from '@/app/types/auth';
 import { TOKEN_LIMITS, TOKEN_TO_CREDIT_RATIO } from '@/app/config/plans';
+import { isNonMemberUsageKey } from '@/app/lib/credits';
 
 // 獲取用戶訂閱信息
 async function getUserSubscription(userId: string): Promise<Subscription> {
@@ -93,7 +94,9 @@ export async function GET(request: Request) {
     });
     
     const allUsersResponse = await docClient.send(allUsersCommand);
-    const allUserIds = [...new Set((allUsersResponse.Items || []).map(item => item.UserId))];
+    // 訪客試用與系統計數列不是會員，排除（否則每列都會回呼 WP 查方案）
+    const allUserIds = [...new Set((allUsersResponse.Items || []).map(item => item.UserId))]
+      .filter(id => !isNonMemberUsageKey(id));
     
     console.log('[DEBUG] 找到的所有用戶 ID:', allUserIds);
     console.log('[DEBUG] 當月有使用記錄的用戶:', monthlyUsageData.map(item => item.UserId));

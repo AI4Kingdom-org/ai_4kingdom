@@ -12,6 +12,7 @@ import MessageList from '../components/Chat/MessageList';
 import ChatInput from '../components/Chat/ChatInput';
 import AIFloatingBubble from '../components/Chat/AIFloatingBubble';
 import IframeAutoHeight from '../components/IframeAutoHeight';
+import { openAuthenticatedDownload } from '../utils/openAuthenticatedDownload';
 import ReactMarkdown from 'react-markdown';
 import styles from '../sunday-guide-v2/SundayGuide.module.css';
 import chatStyles from './navigator/chat.module.css';
@@ -31,7 +32,9 @@ type GuideMode = 'summary' | 'devotional' | 'bible' | null;
 // ─────────────────────────────────────────────────────────────────
 function AgapeChurchContent() {
   const { refreshUsage, hasInsufficientTokens, remainingCredits } = useCredit();
-  const { user } = useAuth();
+  const { user, identityId } = useAuth();
+  // 訪客也能使用聊天：對話紀錄以身分 id（會員 userId／訪客 guest id）為 key
+  const chatUserId = user?.user_id || identityId;
   const [isProcessing, setIsProcessing] = useState(false);
   const [processedContent, setProcessedContent] = useState<ProcessedContent | null>(null);
   const [uploadProgress, setUploadProgress] = useState<number>(0);
@@ -96,9 +99,9 @@ function AgapeChurchContent() {
   }, [chatError, setChatError]);
 
   useEffect(() => {
-    if (currentThreadId && user && shouldLoadHistory.current) {
+    if (currentThreadId && chatUserId && shouldLoadHistory.current) {
       shouldLoadHistory.current = false;
-      loadChatHistory(user.user_id);
+      loadChatHistory(chatUserId);
     }
   }, [currentThreadId]);
 
@@ -282,7 +285,7 @@ function AgapeChurchContent() {
     }
   };
 
-  const handleDownloadPDF = () => {
+  const handleDownloadPDF = async () => {
     setPdfError(null);
     setPdfLoading(true);
     try {
@@ -291,8 +294,8 @@ function AgapeChurchContent() {
       params.set('assistantId', ASSISTANT_IDS.AGAPE_CHURCH);
       params.set('userId', userId);
       params.set('includeAll', 'true');
-      window.open(`/api/sunday-guide/download-pdf?${params.toString()}`, '_blank');
-      setTimeout(() => setPdfLoading(false), 1200);
+      await openAuthenticatedDownload(`/api/sunday-guide/download-pdf?${params.toString()}`);
+      setPdfLoading(false);
     } catch (err) {
       console.error('PDF 下載失敗', err);
       setPdfError(err instanceof Error ? err.message : '下載失敗');
@@ -308,13 +311,14 @@ function AgapeChurchContent() {
       <div className={styles.contentBox}>
         <div className={styles.contentHeader}>
           <h2>{titles[selectedMode!]}</h2>
-          <button
+          {/* 下载完整版僅限登入會員 */}
+          {user && (<button
             className={styles.downloadButton}
             onClick={handleDownloadPDF}
             disabled={pdfLoading}
           >
             {pdfLoading ? '生成中...' : '下载完整版'}
-          </button>
+          </button>)}
         </div>
         {pdfError && <div className={styles.errorMessage}>{pdfError}</div>}
         <div className={styles.markdownContent} ref={contentRef}>
@@ -514,7 +518,7 @@ function AgapeChurchContent() {
         </div>
 
       {/* ── Floating chat bubble + panel ── */}
-      {user && (
+      {chatUserId && (
         <>
           <div className={`${chatStyles.floatingPanel}${chatOpen ? ' ' + chatStyles.panelOpen : ''}`}>
             <div className={chatStyles.panelHeader}>
@@ -526,7 +530,7 @@ function AgapeChurchContent() {
                 <button className={chatStyles.sidebarToggle} onClick={() => setSidebarOpen(v => !v)}>
                   <span>📋 對話記錄</span><span>{sidebarOpen ? '▲' : '▼'}</span>
                 </button>
-                <ConversationList userId={user.user_id} type="agape-church" currentThreadId={currentThreadId}
+                <ConversationList userId={chatUserId} type="agape-church" currentThreadId={currentThreadId}
                   onSelectThread={handleSelectThread} isCreating={false} onCreateNewThread={handleCreateNewThread} sidebarMode={true} />
               </div>
               <div className={chatStyles.main}>

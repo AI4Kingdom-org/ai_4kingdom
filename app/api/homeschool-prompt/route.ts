@@ -6,6 +6,7 @@ import { HomeschoolPromptData, getConcernLabel } from '../../types/homeschool';
 import { getOpenAI } from '../../lib/openai/client';
 import { ensureConversation, isConversationId, isLegacyThreadId } from '../../lib/openai/conversation';
 import { generateResponse } from '../../lib/openai/responses';
+import { getRequestIdentity, requireMember, unauthorized } from '../../lib/identity/server';
 
 const openai = getOpenAI();
 
@@ -17,17 +18,15 @@ const getDocClient = async () => {
 
 // 获取用户的家校信息
 export async function GET(request: Request) {
+  // 孩子資料屬個資：只回傳本人的資料；訪客沒有資料，回傳空白讓聊天照常進行
+  const identity = getRequestIdentity(request);
+  if (!identity) return unauthorized();
+
   try {
     console.log('[DEBUG] 开始获取家校信息');
-    const { searchParams } = new URL(request.url);
-    const userId = searchParams.get('userId');
+    const userId = identity.id;
 
     console.log('[DEBUG] 请求参数:', { userId });
-
-    if (!userId) {
-      console.log('[DEBUG] 缺少 userId');
-      return NextResponse.json({ error: 'UserId is required' }, { status: 400 });
-    }
 
     const docClient = await getDocClient();
     const command = new GetCommand({
@@ -108,16 +107,16 @@ function buildSystemMessage(data: Omit<HomeschoolPromptData, 'userId' | 'threadI
 // 修改 POST 处理函数
 export async function POST(request: Request) {
   console.log('[DEBUG] ========== POST /api/homeschool-prompt 開始 ==========');
+  const auth = requireMember(request);
+  if ('response' in auth) return auth.response;
+  const userId = auth.identity.userId;
+
   try {
     const body = await request.json();
     console.log('[DEBUG] 解析後的 body:', body);
-    const { userId, childName, age, gender, concerns, otherConcern, basicInfo, recentChanges } = body;
+    const { childName, age, gender, concerns, otherConcern, basicInfo, recentChanges } = body;
 
     console.log('[DEBUG] 收到保存请求:', { userId, childName, age, gender, concerns, otherConcern });
-
-    if (!userId) {
-      return NextResponse.json({ error: 'UserId is required' }, { status: 400 });
-    }
 
     // 验证年龄范围
     if (age !== undefined && age !== null && (age < 0 || age > 18)) {

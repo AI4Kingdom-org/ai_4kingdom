@@ -13,6 +13,7 @@ import MessageList from '../components/Chat/MessageList';
 import ChatInput from '../components/Chat/ChatInput';
 import AIFloatingBubble from '../components/Chat/AIFloatingBubble';
 import IframeAutoHeight from '../components/IframeAutoHeight';
+import { openAuthenticatedDownload } from '../utils/openAuthenticatedDownload';
 import { ASSISTANT_IDS, VECTOR_STORE_IDS } from '../config/constants';
 import { CHAT_TYPES } from '../config/chatTypes';
 import ReactMarkdown from 'react-markdown';
@@ -84,7 +85,9 @@ type GuideMode = 'summary' | 'text' | 'devotional' | 'bible' | null;
 
 function SundayGuideContent() {
   const { refreshUsage, hasInsufficientTokens, remainingCredits } = useCredit();
-  const { user, canUploadFiles } = useAuth();
+  const { user, canUploadFiles, identityId } = useAuth();
+  // 訪客也能使用聊天：對話紀錄以身分 id（會員 userId／訪客 guest id）為 key
+  const chatUserId = user?.user_id || identityId;
 
   // ---- Upload states ----
   const [isProcessing, setIsProcessing] = useState(false);
@@ -154,7 +157,8 @@ function SundayGuideContent() {
   const shouldLoadHistory = useRef(false);
 
   const devSkip = process.env.NEXT_PUBLIC_DEV_SKIP_AUTH === 'true';
-  const enablePromo = process.env.NEXT_PUBLIC_ENABLE_PROMO === 'true';
+  // 宣傳片生成會呼叫影片模型（成本高），僅限登入會員
+  const enablePromo = process.env.NEXT_PUBLIC_ENABLE_PROMO === 'true' && !!user;
   const promoProvider = (process.env.NEXT_PUBLIC_PROMO_VIDEO_PROVIDER || 'sora') as 'mock' | 'runway' | 'luma' | 'sora' | 'openai';
   const hasUploadPermission = devSkip || !!user;
 
@@ -324,9 +328,9 @@ function SundayGuideContent() {
   }, [chatError, setChatError]);
 
   useEffect(() => {
-    if (currentThreadId && user && shouldLoadHistory.current) {
+    if (currentThreadId && chatUserId && shouldLoadHistory.current) {
       shouldLoadHistory.current = false;
-      loadChatHistory(user.user_id);
+      loadChatHistory(chatUserId);
     }
   }, [currentThreadId]);
 
@@ -505,7 +509,7 @@ function SundayGuideContent() {
   };
 
   // ---- Download full version ----
-  const handleDownloadPDF = () => {
+  const handleDownloadPDF = async () => {
     setPdfError(null);
     setPdfLoading(true);
     try {
@@ -514,8 +518,8 @@ function SundayGuideContent() {
       if (selectedFileId) {
         downloadUrl += `&fileId=${encodeURIComponent(selectedFileId)}`;
       }
-      window.open(downloadUrl, '_blank');
-      setTimeout(() => setPdfLoading(false), 1000);
+      await openAuthenticatedDownload(downloadUrl);
+      setPdfLoading(false);
     } catch (error) {
       setPdfError(error instanceof Error ? error.message : '下載完整版PDF時發生錯誤，請重試');
       setPdfLoading(false);
@@ -668,9 +672,10 @@ function SundayGuideContent() {
       <div className={styles.contentBox}>
         <div className={styles.contentHeader}>
           <h2>{titles[selectedMode!]}</h2>
-          <button className={styles.downloadButton} onClick={handleDownloadPDF} disabled={pdfLoading}>
+          {/* 下载完整版僅限登入會員 */}
+          {user && (<button className={styles.downloadButton} onClick={handleDownloadPDF} disabled={pdfLoading}>
             {pdfLoading ? '生成預覽中...' : '下载完整版(简体中文)'}
-          </button>
+          </button>)}
         </div>
         {pdfError && <div className={styles.errorMessage}>{pdfError}</div>}
         <div className={styles.markdownContent} ref={contentRef}>
@@ -975,7 +980,7 @@ function SundayGuideContent() {
       </div>{/* end mainLayout */}
 
       {/* ── Floating chat bubble + panel ── */}
-      {user && (
+      {chatUserId && (
         <>
           <div className={`${chatStyles.floatingPanel}${chatOpen ? ' ' + chatStyles.panelOpen : ''}`}>
             <div className={chatStyles.panelHeader}>
@@ -987,7 +992,7 @@ function SundayGuideContent() {
                 <button className={chatStyles.sidebarToggle} onClick={() => setSidebarOpen(v => !v)}>
                   <span>📋 對話記錄</span><span>{sidebarOpen ? '▲' : '▼'}</span>
                 </button>
-                <ConversationList userId={user.user_id} type={CHAT_TYPES.SUNDAY_GUIDE} currentThreadId={currentThreadId}
+                <ConversationList userId={chatUserId} type={CHAT_TYPES.SUNDAY_GUIDE} currentThreadId={currentThreadId}
                   onSelectThread={handleSelectThread} isCreating={false} onCreateNewThread={handleCreateNewThread} sidebarMode={true} />
               </div>
               <div className={chatStyles.main}>
@@ -1025,13 +1030,7 @@ export default function SundayGuideV2() {
     );
   }
 
-  if (!user && !devSkip) {
-    return (
-      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh', fontSize: '1rem', color: '#64748b' }}>
-        請先登入
-      </div>
-    );
-  }
+  // 不再要求登入：文檔列表與主日信息導航對訪客開放；上傳、刪除、下載等由內層依權限顯示
 
   return (
     <WithChat chatType={CHAT_TYPES.SUNDAY_GUIDE}>

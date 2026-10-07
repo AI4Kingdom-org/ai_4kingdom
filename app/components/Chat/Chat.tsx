@@ -136,14 +136,15 @@ export default function Chat({ type, assistantId, vectorStoreId, userId, threadI
   // （ChatContext.sendMessage 已內建懶惰建立邏輯）
 
   const handleCreateNewThread = async () => {
-    if (isCreatingThread || !user) return;
+    // 訪客也可建立對話（伺服器端以簽章身分決定對話歸屬）
+    if (isCreatingThread || !(userId || user?.user_id)) return;
 
     try {
       setIsCreatingThread(true);
       const response = await fetch('/api/threads/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: user.user_id, type }),
+        body: JSON.stringify({ userId: userId || user?.user_id, type }),
       });
 
       if (!response.ok) throw new Error('创建对话失败');

@@ -1,13 +1,18 @@
 import { NextResponse } from 'next/server';
 import OpenAI from 'openai';
 import { formatTranscript } from '../../../lib/formatTranscript';
+import { requireMember } from '../../../lib/identity/server';
 
 /**
  * GET /api/sunday-guide/transcription
  * 回傳大檔案直接上傳到 Fly.io Worker 所需的 config。
  * 前端在檔案 > 10MB 時呼叫此端點，取得 uploadUrl 後直接上傳，繞過 Amplify 10MB 限制。
+ * 回應含 worker secret，因此僅限登入會員（上傳區塊本身也只對指定使用者顯示）。
  */
-export async function GET() {
+export async function GET(request: Request) {
+  const auth = requireMember(request);
+  if ('response' in auth) return auth.response;
+
   const workerUrl = process.env.YOUTUBE_WORKER_URL;
   const workerSecret = process.env.YOUTUBE_WORKER_SECRET;
   if (!workerUrl) {
@@ -43,6 +48,9 @@ const MAX_UPLOAD_BYTES = 10 * 1024 * 1024; // 10 MB（大於此限制請走 GET 
  * Response: { transcript: string, source: 'whisper', fileName: string, charCount: number }
  */
 export async function POST(request: Request) {
+  const auth = requireMember(request);
+  if ('response' in auth) return auth.response;
+
   try {
     const formData = await request.formData();
     const file = formData.get('file') as File | null;

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { updateMonthlyTokenUsage } from '@/app/utils/monthlyTokenUsage';
+import { requireMember } from '@/app/lib/identity/server';
 
 /**
  * POST /api/usage/update-tokens
@@ -48,13 +49,14 @@ const FILE_PROCESSING_TOKENS = {
 };
 
 export async function POST(request: Request) {
+  // 上傳／轉錄流程的扣點；只記在本人帳上（不採信 body 的 userId）
+  const auth = requireMember(request);
+  if ('response' in auth) return auth.response;
+  const userId = auth.identity.userId;
+
   try {
     const body = await request.json();
-    const { userId, type, estimatedPages = 1 } = body;
-
-    if (!userId || typeof userId !== 'string') {
-      return NextResponse.json({ error: 'userId is required' }, { status: 400 });
-    }
+    const { type, estimatedPages = 1 } = body;
 
     if (type !== 'upload' && type !== 'process' && type !== 'transcribe') {
       return NextResponse.json(

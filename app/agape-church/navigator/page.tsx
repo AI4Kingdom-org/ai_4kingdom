@@ -11,6 +11,7 @@ import styles from '../../user-sunday-guide/page.module.css';
 import chatStyles from './chat.module.css';
 import { ASSISTANT_IDS, VECTOR_STORE_IDS } from '../../config/constants';
 import ReactMarkdown from 'react-markdown';
+import { openAuthenticatedDownload } from '../../utils/openAuthenticatedDownload';
 
 // Reuse same type of modes
 type GuideMode = 'summary' | 'devotional' | 'bible' | null;
@@ -26,7 +27,9 @@ interface AgapeRecord {
 function AgapeNavigatorContent() {
   const [fileList, setFileList] = useState<AgapeRecord[]>([]);
   const [selectedFileUniqueId, setSelectedFileUniqueId] = useState<string | null>(null);
-  const { user } = useAuth();
+  const { user, identityId } = useAuth();
+  // 訪客也能閱讀與聊天：對話紀錄以身分 id（會員 userId／訪客 guest id）為 key
+  const chatUserId = user?.user_id || identityId;
   const { refreshUsage } = useCredit();
   const [selectedMode, setSelectedMode] = useState<GuideMode>(null);
   const [sermonContent, setSermonContent] = useState<string | null>(null);
@@ -52,9 +55,9 @@ function AgapeNavigatorContent() {
   }, [chatError, setChatError]);
 
   useEffect(() => {
-    if (currentThreadId && user && shouldLoadHistory.current) {
+    if (currentThreadId && chatUserId && shouldLoadHistory.current) {
       shouldLoadHistory.current = false;
-      loadChatHistory(user.user_id);
+      loadChatHistory(chatUserId);
     }
   }, [currentThreadId]);
 
@@ -79,9 +82,8 @@ function AgapeNavigatorContent() {
 
   // 初始化：取得檔案列表
   useEffect(() => {
-    if (user?.user_id) {
-      fetchAgapeFiles();
-    }
+    // 文件清單對訪客開放，不再要求登入
+    fetchAgapeFiles();
   }, [user]);
 
   const fetchAgapeFiles = async () => {
@@ -198,7 +200,8 @@ function AgapeNavigatorContent() {
       <div className={styles.contentBox}>
         <div className={styles.contentHeader}>
           <h2>{titles[selectedMode!]}</h2>
-      {sermonContent && (
+      {/* 下载完整版僅限登入會員 */}
+          {sermonContent && user && (
             <button
               style={{ marginLeft: 8 }}
               className={styles.downloadButton}
@@ -218,7 +221,7 @@ function AgapeNavigatorContent() {
   };
 
   // PDF 下載：僅保留完整版
-  const handleDownloadPDF = () => {
+  const handleDownloadPDF = async () => {
     setPdfError(null);
     setPdfLoading(true);
     try {
@@ -230,8 +233,8 @@ function AgapeNavigatorContent() {
       params.set('userId', userId);
       params.set('includeAll', 'true');
       const url = `${base}?${params.toString()}`;
-      window.open(url, '_blank');
-      setTimeout(()=> setPdfLoading(false), 1200);
+      await openAuthenticatedDownload(url);
+      setPdfLoading(false);
     } catch (err) {
       console.error('PDF 下載失敗', err);
       setPdfError(err instanceof Error ? err.message : '下載失敗');
@@ -239,9 +242,7 @@ function AgapeNavigatorContent() {
     }
   };
 
-  if (!user) {
-    return <div>請先登錄</div>;
-  }
+  if (!chatUserId) return null;
 
   return (
     <div className={styles.container}>
@@ -276,7 +277,7 @@ function AgapeNavigatorContent() {
                     <span>{sidebarOpen ? '▲' : '▼'}</span>
                   </button>
                   <ConversationList
-                    userId={user.user_id}
+                    userId={chatUserId}
                     type="agape-church"
                     currentThreadId={currentThreadId}
                     onSelectThread={handleSelectThread}
@@ -309,17 +310,18 @@ function AgapeNavigatorContent() {
 
 export default function AgapeNavigatorPage() {
   const [mounted, setMounted] = useState(false);
-  const { user, loading } = useAuth();
+  const { user, loading, identityId } = useAuth();
+  const chatUserId = user?.user_id || identityId;
   useEffect(() => setMounted(true), []);
   if (!mounted || loading) return null;
-  if (!user) return <div>请先登录</div>;
+  if (!chatUserId) return null;
   return (
     <ChatProvider
       initialConfig={{
         type: 'agape-church',
         assistantId: ASSISTANT_IDS.AGAPE_CHURCH,
         vectorStoreId: VECTOR_STORE_IDS.AGAPE_CHURCH,
-        userId: user.user_id,
+        userId: chatUserId,
       }}
     >
       <AgapeNavigatorContent />

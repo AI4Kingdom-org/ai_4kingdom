@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import styles from './ChatInput.module.css';
 import { useChat } from '../../contexts/ChatContext';
+import GuestCreditNotice from '../GuestCreditNotice';
 
 interface ChatInputProps {
   onSend: (message: string) => Promise<void>;
@@ -46,6 +47,8 @@ export default function ChatInput({ onSend, isLoading }: ChatInputProps) {
   };
 
   return (
+    <>
+    <GuestCreditNotice />
     <div className={styles.inputContainer}>
       <div className={styles.inputField}>
         <textarea
@@ -84,5 +87,6 @@ export default function ChatInput({ onSend, isLoading }: ChatInputProps) {
         </svg>
       </button>
     </div>
+    </>
   );
-} 
+}

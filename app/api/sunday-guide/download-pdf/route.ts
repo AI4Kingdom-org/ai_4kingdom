@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createDynamoDBClient } from '../../../utils/dynamodb';
 import { ScanCommand } from "@aws-sdk/lib-dynamodb";
+import { requireMember } from '../../../lib/identity/server';
 
 // 簡繁轉換映射表（簡化版）
 const traditionalToSimplified: Record<string, string> = {
@@ -32,20 +33,17 @@ export async function GET(
   request: Request,
   { params }: { params: { id?: string } }
 ) {
+  // 「下载完整版」僅限登入會員；訪客可線上閱讀但不能下載
+  const auth = requireMember(request);
+  if ('response' in auth) return auth.response;
+
   try {
     // 獲取查詢參數
     const url = new URL(request.url);
     const type = url.searchParams.get('type') || 'summary';
-    const userId = url.searchParams.get('userId');
+    const userId = auth.identity.userId;
     const assistantId = url.searchParams.get('assistantId') || DEFAULT_ASSISTANT_ID;
     const includeAll = url.searchParams.get('includeAll') === 'true';
-    
-    if (!userId) {
-      return NextResponse.json(
-        { error: '缺少必要參數: userId' },
-        { status: 400 }
-      );
-    }
 
     console.log(`[DEBUG] PDF下載請求: type=${type}, userId=${userId}, assistantId=${assistantId}, includeAll=${includeAll}`);
 

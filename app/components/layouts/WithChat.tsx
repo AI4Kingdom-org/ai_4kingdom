@@ -14,35 +14,38 @@ interface WithChatProps {
 }
 
 function ChatWrapper({ children, chatType = 'general', disableChatContext = false }: { children: ReactNode, chatType?: ChatType, disableChatContext?: boolean }) {
-  const { user } = useAuth();
+  const { user, loading, identityId } = useAuth();
   const [isReady, setIsReady] = useState(false);
 
   // disableChatContext：不需要 bubble chat 的頁面直接渲染 children，避免等待使用者驗證
   if (disableChatContext) {
     return <>{children}</>;
   }
-  
+
+  // 不再要求登入：會員用 WP userId，訪客用 guest id（伺服器端以簽章 token 判定實際身分與額度）
+  const chatUserId = user?.user_id || identityId;
+
   const config = useMemo(() => {
-    if (!user) return null;
-    
+    if (!chatUserId) return null;
+
     // 根据聊天类型获取对应的配置
     const typeConfig = CHAT_TYPE_CONFIGS[chatType];
-    
+
     return {
       type: chatType,
       assistantId: typeConfig.assistantId || ASSISTANT_IDS.GENERAL,
       vectorStoreId: typeConfig.vectorStoreId || VECTOR_STORE_IDS.GENERAL,
-      userId: user.user_id
+      userId: chatUserId
     };
-  }, [user, chatType]);
+  }, [chatUserId, chatType]);
 
   useEffect(() => {
-    if (user) {
+    if (!loading && chatUserId) {
       setIsReady(true);
     }
-  }, [user]);
-  
-  // 等待用户加载完成
+  }, [loading, chatUserId]);
+
+  // 等待身分判定完成
   if (!isReady || !config) {
     return null;
   }

@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
 import OpenAI from 'openai';
+import { getRequestIdentity, unauthorized } from '@/app/lib/identity/server';
+import { checkCredits, recordUsage } from '@/app/lib/credits';
 
 type ReferenceImageInput = {
   dataUrl?: string;
@@ -152,6 +154,11 @@ function sanitizeDraft(payload: Partial<CreativeDraftPayload>, durationSec: numb
 }
 
 export async function POST(request: Request) {
+  const identity = getRequestIdentity(request);
+  if (!identity) return unauthorized();
+  const creditError = await checkCredits(identity, request);
+  if (creditError) return creditError;
+
   try {
     const body = (await request.json()) as CreativeDraftRequest;
     const summary = normalizeSummary(body.summary || '');
@@ -222,6 +229,15 @@ export async function POST(request: Request) {
         },
       ],
     });
+
+    if (completion.usage) {
+      await recordUsage(identity, {
+        prompt_tokens: completion.usage.prompt_tokens || 0,
+        completion_tokens: completion.usage.completion_tokens || 0,
+        total_tokens: completion.usage.total_tokens || 0,
+        retrieval_tokens: 0,
+      }, request);
+    }
 
     const raw = completion.choices[0]?.message?.content?.trim() || '';
     const parsed = raw ? (JSON.parse(raw) as Partial<CreativeDraftPayload>) : null;

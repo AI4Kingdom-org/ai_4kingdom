@@ -105,7 +105,9 @@ const mdComponents: Components = {
 
 // ─────────────────────────────────────────────────────────────────
 function ZhimingYuanContent() {
-  const { user } = useAuth();
+  const { user, identityId } = useAuth();
+  // 訪客也能使用聊天：對話紀錄以身分 id（會員 userId／訪客 guest id）為 key
+  const chatUserId = user?.user_id || identityId;
   const { refreshUsage } = useCredit();
 
   // ── Document list ─────────────────────────────────────────────
@@ -151,9 +153,9 @@ function ZhimingYuanContent() {
   }, [chatError, setChatError]);
 
   useEffect(() => {
-    if (currentThreadId && user && shouldLoadHistory.current) {
+    if (currentThreadId && chatUserId && shouldLoadHistory.current) {
       shouldLoadHistory.current = false;
-      loadChatHistory(user.user_id);
+      loadChatHistory(chatUserId);
     }
   }, [currentThreadId]);
 
@@ -405,7 +407,7 @@ function ZhimingYuanContent() {
       </div>
 
       {/* ── Floating chat bubble + panel ── */}
-      {user && (
+      {chatUserId && (
         <>
           {/* Chat panel */}
           <div className={`${chatStyles.floatingPanel}${chatOpen ? ' ' + chatStyles.panelOpen : ''}`}>
@@ -423,7 +425,7 @@ function ZhimingYuanContent() {
                   <span>{sidebarOpen ? '▲' : '▼'}</span>
                 </button>
                 <ConversationList
-                  userId={user.user_id}
+                  userId={chatUserId}
                   type="zhiming-yuan"
                   currentThreadId={currentThreadId}
                   onSelectThread={handleSelectThread}

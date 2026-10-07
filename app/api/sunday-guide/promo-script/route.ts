@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { requireMember } from '@/app/lib/identity/server';
 import OpenAI from 'openai';
 
 type PromoShot = {
@@ -72,6 +73,10 @@ function extractFirstJsonObject(text: string): string | null {
 }
 
 export async function POST(request: Request) {
+  // 宣傳片生成會呼叫高成本模型，僅限登入會員
+  const auth = requireMember(request);
+  if ('response' in auth) return auth.response;
+
   try {
     const body = (await request.json()) as PromoScriptRequest;
     const summary = normalizeSummary(body.summary || '');

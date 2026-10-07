@@ -3,18 +3,21 @@ import { createDynamoDBClient } from '../../utils/dynamodb';
 import { QueryCommand } from '@aws-sdk/client-dynamodb';
 import { getOpenAI } from '../../lib/openai/client';
 import { isConversationId } from '../../lib/openai/conversation';
+import { getRequestIdentity, unauthorized } from '../../lib/identity/server';
 
 export async function GET(request: Request) {
+  const identity = getRequestIdentity(request);
+  if (!identity) return unauthorized();
+
   try {
     const { searchParams } = new URL(request.url);
     const threadId = searchParams.get('threadId');
-    const userId = searchParams.get('userId');
 
-    if (!threadId || !userId) {
-      console.warn('[WARN] 缺少必要参数:', { threadId, userId });
+    if (!threadId) {
+      console.warn('[WARN] 缺少必要参数:', { threadId });
       return NextResponse.json({
         success: false,
-        error: 'ThreadId and UserId are required'
+        error: 'ThreadId is required'
       }, { status: 400 });
     }
 
@@ -24,6 +27,13 @@ export async function GET(request: Request) {
       let formattedMessages: Array<{ id: string; role: string; content: string; createdAt: number | string | null }>;
 
       if (isConversationId(threadId)) {
+        // 只能讀自己的對話：建立 conversation 時 metadata.userId 存的是身分 id
+        const conversation = await openai.conversations.retrieve(threadId);
+        const ownerId = (conversation as any).metadata?.userId;
+        if (ownerId && String(ownerId) !== identity.id) {
+          return NextResponse.json({ success: false, error: '無權讀取此對話' }, { status: 403 });
+        }
+
         // 新格式：Conversation items
         const items = await openai.conversations.items.list(threadId, { limit: 100, order: 'asc' } as any);
         formattedMessages = [];

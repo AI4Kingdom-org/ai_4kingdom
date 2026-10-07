@@ -15,6 +15,10 @@ export const TOKEN_LIMITS: Record<SubscriptionType, number> = {
   ultimate: 10000000 // 10,000 credits
 };
 
+// 未登入訪客的一次性試用額度（每台裝置一次、不隨月份重置）。
+// 用量存於 MonthlyTokenUsage，key = {guest_<id>, 'lifetime'}。
+export const GUEST_TOKEN_LIMIT = 50000; // 50 credits
+
 /** 取得指定方案的 token 上限；未知型別一律回退 free。 */
 export function getTokenLimit(type?: string | null): number {
   return TOKEN_LIMITS[(type as SubscriptionType)] ?? TOKEN_LIMITS.free;

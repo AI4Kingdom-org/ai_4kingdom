@@ -8,6 +8,7 @@ import UserIdDisplay from '../components/UserIdDisplay';
 import styles from './SundayGuide.module.css';
 import { ASSISTANT_IDS, VECTOR_STORE_IDS } from '../config/constants';
 import { useAuth } from '../contexts/AuthContext';
+import { openAuthenticatedDownload } from '../utils/openAuthenticatedDownload';
 
 interface ProcessedContent {
   summary: string;
@@ -155,7 +156,8 @@ export default function SundayGuide() {
   const handleRecentFileClick = (fileId: string, fileName: string) => {
     if (!user?.user_id || !fileId) return;
     const url = `/api/sunday-guide/download-pdf?includeAll=true&userId=${user.user_id}&assistantId=${ASSISTANT_IDS.SUNDAY_GUIDE}&fileId=${fileId}&previewOnly=true`;
-    window.open(url, '_blank');
+    // download-pdf 需要身分標頭，window.open 帶不到
+    openAuthenticatedDownload(url).catch((e) => alert(e instanceof Error ? e.message : '開啟失敗'));
   };
 
   const handleRenameTitle = async (fileId: string, newTitle: string) => {

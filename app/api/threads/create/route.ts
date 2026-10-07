@@ -2,11 +2,16 @@ import { NextResponse } from 'next/server';
 import { DynamoDBDocumentClient, PutCommand } from '@aws-sdk/lib-dynamodb';
 import { createDynamoDBClient } from '../../../utils/dynamodb';
 import { getOpenAI } from '../../../lib/openai/client';
+import { getRequestIdentity, unauthorized } from '../../../lib/identity/server';
 
 export async function POST(request: Request) {
+  const identity = getRequestIdentity(request);
+  if (!identity) return unauthorized();
+
   try {
     const body = await request.json();
-    const { userId, type, title } = body;
+    const { type, title } = body;
+    const userId = identity.id;
 
     console.log('[DEBUG] 开始创建对话:', { userId, type });
 

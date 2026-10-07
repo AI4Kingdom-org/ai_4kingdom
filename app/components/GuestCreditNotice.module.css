@@ -1,0 +1,31 @@
+.notice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px 12px;
+  padding: 6px 12px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #1e3a5f;
+  background: #eef5ff;
+  border-top: 1px solid #d6e4f5;
+}
+
+.exhausted {
+  color: #92400e;
+  background: #fef3c7;
+  border-top-color: #fde68a;
+}
+
+.links {
+  display: flex;
+  gap: 10px;
+  white-space: nowrap;
+}
+
+.links a {
+  color: #0b4a8b;
+  font-weight: 600;
+  text-decoration: underline;
+}

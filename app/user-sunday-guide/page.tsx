@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import { openAuthenticatedDownload } from '../utils/openAuthenticatedDownload';
 import { useCredit } from '../contexts/CreditContext';
 import WithChat from '../components/layouts/WithChat';
 import styles from './page.module.css';
@@ -359,28 +360,24 @@ function SundayGuideContent() {
   };
 
   // 下載包含所有內容的完整版本
-  const handleDownloadPDF = () => {
+  const handleDownloadPDF = async () => {
     setPdfError(null);
     setPdfLoading(true);
-    
+
     try {
       console.log('開始準備下載完整版...');
-      
+
       const userId = user?.user_id || '';
-      
+
       // 使用伺服器端API下載包含所有內容的HTML文件
       const downloadUrl = `/api/sunday-guide/download-pdf?includeAll=true&userId=${encodeURIComponent(userId)}&assistantId=${ASSISTANT_IDS.SUNDAY_GUIDE}`;
-      
-      // 在新分頁中打開下載URL
-      window.open(downloadUrl, '_blank');
-      
+
+      // 在新分頁中打開（需帶身分標頭，不能直接 window.open）
+      await openAuthenticatedDownload(downloadUrl);
+
       console.log('完整版下載請求已發送');
-      
-      // 短暫延遲後重置加載狀態
-      setTimeout(() => {
-        setPdfLoading(false);
-      }, 1000);
-      
+      setPdfLoading(false);
+
     } catch (error) {
       console.error('完整版PDF下載請求失敗:', error);
       setPdfError(error instanceof Error ? error.message : '下載完整版PDF時發生錯誤，請重試');
