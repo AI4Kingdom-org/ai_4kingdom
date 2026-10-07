@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createDynamoDBClient } from '@/app/utils/dynamodb';
 import { ScanCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
+import { requireAdmin } from '@/app/lib/identity/admin';
 
 const TABLE = process.env.NEXT_PUBLIC_SUNDAY_GUIDE_TABLE || 'SundayGuide';
 
@@ -35,6 +36,10 @@ function isCandidate(item: any, now: number, staleMs: number, unitId?: string): 
 }
 
 export async function POST(request: Request) {
+  // 管理用端點：僅限管理員或帶 service token 的內部呼叫（見 app/lib/identity/admin.ts）
+  const auth = await requireAdmin(request);
+  if ('response' in auth) return auth.response;
+
   try {
     const body = (await request.json().catch(() => ({}))) as Body;
     const mode = body.mode || 'mark-failed';

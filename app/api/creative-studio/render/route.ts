@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getRequestIdentity, unauthorized } from '@/app/lib/identity/server';
+import { getRequestIdentity, internalRequestHeaders, unauthorized } from '@/app/lib/identity/server';
 import { checkCredits, recordUsage } from '@/app/lib/credits';
 import { TOKEN_TO_CREDIT_RATIO } from '@/app/config/plans';
 
@@ -87,7 +87,7 @@ export async function POST(request: Request) {
     const endpoint = buildInternalUrl(request, '/api/creative-studio/video');
     const response = await fetch(endpoint, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...internalRequestHeaders() },
       body: JSON.stringify({
         provider,
         summary,

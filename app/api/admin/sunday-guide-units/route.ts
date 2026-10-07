@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { PutCommand } from '@aws-sdk/lib-dynamodb';
 import { createDynamoDBClient } from '@/app/utils/dynamodb';
 import { getUnitConfigsFromDB } from '@/app/utils/getUnitAllowedUploaders';
+import { requireAdmin } from '@/app/lib/identity/admin';
 
 const TABLE = process.env.NEXT_PUBLIC_SUNDAY_GUIDE_TABLE || 'SundayGuide';
 const UNIT_CONFIG_KEY = '__SYSTEM_UNIT_CONFIGS__';
@@ -31,16 +32,15 @@ export async function GET() {
 interface PostBody {
   unitId: string;
   allowedUploaders: string[];
-  userId?: string;
 }
 
 export async function POST(req: NextRequest) {
   try {
-    const { unitId, allowedUploaders, userId } = (await req.json()) as PostBody;
+    // 原本只比對前端帶來的 userId === '1'，任何人都能冒用；改以簽章 token 判定超級管理員
+    const auth = await requireAdmin(req, { superOnly: true });
+    if ('response' in auth) return auth.response;
 
-    if (userId !== '1') {
-      return NextResponse.json({ success: false, error: '沒有權限執行此操作' }, { status: 403 });
-    }
+    const { unitId, allowedUploaders } = (await req.json()) as PostBody;
 
     if (!['agape', 'eastChristHome', 'jianZhu', 'cfscChurch', 'chinesePastorNetwork'].includes(unitId)) {
       return NextResponse.json({ success: false, error: '不支援的單位' }, { status: 400 });
@@ -65,7 +65,7 @@ export async function POST(req: NextRequest) {
           jianZhuUploaders: updated.jianZhu,
           cfscChurchUploaders: updated.cfscChurch,
           chinesePastorNetworkUploaders: updated.chinesePastorNetwork,
-          updatedBy: String(userId),
+          updatedBy: auth.actorId,
           updatedAt: new Date().toISOString(),
         },
       })

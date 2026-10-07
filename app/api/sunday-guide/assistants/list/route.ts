@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createDynamoDBClient } from '../../../../utils/dynamodb';
 import { ScanCommand } from "@aws-sdk/lib-dynamodb";
+import { requireAdmin } from '@/app/lib/identity/admin';
 
 const SUNDAY_GUIDE_TABLE = process.env.NEXT_PUBLIC_SUNDAY_GUIDE_TABLE || 'SundayGuide';
 
@@ -13,7 +14,11 @@ interface AssistantListItem {
   vectorStoreId?: string;
 }
 
-export async function GET() {
+export async function GET(request: Request) {
+  // 管理用端點：僅限管理員或帶 service token 的內部呼叫（見 app/lib/identity/admin.ts）
+  const auth = await requireAdmin(request);
+  if ('response' in auth) return auth.response;
+
   try {
     console.log('[DEBUG] 開始檢索助手列表');
     

@@ -3,6 +3,7 @@ import OpenAI from 'openai';
 import { createDynamoDBClient } from '@/app/utils/dynamodb';
 import { ScanCommand } from '@aws-sdk/lib-dynamodb';
 import { VECTOR_STORE_IDS, ASSISTANT_IDS } from '@/app/config/constants';
+import { requireAdmin } from '@/app/lib/identity/admin';
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
@@ -11,7 +12,11 @@ const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 // 2. 取得 DynamoDB 中 unitId=agape 的有效 fileId 集合
 // 3. 移除多餘 file
 // 4. （可選）補上缺失 file（因上傳流程已同步，這裡先不做補）
-export async function POST() {
+export async function POST(request: Request) {
+  // 管理用端點：僅限管理員或帶 service token 的內部呼叫（見 app/lib/identity/admin.ts）
+  const auth = await requireAdmin(request);
+  if ('response' in auth) return auth.response;
+
   try {
     const agapeVector = VECTOR_STORE_IDS.AGAPE_CHURCH;
     if (!agapeVector) {

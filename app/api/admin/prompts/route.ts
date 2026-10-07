@@ -1,10 +1,15 @@
 import { NextResponse } from 'next/server';
 import { createDynamoDBClient } from '@/app/utils/dynamodb';
 import { PutCommand, ScanCommand, UpdateCommand, DeleteCommand } from '@aws-sdk/lib-dynamodb';
+import { requireAdmin } from '@/app/lib/identity/admin';
 
 const TABLE_NAME = process.env.NEXT_PUBLIC_AI_PROMPTS_TABLE || 'AIPrompts';
 
-export async function GET() {
+export async function GET(request: Request) {
+  // 管理用端點：僅限管理員或帶 service token 的內部呼叫（見 app/lib/identity/admin.ts）
+  const auth = await requireAdmin(request);
+  if ('response' in auth) return auth.response;
+
   // 讀取所有 prompts
   try {
     const docClient = await createDynamoDBClient();
@@ -32,6 +37,9 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  const auth = await requireAdmin(request);
+  if ('response' in auth) return auth.response;
+
   // 新增 prompt
   try {
     const data = await request.json();
@@ -55,6 +63,9 @@ export async function POST(request: Request) {
 }
 
 export async function PUT(request: Request) {
+  const auth = await requireAdmin(request);
+  if ('response' in auth) return auth.response;
+
   // 編輯 prompt
   try {
     const data = await request.json();
@@ -80,6 +91,9 @@ export async function PUT(request: Request) {
 }
 
 export async function DELETE(request: Request) {
+  const auth = await requireAdmin(request);
+  if ('response' in auth) return auth.response;
+
   // 刪除 prompt
   try {
     const { id } = await request.json();

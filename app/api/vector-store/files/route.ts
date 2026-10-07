@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { OpenAI } from 'openai';
+import { requireAdmin } from '@/app/lib/identity/admin';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
@@ -12,6 +13,10 @@ interface FileDetail {
 }
 
 export async function GET(request: Request) {
+  // 管理用端點：僅限管理員或帶 service token 的內部呼叫（見 app/lib/identity/admin.ts）
+  const auth = await requireAdmin(request);
+  if ('response' in auth) return auth.response;
+
   console.log('[DEBUG] 接收到文件列表請求');
   
   const url = new URL(request.url);

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { DynamoDBDocumentClient, ScanCommand } from "@aws-sdk/lib-dynamodb";
 import { createDynamoDBClient } from '../../utils/dynamodb';
 import { PutCommand } from "@aws-sdk/lib-dynamodb";
+import { requireAdmin } from '@/app/lib/identity/admin';
 
 export async function GET() {
   try {
@@ -37,6 +38,10 @@ export async function GET() {
 
 // POST 方法用于创建新记录
 export async function POST(request: Request) {
+  // 管理用端點：僅限管理員或帶 service token 的內部呼叫（見 app/lib/identity/admin.ts）
+  const auth = await requireAdmin(request);
+  if ('response' in auth) return auth.response;
+
   try {
     const docClient = await createDynamoDBClient();
     const data = await request.json();

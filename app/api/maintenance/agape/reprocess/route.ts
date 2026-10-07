@@ -2,12 +2,18 @@ import { NextResponse } from 'next/server';
 import { createDynamoDBClient } from '@/app/utils/dynamodb';
 import { ScanCommand } from '@aws-sdk/lib-dynamodb';
 import { ASSISTANT_IDS, VECTOR_STORE_IDS } from '@/app/config/constants';
+import { requireAdmin } from '@/app/lib/identity/admin';
+import { internalRequestHeaders } from '@/app/lib/identity/server';
 
 const TABLE = process.env.NEXT_PUBLIC_SUNDAY_GUIDE_TABLE || 'SundayGuide';
 
 interface Body { fileIds?: string[]; mode?: 'failed'|'pending'|'all'; limit?: number; }
 
 export async function POST(req: Request) {
+  // 管理用端點：僅限管理員或帶 service token 的內部呼叫（見 app/lib/identity/admin.ts）
+  const auth = await requireAdmin(req);
+  if ('response' in auth) return auth.response;
+
   try {
     const body: Body = await req.json().catch(()=>({}));
     const { fileIds, mode='failed', limit=25 } = body;
@@ -41,7 +47,8 @@ export async function POST(req: Request) {
         const apiOrigin = new URL(req.url).origin;
         await fetch(`${apiOrigin}/api/sunday-guide/process-document`, {
           method: 'POST',
-          headers: { 'Content-Type':'application/json' },
+          // process-document 需驗證身分；以內部呼叫標頭觸發，userId 沿用原紀錄
+          headers: { 'Content-Type':'application/json', ...internalRequestHeaders() },
           body: JSON.stringify({
             assistantId: ASSISTANT_IDS.AGAPE_CHURCH,
             vectorStoreId: t.vectorStoreId || VECTOR_STORE_IDS.AGAPE_CHURCH,

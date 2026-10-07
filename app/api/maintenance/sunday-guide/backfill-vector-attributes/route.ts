@@ -3,6 +3,7 @@ import OpenAI from 'openai';
 import { createDynamoDBClient } from '@/app/utils/dynamodb';
 import { ScanCommand } from '@aws-sdk/lib-dynamodb';
 import { SUNDAY_GUIDE_UNITS, getSundayGuideUnitConfig, findUnitByAssistantId } from '@/app/config/constants';
+import { requireAdmin } from '@/app/lib/identity/admin';
 
 // 為「本次改動之前」已在單位共用向量庫裡的檔案補上 sgFileId attribute，
 // 讓 Chat 依「選定講章」過濾檢索也能命中舊資料。
@@ -37,6 +38,10 @@ async function runPool<T>(items: T[], worker: (item: T) => Promise<void>, concur
 }
 
 export async function POST(req: Request) {
+  // 管理用端點：僅限管理員或帶 service token 的內部呼叫（見 app/lib/identity/admin.ts）
+  const auth = await requireAdmin(req);
+  if ('response' in auth) return auth.response;
+
   try {
     const body = await req.json().catch(() => ({} as any));
     const { unitId, limit = 200, dryRun = false } = body as { unitId?: string; limit?: number; dryRun?: boolean };

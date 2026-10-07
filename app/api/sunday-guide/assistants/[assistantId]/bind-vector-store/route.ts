@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { requireAdmin } from '@/app/lib/identity/admin';
 
 // ⚠️ 已棄用：Assistants API 移除後不再有「assistant 本體綁定向量庫」的概念。
 // 現在所有生成/聊天呼叫都在 Responses API 呼叫層級以
@@ -9,6 +10,10 @@ export async function POST(
   request: Request,
   { params }: { params: { assistantId: string } }
 ) {
+  // 管理用端點：僅限管理員或帶 service token 的內部呼叫（見 app/lib/identity/admin.ts）
+  const auth = await requireAdmin(request);
+  if ('response' in auth) return auth.response;
+
   try {
     const { assistantId } = params;
     const { vectorStoreId } = await request.json();

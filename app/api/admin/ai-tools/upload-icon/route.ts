@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { canManageAiTools, sanitizeText } from '@/app/utils/aiToolsDirectory';
+import { requireMember } from '@/app/lib/identity/server';
 import { getWordPressMediaConfig, uploadToWordPressMedia } from '@/app/utils/wordpressMedia';
 
 export const runtime = 'nodejs';
@@ -12,22 +13,20 @@ const ALLOWED_TYPES: Record<string, string> = {
   'image/gif': '.gif',
 };
 
-function getRequestUserId(request: NextRequest, formData: FormData): string {
-  return String(request.headers.get('x-user-id') || formData.get('userId') || '').trim();
-}
-
 export async function POST(request: NextRequest) {
   try {
-    const formData = await request.formData();
-    const userId = getRequestUserId(request, formData);
+    // 身分取自簽章 token，不再相信表單或 x-user-id 帶來的 userId
+    const auth = requireMember(request);
+    if ('response' in auth) return auth.response;
 
-    if (!(await canManageAiTools(userId))) {
+    if (!(await canManageAiTools(auth.identity.userId))) {
       return NextResponse.json(
         { success: false, error: '没有权限上传图标。' },
         { status: 403 }
       );
     }
 
+    const formData = await request.formData();
     const file = formData.get('file');
     if (!(file instanceof File)) {
       return NextResponse.json({ success: false, error: '请上传图标文件。' }, { status: 400 });
