@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import styles from './page.module.css';
+import IframeAutoHeight from '../../components/IframeAutoHeight';
 import type { AiToolRecord } from '@/app/types/aiTools';
 
 interface DetailResponse {
@@ -51,42 +52,43 @@ export default function AiToolDetailPage() {
 
   return (
     <main className={styles.page}>
+      <IframeAutoHeight />
+
       <div className={styles.shell}>
         <Link className={styles.backLink} href="/ai-tools">
           ← 返回 AI 工具目录
         </Link>
 
         {loading ? (
-          <div className={styles.stateBox}>載入中...</div>
+          <div className={styles.stateBox}>载入中…</div>
         ) : error || !tool ? (
           <div className={styles.stateBox}>
-            <strong>資料載入失敗</strong>
-            <p>{error || '找不到這個工具。'}</p>
+            <strong>资料载入失败</strong>
+            <p>{error || '找不到这个工具。'}</p>
           </div>
         ) : (
-          <article className={styles.card}>
-            <img className={styles.icon} src={tool.iconUrl} alt={`${tool.name} 图标`} />
+          <article>
+            <header className={styles.hero}>
+              <p className={styles.kicker}>
+                <span>
+                  {tool.category} › {tool.subcategory}
+                </span>
+              </p>
+              <div className={styles.titleRow}>
+                <img className={styles.icon} src={tool.iconUrl} alt={`${tool.name} 图标`} />
+                <div className={styles.titleText}>
+                  <h1>{tool.name}</h1>
+                  {tool.featured && <span className={styles.featuredBadge}>精选</span>}
+                </div>
+              </div>
+            </header>
 
             <div className={styles.body}>
-              <div className={styles.titleRow}>
-                <h1>{tool.name}</h1>
-                {tool.featured && <span className={styles.featuredBadge}>精选</span>}
-              </div>
-
-              <p className={styles.breadcrumb}>
-                {tool.category} / {tool.subcategory}
-              </p>
-
               <p className={styles.shortTitle}>{tool.shortTitle}</p>
               <p className={styles.description}>{tool.description}</p>
 
               {tool.websiteUrl && (
-                <a
-                  className={styles.websiteLink}
-                  href={tool.websiteUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                >
+                <a className={styles.websiteLink} href={tool.websiteUrl} target="_blank" rel="noreferrer">
                   前往工具官网 ↗
                 </a>
               )}
