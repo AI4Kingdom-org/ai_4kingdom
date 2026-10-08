@@ -4,6 +4,7 @@ import { createDynamoDBClient } from '@/app/utils/dynamodb';
 import { updateMonthlyTokenUsage } from '@/app/utils/monthlyTokenUsage';
 import { GUEST_TOKEN_LIMIT, TOKEN_TO_CREDIT_RATIO, getTokenLimit, tokensToCredits } from '@/app/config/plans';
 import type { Identity } from '@/app/lib/identity/server';
+import { isAdmin } from '@/app/lib/identity/admin';
 
 /**
  * 伺服器端額度檢查與記帳。
@@ -38,6 +39,21 @@ export interface CreditStatus {
   usedTokens: number;
   remainingCredits: number;
   totalCredits: number;
+  // 管理員不受額度限制（用量仍照常記錄，供統計）
+  unlimited: boolean;
+}
+
+// 管理員名單需讀 DynamoDB；每次聊天都查太浪費，短暫快取即可（名單異動最多延遲 1 分鐘生效）
+const ADMIN_CACHE_TTL_MS = 60_000;
+const adminCache = new Map<string, { value: boolean; expires: number }>();
+
+async function isUnlimitedMember(identity: Identity): Promise<boolean> {
+  if (identity.kind !== 'member') return false;
+  const cached = adminCache.get(identity.userId);
+  if (cached && cached.expires > Date.now()) return cached.value;
+  const value = await isAdmin(identity.userId);
+  adminCache.set(identity.userId, { value, expires: Date.now() + ADMIN_CACHE_TTL_MS });
+  return value;
 }
 
 function currentYearMonth(): string {
@@ -87,9 +103,12 @@ async function addTotalTokens(userId: string, yearMonth: string, usage: TokenUsa
 
 export async function getCreditStatus(identity: Identity): Promise<CreditStatus> {
   const limitTokens = identity.kind === 'member' ? getTokenLimit(identity.plan) : GUEST_TOKEN_LIMIT;
-  const usedTokens = identity.kind === 'member'
-    ? await readTotalTokens(identity.userId, currentYearMonth())
-    : await readTotalTokens(identity.id, GUEST_LIFETIME_KEY);
+  const [usedTokens, unlimited] = await Promise.all([
+    identity.kind === 'member'
+      ? readTotalTokens(identity.userId, currentYearMonth())
+      : readTotalTokens(identity.id, GUEST_LIFETIME_KEY),
+    isUnlimitedMember(identity),
+  ]);
 
   return {
     kind: identity.kind,
@@ -98,6 +117,7 @@ export async function getCreditStatus(identity: Identity): Promise<CreditStatus>
     usedTokens,
     remainingCredits: tokensToCredits(Math.max(0, limitTokens - usedTokens)),
     totalCredits: Math.floor(limitTokens / TOKEN_TO_CREDIT_RATIO),
+    unlimited,
   };
 }
 
@@ -120,6 +140,7 @@ function insufficientCredits(identity: Identity, message: string) {
 export async function checkCredits(identity: Identity, request: Request): Promise<NextResponse | null> {
   try {
     const status = await getCreditStatus(identity);
+    if (status.unlimited) return null;
     if (status.usedTokens >= status.limitTokens) {
       return insufficientCredits(
         identity,

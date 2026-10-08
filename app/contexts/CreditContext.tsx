@@ -16,11 +16,14 @@ interface CreditContextType {
   remainingCredits: number;
   totalCredits: number;
   isGuest: boolean;
+  isUnlimited: boolean;
   lastRefreshTime: Date | null;
   hasInsufficientTokens: boolean; // 新增檢查 token 是否不足的屬性
 }
 
 const CreditContext = createContext<CreditContextType | null>(null);
+
+export const UNLIMITED_CREDITS = 999999;
 
 /**
  * 額度一律以伺服器 /api/credits/me 為準（會員依方案的每月額度；訪客為一次性 50 點試用）。
@@ -32,6 +35,7 @@ export function CreditProvider({ children }: { children: React.ReactNode }) {
   const [remainingCredits, setRemainingCredits] = useState(0);
   const [totalCredits, setTotalCredits] = useState(0);
   const [isGuest, setIsGuest] = useState(true);
+  const [isUnlimited, setIsUnlimited] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [lastRefreshTime, setLastRefreshTime] = useState<Date | null>(null);
@@ -49,7 +53,9 @@ export function CreditProvider({ children }: { children: React.ReactNode }) {
       }
 
       setUsage({ monthlyTokens: data.usedTokens || 0 });
-      setRemainingCredits(data.remainingCredits || 0);
+      // 管理員不限額度：給一個不會觸發「額度不足／余额较低」的值，各頁面不必個別判斷
+      setRemainingCredits(data.unlimited ? UNLIMITED_CREDITS : (data.remainingCredits || 0));
+      setIsUnlimited(!!data.unlimited);
       setTotalCredits(data.totalCredits || 0);
       setIsGuest(data.kind === 'guest');
       setLastRefreshTime(new Date());
@@ -88,6 +94,7 @@ export function CreditProvider({ children }: { children: React.ReactNode }) {
     remainingCredits,
     totalCredits,
     isGuest,
+    isUnlimited,
     lastRefreshTime,
     hasInsufficientTokens: !!usage && remainingCredits <= 0,
   };
