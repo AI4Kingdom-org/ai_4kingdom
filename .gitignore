@@ -114,3 +114,11 @@ run_cdp_extractor.bat
 
 # Claude 本地設定
 .claude/
+
+# 批次處理進度檔（含中間狀態，不進版控）
+scripts/zhiming-yuan-batch-progress.json
+scripts/zhiming-yuan-folder-batch-progress.json
+
+# 本機 dev server／build 輸出紀錄
+.next-dev-*.log
+build_output.txt
