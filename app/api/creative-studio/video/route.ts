@@ -423,9 +423,10 @@ export async function POST(request: Request) {
     return NextResponse.json({
       success: true,
       jobId: id,
+      providerJobId: job.providerJobId || null,
       status: job.status,
       provider,
-      pollUrl: `/api/creative-studio/video?jobId=${id}`,
+      pollUrl: `/api/creative-studio/video?jobId=${job.providerJobId || id}`,
     });
   } catch (error) {
     console.error('[creative-studio/video] POST Error:', error);
