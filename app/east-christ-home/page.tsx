@@ -12,6 +12,7 @@ import MessageList from '../components/Chat/MessageList';
 import ChatInput from '../components/Chat/ChatInput';
 import AIFloatingBubble from '../components/Chat/AIFloatingBubble';
 import IframeAutoHeight from '../components/IframeAutoHeight';
+import { openAuthenticatedDownload } from '../utils/openAuthenticatedDownload';
 import ReactMarkdown from 'react-markdown';
 import styles from '../sunday-guide-v2/SundayGuide.module.css';
 import chatStyles from './navigator/chat.module.css';
@@ -29,7 +30,9 @@ type GuideMode = 'summary' | 'devotional' | 'bible' | null;
 function EastChristHomeContent() {
   const eastUnit = getSundayGuideUnitConfig('eastChristHome');
   const { refreshUsage, hasInsufficientTokens, remainingCredits } = useCredit();
-  const { user } = useAuth();
+  const { user, identityId } = useAuth();
+  // 訪客也能使用聊天：對話紀錄以身分 id（會員 userId／訪客 guest id）為 key
+  const chatUserId = user?.user_id || identityId;
   const [isProcessing, setIsProcessing] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<number>(0);
   const [uploadTime, setUploadTime] = useState<string>('');
@@ -85,9 +88,9 @@ function EastChristHomeContent() {
   }, [chatError, setChatError]);
 
   useEffect(() => {
-    if (currentThreadId && user && shouldLoadHistory.current) {
+    if (currentThreadId && chatUserId && shouldLoadHistory.current) {
       shouldLoadHistory.current = false;
-      loadChatHistory(user.user_id);
+      loadChatHistory(chatUserId);
     }
   }, [currentThreadId]);
 
@@ -242,15 +245,15 @@ function EastChristHomeContent() {
     } catch (e) { console.error(e); alert(e instanceof Error ? e.message : '請稍後重試'); }
     finally { setNavLoading(false); }
   };
-  const handleDownloadPDF = () => {
+  const handleDownloadPDF = async () => {
     setPdfError(null); setPdfLoading(true);
     try {
       const params = new URLSearchParams();
       params.set('assistantId', eastUnit.assistantId);
       params.set('userId', user?.user_id || '');
       params.set('includeAll', 'true');
-      window.open(`/api/sunday-guide/download-pdf?${params.toString()}`, '_blank');
-      setTimeout(() => setPdfLoading(false), 1200);
+      await openAuthenticatedDownload(`/api/sunday-guide/download-pdf?${params.toString()}`);
+      setPdfLoading(false);
     } catch (err) { setPdfError(err instanceof Error ? err.message : '下載失敗'); setPdfLoading(false); }
   };
   const renderNavContent = () => {
@@ -261,7 +264,8 @@ function EastChristHomeContent() {
       <div className={styles.contentBox}>
         <div className={styles.contentHeader}>
           <h2>{titles[selectedMode!]}</h2>
-          <button className={styles.downloadButton} onClick={handleDownloadPDF} disabled={pdfLoading}>{pdfLoading ? '生成中...' : '下载完整版'}</button>
+          {/* 下载完整版僅限登入會員 */}
+          {user && (<button className={styles.downloadButton} onClick={handleDownloadPDF} disabled={pdfLoading}>{pdfLoading ? '生成中...' : '下载完整版'}</button>)}
         </div>
         {pdfError && <div className={styles.errorMessage}>{pdfError}</div>}
         <div className={styles.markdownContent} ref={contentRef}><ReactMarkdown>{sermonContent}</ReactMarkdown></div>
@@ -342,7 +346,7 @@ function EastChristHomeContent() {
       </div>
 
       {/* ── Floating chat bubble + panel ── */}
-      {user && (
+      {chatUserId && (
         <>
           <div className={`${chatStyles.floatingPanel}${chatOpen ? ' ' + chatStyles.panelOpen : ''}`}>
             <div className={chatStyles.panelHeader}>
@@ -354,7 +358,7 @@ function EastChristHomeContent() {
                 <button className={chatStyles.sidebarToggle} onClick={() => setSidebarOpen(v => !v)}>
                   <span>📋 對話記錄</span><span>{sidebarOpen ? '▲' : '▼'}</span>
                 </button>
-                <ConversationList userId={user.user_id} type="east-christ-home" currentThreadId={currentThreadId}
+                <ConversationList userId={chatUserId} type="east-christ-home" currentThreadId={currentThreadId}
                   onSelectThread={handleSelectThread} isCreating={false} onCreateNewThread={handleCreateNewThread} sidebarMode={true} />
               </div>
               <div className={chatStyles.main}>

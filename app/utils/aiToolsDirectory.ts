@@ -7,23 +7,15 @@ import {
   GlobalSecondaryIndex,
   KeySchemaElement,
 } from '@aws-sdk/client-dynamodb';
-import { GetCommand, QueryCommand, ScanCommand } from '@aws-sdk/lib-dynamodb';
+import { GetCommand, ScanCommand } from '@aws-sdk/lib-dynamodb';
 import { PERMISSION_GROUPS, UPLOAD_PERMITTED_USERS } from '@/app/config/userPermissions';
+import { isSuperAdmin, readPermissionConfig } from '@/app/lib/identity/admin';
 import { createDynamoDBClient, getDynamoDBConfig } from '@/app/utils/dynamodb';
 import type { AiToolRecord, AiToolStatus, AiToolsCategoryGroup } from '@/app/types/aiTools';
 
 export const AI_TOOLS_TABLE = process.env.AI_TOOLS_TABLE || process.env.NEXT_PUBLIC_AI_TOOLS_TABLE || 'AiToolsDirectory';
 
-const SUNDAY_GUIDE_TABLE = process.env.NEXT_PUBLIC_SUNDAY_GUIDE_TABLE || 'SundayGuide';
-const PERMISSIONS_CONFIG_ASSISTANT_ID = '__SYSTEM_PERMISSIONS__';
-const PERMISSIONS_CONFIG_TYPE = 'GLOBAL_UPLOAD_PERMISSIONS';
 let ensureAiToolsTablePromise: Promise<void> | null = null;
-
-type PermissionGroups = {
-  ADMINS: string[];
-  EDITORS: string[];
-  SPECIAL_USERS: string[];
-};
 
 export interface AiToolInput {
   name: string;
@@ -190,52 +182,10 @@ export function getAiToolsErrorMessage(error: unknown, action: string): string {
   return `${action}失败。`;
 }
 
-function normalizeStringArray(list: unknown): string[] {
-  if (!Array.isArray(list)) return [];
-  return [...new Set(list.map((item) => String(item ?? '').trim()).filter(Boolean))];
-}
-
-function normalizePermissionGroups(input: unknown): PermissionGroups {
-  const groups = (input || {}) as Record<string, unknown>;
-  return {
-    ADMINS: normalizeStringArray(groups.ADMINS),
-    EDITORS: normalizeStringArray(groups.EDITORS),
-    SPECIAL_USERS: normalizeStringArray(groups.SPECIAL_USERS),
-  };
-}
-
-async function readPermissionConfig() {
-  try {
-    const client = await createDynamoDBClient();
-    const result = await client.send(
-      new QueryCommand({
-        TableName: SUNDAY_GUIDE_TABLE,
-        KeyConditionExpression: 'assistantId = :assistantId',
-        ExpressionAttributeValues: {
-          ':assistantId': PERMISSIONS_CONFIG_ASSISTANT_ID,
-        },
-        ScanIndexForward: false,
-        Limit: 20,
-      })
-    );
-
-    const record = (result.Items || []).find((item) => item.recordType === PERMISSIONS_CONFIG_TYPE);
-    if (!record) return null;
-
-    return {
-      uploadPermittedUsers: normalizeStringArray(record.uploadPermittedUsers),
-      permissionGroups: normalizePermissionGroups(record.permissionGroups),
-    };
-  } catch (error) {
-    console.warn('[AiToolsDirectory] Permission lookup failed, using static fallback.', error);
-    return null;
-  }
-}
-
 export async function canManageAiTools(userId: unknown): Promise<boolean> {
   const normalizedUserId = String(userId ?? '').trim();
   if (!normalizedUserId) return false;
-  if (normalizedUserId === '1') return true;
+  if (isSuperAdmin(normalizedUserId)) return true;
 
   const stored = await readPermissionConfig();
   const uploadPermittedUsers = stored?.uploadPermittedUsers || UPLOAD_PERMITTED_USERS;

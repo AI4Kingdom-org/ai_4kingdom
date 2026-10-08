@@ -12,18 +12,14 @@ import {
   validateAiToolInput,
 } from '@/app/utils/aiToolsDirectory';
 import type { AiToolRecord } from '@/app/types/aiTools';
+import { requireMember } from '@/app/lib/identity/server';
 
-function getRequestUserId(request: NextRequest, body?: Record<string, unknown>): string {
-  return String(
-    request.headers.get('x-user-id') ||
-    body?.userId ||
-    new URL(request.url).searchParams.get('userId') ||
-    ''
-  ).trim();
-}
+// 身分一律取自簽章 token，不再相信前端帶來的 userId（query / body / x-user-id）
+async function requireAiToolsManager(request: NextRequest) {
+  const auth = requireMember(request);
+  if ('response' in auth) return { userId: '', response: auth.response };
 
-async function requireAiToolsManager(request: NextRequest, body?: Record<string, unknown>) {
-  const userId = getRequestUserId(request, body);
+  const { userId } = auth.identity;
   const allowed = await canManageAiTools(userId);
   if (!allowed) {
     return {
@@ -60,7 +56,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = (await request.json()) as Record<string, unknown>;
-    const auth = await requireAiToolsManager(request, body);
+    const auth = await requireAiToolsManager(request);
     if (auth.response) return auth.response;
 
     const input = normalizeAiToolInput(body);
@@ -99,7 +95,7 @@ export async function POST(request: NextRequest) {
 export async function PUT(request: NextRequest) {
   try {
     const body = (await request.json()) as Record<string, unknown>;
-    const auth = await requireAiToolsManager(request, body);
+    const auth = await requireAiToolsManager(request);
     if (auth.response) return auth.response;
 
     const id = sanitizeText(body.id, 120);
@@ -157,7 +153,7 @@ export async function PUT(request: NextRequest) {
 export async function DELETE(request: NextRequest) {
   try {
     const body = (await request.json()) as Record<string, unknown>;
-    const auth = await requireAiToolsManager(request, body);
+    const auth = await requireAiToolsManager(request);
     if (auth.response) return auth.response;
 
     const id = sanitizeText(body.id, 120);

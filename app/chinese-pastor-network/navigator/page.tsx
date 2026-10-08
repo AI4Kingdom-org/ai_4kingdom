@@ -11,6 +11,7 @@ import styles from '../../user-sunday-guide/page.module.css';
 import chatStyles from './chat.module.css';
 import { ASSISTANT_IDS, VECTOR_STORE_IDS } from '../../config/constants';
 import ReactMarkdown from 'react-markdown';
+import { openAuthenticatedDownload } from '../../utils/openAuthenticatedDownload';
 
 type GuideMode = 'summary' | 'devotional' | 'bible' | null;
 
@@ -25,7 +26,9 @@ interface CPNRecord {
 function ChinesePastorNetworkNavigatorContent() {
   const [fileList, setFileList] = useState<CPNRecord[]>([]);
   const [selectedFileUniqueId, setSelectedFileUniqueId] = useState<string | null>(null);
-  const { user } = useAuth();
+  const { user, identityId } = useAuth();
+  // 訪客也能閱讀與聊天：對話紀錄以身分 id（會員 userId／訪客 guest id）為 key
+  const chatUserId = user?.user_id || identityId;
   const { refreshUsage } = useCredit();
   const [selectedMode, setSelectedMode] = useState<GuideMode>(null);
   const [sermonContent, setSermonContent] = useState<string | null>(null);
@@ -48,9 +51,9 @@ function ChinesePastorNetworkNavigatorContent() {
   }, [chatError, setChatError]);
 
   useEffect(() => {
-    if (currentThreadId && user && shouldLoadHistory.current) {
+    if (currentThreadId && chatUserId && shouldLoadHistory.current) {
       shouldLoadHistory.current = false;
-      loadChatHistory(user.user_id);
+      loadChatHistory(chatUserId);
     }
   }, [currentThreadId]);
 
@@ -74,9 +77,8 @@ function ChinesePastorNetworkNavigatorContent() {
   };
 
   useEffect(() => {
-    if (user?.user_id) {
-      fetchFiles();
-    }
+    // 文件清單對訪客開放，不再要求登入
+    fetchFiles();
   }, [user]);
 
   const fetchFiles = async () => {
@@ -190,7 +192,8 @@ function ChinesePastorNetworkNavigatorContent() {
       <div className={styles.contentBox}>
         <div className={styles.contentHeader}>
           <h2>{titles[selectedMode!]}</h2>
-          {sermonContent && (
+          {/* 下载完整版僅限登入會員 */}
+          {sermonContent && user && (
             <button
               style={{ marginLeft: 8 }}
               className={styles.downloadButton}
@@ -209,7 +212,7 @@ function ChinesePastorNetworkNavigatorContent() {
     );
   };
 
-  const handleDownloadPDF = () => {
+  const handleDownloadPDF = async () => {
     setPdfError(null);
     setPdfLoading(true);
     try {
@@ -220,8 +223,8 @@ function ChinesePastorNetworkNavigatorContent() {
       params.set('userId', userId);
       params.set('includeAll', 'true');
       const url = `${base}?${params.toString()}`;
-      window.open(url, '_blank');
-      setTimeout(() => setPdfLoading(false), 1200);
+      await openAuthenticatedDownload(url);
+      setPdfLoading(false);
     } catch (err) {
       console.error('PDF 下載失敗', err);
       setPdfError(err instanceof Error ? err.message : '下載失敗');
@@ -229,9 +232,7 @@ function ChinesePastorNetworkNavigatorContent() {
     }
   };
 
-  if (!user) {
-    return <div>請先登錄</div>;
-  }
+  if (!chatUserId) return null;
 
   return (
     <div className={styles.container}>
@@ -266,7 +267,7 @@ function ChinesePastorNetworkNavigatorContent() {
                     <span>{sidebarOpen ? '▲' : '▼'}</span>
                   </button>
                   <ConversationList
-                    userId={user.user_id}
+                    userId={chatUserId}
                     type="chinese-pastor-network"
                     currentThreadId={currentThreadId}
                     onSelectThread={handleSelectThread}
@@ -297,17 +298,18 @@ function ChinesePastorNetworkNavigatorContent() {
 
 export default function ChinesePastorNetworkNavigatorPage() {
   const [mounted, setMounted] = useState(false);
-  const { user, loading } = useAuth();
+  const { user, loading, identityId } = useAuth();
+  const chatUserId = user?.user_id || identityId;
   useEffect(() => setMounted(true), []);
   if (!mounted || loading) return null;
-  if (!user) return <div>请先登录</div>;
+  if (!chatUserId) return null;
   return (
     <ChatProvider
       initialConfig={{
         type: 'chinese-pastor-network',
         assistantId: ASSISTANT_IDS.CHINESE_PASTOR_NETWORK,
         vectorStoreId: VECTOR_STORE_IDS.CHINESE_PASTOR_NETWORK,
-        userId: user.user_id,
+        userId: chatUserId,
       }}
     >
       <ChinesePastorNetworkNavigatorContent />

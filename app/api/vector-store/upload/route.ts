@@ -3,7 +3,7 @@ import OpenAI from 'openai';
 import { createDynamoDBClient } from '@/app/utils/dynamodb';
 import { PutCommand, ScanCommand } from "@aws-sdk/lib-dynamodb";
 import { findUnitByAssistantId, getSundayGuideUnitConfig, VECTOR_STORE_IDS } from '@/app/config/constants';
-import { getUnitAllowedUploaders } from '@/app/utils/getUnitAllowedUploaders';
+import { requireUploader } from '@/app/lib/identity/uploadPermission';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
@@ -91,7 +91,6 @@ export async function POST(request: Request) {
 
     const formData = await request.formData();
     const file = formData.get('file') as File;
-    const userId = formData.get('userId') as string | null;
 
     // 單位辨識：優先使用顯式傳入，其次 assistantId 反查
     let unitId: any;
@@ -105,13 +104,10 @@ export async function POST(request: Request) {
     const unitCfg = getSundayGuideUnitConfig(unitId);
     const isAgape = unitId === 'agape';
 
-    // 權限：若是非 default 單位，需檢查 allowedUploaders
-    if (unitId !== 'default') {
-      const uploaders = await getUnitAllowedUploaders(unitId);
-      if (!userId || !uploaders.includes(String(userId))) {
-        return NextResponse.json({ error: '無權在此單位上傳' }, { status: 403 });
-      }
-    }
+    // 權限：須為登入會員；非 default 單位再檢查 allowedUploaders（上傳者以簽章身分為準，不採信 form 的 userId）
+    const auth = await requireUploader(request, unitId);
+    if ('response' in auth) return auth.response;
+    const userId = auth.identity.userId;
     
     if (!file) {
       console.error('[ERROR] 沒有找到文件');

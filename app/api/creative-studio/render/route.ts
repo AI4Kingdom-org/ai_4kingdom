@@ -1,4 +1,10 @@
 import { NextResponse } from 'next/server';
+import { getRequestIdentity, internalRequestHeaders, unauthorized } from '@/app/lib/identity/server';
+import { checkCredits, recordUsage } from '@/app/lib/credits';
+import { TOKEN_TO_CREDIT_RATIO } from '@/app/config/plans';
+
+// 影片生成不是以 token 計價，每支影片固定扣點（可用環境變數調整）
+const RENDER_CREDITS = Number(process.env.CREATIVE_RENDER_CREDITS) || 30;
 
 type ReferenceImageInput = {
   dataUrl?: string;
@@ -58,6 +64,11 @@ function resolveProvider(): 'sora' | 'mock' {
 }
 
 export async function POST(request: Request) {
+  const identity = getRequestIdentity(request);
+  if (!identity) return unauthorized();
+  const creditError = await checkCredits(identity, request);
+  if (creditError) return creditError;
+
   try {
     const body = (await request.json()) as CreativeRenderRequest;
     const draft = body.draft;
@@ -76,7 +87,7 @@ export async function POST(request: Request) {
     const endpoint = buildInternalUrl(request, '/api/creative-studio/video');
     const response = await fetch(endpoint, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...internalRequestHeaders() },
       body: JSON.stringify({
         provider,
         summary,
@@ -100,6 +111,10 @@ export async function POST(request: Request) {
     });
 
     const data = await response.json().catch(() => ({}));
+    if (response.ok && data?.jobId) {
+      const tokens = RENDER_CREDITS * TOKEN_TO_CREDIT_RATIO;
+      await recordUsage(identity, { prompt_tokens: 0, completion_tokens: tokens, total_tokens: tokens, retrieval_tokens: 0 }, request);
+    }
     return NextResponse.json(
       {
         ...data,

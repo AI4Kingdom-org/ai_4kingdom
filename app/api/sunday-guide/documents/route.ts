@@ -4,6 +4,8 @@ import { createDynamoDBClient } from '../../../utils/dynamodb';
 import { PutCommand, ScanCommand, DeleteCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import { ASSISTANT_IDS, findUnitByAssistantId, getSundayGuideUnitConfig } from '@/app/config/constants';
 import { getUnitAllowedUploaders } from '@/app/utils/getUnitAllowedUploaders';
+import { internalRequestHeaders, requireMember } from '@/app/lib/identity/server';
+import { requireUploader } from '@/app/lib/identity/uploadPermission';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
@@ -207,16 +209,13 @@ export async function POST(request: Request) {
     
     const file = formData.get('files') as File;
     const assistantId = formData.get('assistantId') as string;
-    const userId = formData.get('userId') as string; // 獲取 userId
     const unitId = (formData.get('unitId') as string) || undefined; // 上傳時帶入的單位
 
-    // 標準化用戶 ID 的處理
-    let parsedUserId = userId;
-    if (userId && !isNaN(Number(userId))) {
-      parsedUserId = userId;
-    } else if (!userId) {
-      parsedUserId = 'unknown';
-    }
+    // 上傳者以簽章身分為準，並須具備該單位的上傳權限
+    const auth = await requireUploader(request, unitId);
+    if ('response' in auth) return auth.response;
+    const userId = auth.identity.userId;
+    const parsedUserId = userId;
 
     console.log('请求参数详情:', {
       文件信息: file ? {
@@ -309,7 +308,7 @@ export async function POST(request: Request) {
       const apiOrigin = new URL(request.url).origin;
       await fetch(`${apiOrigin}/api/sunday-guide/process-document`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...internalRequestHeaders() },
         body: JSON.stringify({
           assistantId,
           vectorStoreId: vectorStore.id,
@@ -378,16 +377,19 @@ export async function POST(request: Request) {
   }
 }
 
-// 單筆刪除：僅允許該筆上傳者且 unitId=agape (公開瀏覽) 刪除
+// 單筆刪除：僅允許該筆上傳者或該單位管理員刪除（身分以簽章 token 為準，不接受 query 的 userId）
 export async function DELETE(request: Request) {
+  const auth = requireMember(request);
+  if ('response' in auth) return auth.response;
+
   try {
     const url = new URL(request.url);
     const fileId = url.searchParams.get('fileId');
     const unitId = url.searchParams.get('unitId');
-    const userId = url.searchParams.get('userId');
+    const userId = auth.identity.userId;
 
-    if (!fileId || !unitId || !userId) {
-      return NextResponse.json({ success: false, error: '缺少必要參數 fileId / unitId / userId' }, { status: 400 });
+    if (!fileId || !unitId) {
+      return NextResponse.json({ success: false, error: '缺少必要參數 fileId / unitId' }, { status: 400 });
     }
     if (!['agape', 'eastChristHome', 'jianZhu', 'cfscChurch', 'chinesePastorNetwork', 'default'].includes(unitId)) {
       return NextResponse.json({ success: false, error: '不支援的單位' }, { status: 400 });
@@ -501,9 +503,13 @@ export async function DELETE(request: Request) {
 
 // 更新文檔標題（sermonTitle）
 export async function PATCH(request: Request) {
+  const auth = requireMember(request);
+  if ('response' in auth) return auth.response;
+
   try {
-    const { fileId, unitId, userId, sermonTitle } = await request.json();
-    if (!fileId || !unitId || !userId || typeof sermonTitle !== 'string') {
+    const { fileId, unitId, sermonTitle } = await request.json();
+    const userId = auth.identity.userId;
+    if (!fileId || !unitId || typeof sermonTitle !== 'string') {
       return NextResponse.json({ success: false, error: '缺少必要參數' }, { status: 400 });
     }
     const trimmedTitle = sermonTitle.trim();

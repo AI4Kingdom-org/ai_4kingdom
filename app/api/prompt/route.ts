@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { DynamoDBDocumentClient, GetCommand, PutCommand } from "@aws-sdk/lib-dynamodb";
 import { ASSISTANT_IDS, VECTOR_STORE_IDS } from "@/app/config/constants";
 import { createDynamoDBClient } from '../../utils/dynamodb';
+import { requireAdmin } from '@/app/lib/identity/admin';
 
 // 使用統一的 DynamoDB 客戶端
 const getDocClient = async () => {
@@ -58,6 +59,10 @@ export async function GET(request: Request) {
 
 // 更新Prompt
 export async function PUT(request: Request) {
+  // 管理用端點：僅限管理員或帶 service token 的內部呼叫（見 app/lib/identity/admin.ts）
+  const auth = await requireAdmin(request);
+  if ('response' in auth) return auth.response;
+
   try {
     const { content, vectorStoreId = VECTOR_STORE_IDS.GENERAL, assistantId = ASSISTANT_IDS.GENERAL } = await request.json();
     

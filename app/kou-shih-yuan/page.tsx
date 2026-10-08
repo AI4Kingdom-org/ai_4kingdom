@@ -12,7 +12,9 @@ import { CHAT_TYPES } from '../config/chatTypes';
 import styles from './page.module.css';
 
 function KouShihYuanContent() {
-  const { user } = useAuth();
+  const { user, identityId } = useAuth();
+  // 訪客也能使用：對話紀錄以身分 id（會員 userId／訪客 guest id）為 key
+  const chatUserId = user?.user_id || identityId;
   const {
     messages,
     currentThreadId,
@@ -29,9 +31,9 @@ function KouShihYuanContent() {
   const shouldLoadHistory = useRef(false);
 
   useEffect(() => {
-    if (currentThreadId && user && shouldLoadHistory.current) {
+    if (currentThreadId && chatUserId && shouldLoadHistory.current) {
       shouldLoadHistory.current = false;
-      loadChatHistory(user.user_id);
+      loadChatHistory(chatUserId);
     }
   }, [currentThreadId]);
 
@@ -54,7 +56,7 @@ function KouShihYuanContent() {
     window.dispatchEvent(new CustomEvent('refreshConversations'));
   };
 
-  if (!user) return null;
+  if (!chatUserId) return null;
 
   return (
     <div className={styles.pageBackground}>
@@ -69,7 +71,7 @@ function KouShihYuanContent() {
               <span>📋 對話記錄</span><span>{sidebarOpen ? '▲' : '▼'}</span>
             </button>
             <ConversationList
-              userId={user.user_id}
+              userId={chatUserId}
               type={CHAT_TYPES.KOU_SHIH_YUAN}
               currentThreadId={currentThreadId}
               onSelectThread={handleSelectThread}

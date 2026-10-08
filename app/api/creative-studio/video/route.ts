@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { isInternalRequest, unauthorized } from '@/app/lib/identity/server';
 
 type CreativeVideoRequest = {
   summary?: string;
@@ -325,6 +326,9 @@ function enqueueMockRender(job: CreativeVideoJob): void {
 }
 
 export async function POST(request: Request) {
+  // 只接受 /api/creative-studio/render 的內部呼叫：扣點在 render 進行，直接呼叫會繞過扣點
+  if (!isInternalRequest(request)) return unauthorized();
+
   try {
     const body = (await request.json()) as CreativeVideoRequest;
     const envProvider = process.env.CREATIVE_STUDIO_VIDEO_PROVIDER as 'mock' | 'sora' | undefined;
@@ -419,9 +423,10 @@ export async function POST(request: Request) {
     return NextResponse.json({
       success: true,
       jobId: id,
+      providerJobId: job.providerJobId || null,
       status: job.status,
       provider,
-      pollUrl: `/api/creative-studio/video?jobId=${id}`,
+      pollUrl: `/api/creative-studio/video?jobId=${job.providerJobId || id}`,
     });
   } catch (error) {
     console.error('[creative-studio/video] POST Error:', error);

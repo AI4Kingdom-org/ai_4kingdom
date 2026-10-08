@@ -42,4 +42,6 @@ export interface AuthContextType extends AuthState {
   hasRole: (role: MemberRole) => boolean;
   canAccessFeature: (feature: FeatureKey) => boolean;
   canUploadFiles: () => boolean; // 新增上傳權限檢查方法
+  // 目前身分的 id：會員為 WP userId，訪客為 guest_<hex>；尚未判定時為 null
+  identityId: string | null;
 } 

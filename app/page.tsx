@@ -9,21 +9,19 @@ import { ASSISTANT_IDS, VECTOR_STORE_IDS } from './config/constants';
 import { ChatProvider } from './contexts/ChatContext';
 
 export default function Home() {
-  const { user, loading } = useAuth();
-  
+  const { user, loading, identityId } = useAuth();
+  // 訪客也能使用：會員用 WP userId，訪客用 guest id
+  const chatUserId = user?.user_id || identityId;
+
   console.log('[DEBUG] General页面初始化:', {
-    userId: user?.user_id,
+    userId: chatUserId,
     loading,
     assistantId: ASSISTANT_IDS.GENERAL,
     vectorStoreId: VECTOR_STORE_IDS.GENERAL
   });
-  
-  if (loading) {
-    return <div>加载中...</div>;
-  }
 
-  if (!user?.user_id) {
-    return <div>请先登录</div>;
+  if (loading || !chatUserId) {
+    return <div>加载中...</div>;
   }
 
   return (
@@ -44,13 +42,13 @@ export default function Home() {
                 type: CHAT_TYPES.GENERAL,
                 assistantId: ASSISTANT_IDS.GENERAL,
                 vectorStoreId: VECTOR_STORE_IDS.GENERAL,
-                userId: user.user_id
+                userId: chatUserId
               }}>
-                <Chat 
+                <Chat
                   type={CHAT_TYPES.GENERAL}
                   assistantId={ASSISTANT_IDS.GENERAL}
                   vectorStoreId={VECTOR_STORE_IDS.GENERAL}
-                  userId={user.user_id}
+                  userId={chatUserId}
                 />
               </ChatProvider>
             </div>

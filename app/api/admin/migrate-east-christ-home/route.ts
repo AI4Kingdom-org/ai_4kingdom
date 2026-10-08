@@ -3,6 +3,7 @@ import { ScanCommand, PutCommand, DeleteCommand } from '@aws-sdk/lib-dynamodb';
 import { createDynamoDBClient } from '@/app/utils/dynamodb';
 import { ASSISTANT_IDS, VECTOR_STORE_IDS } from '@/app/config/constants';
 import OpenAI from 'openai';
+import { requireAdmin } from '@/app/lib/identity/admin';
 
 const TABLE = process.env.NEXT_PUBLIC_SUNDAY_GUIDE_TABLE || 'SundayGuide';
 const OLD_ASSISTANT_ID = ASSISTANT_IDS.AGAPE_CHURCH;
@@ -13,17 +14,16 @@ const NEW_VS_ID = VECTOR_STORE_IDS.EAST_CHRIST_HOME;
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 interface MigrateBody {
-  userId: string;
   dryRun?: boolean;
 }
 
 export async function POST(req: NextRequest) {
   try {
-    const { userId, dryRun = true } = (await req.json()) as MigrateBody;
+    // 原本只比對前端帶來的 userId === '1'，任何人都能冒用；改以簽章 token 判定超級管理員
+    const auth = await requireAdmin(req, { superOnly: true });
+    if ('response' in auth) return auth.response;
 
-    if (userId !== '1') {
-      return NextResponse.json({ success: false, error: '沒有權限執行此操作' }, { status: 403 });
-    }
+    const { dryRun = true } = (await req.json()) as MigrateBody;
 
     const client = await createDynamoDBClient();
 

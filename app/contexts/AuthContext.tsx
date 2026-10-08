@@ -3,6 +3,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { FEATURE_ACCESS } from '../types/auth';
 import { canUserUpload } from '../config/userPermissions';
+import { getIdentityId, installIdentityFetch, registerSessionRefresher, setMemberSession } from '../lib/identity/client';
 import type { UserData, AuthState, AuthContextType, FeatureKey, MemberRole } from '../types/auth';
 import type { Subscription } from '../types/auth';
 
@@ -61,7 +62,12 @@ export function AuthProvider({ children, optional = false }: { children: React.R
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [dynamicUploadPermittedUsers, setDynamicUploadPermittedUsers] = useState<string[] | null>(null);
+  const [identityId, setIdentityId] = useState<string | null>(null);
   const isOptional = optional || process.env.NEXT_PUBLIC_AUTH_OPTIONAL === 'true';
+
+  // 必須在 render 階段安裝：子元件的 useEffect 會比本元件的 useEffect 先執行，
+  // 若延到 effect 才安裝，頁面第一批 /api/ 請求就不會帶身分標頭。
+  if (typeof window !== 'undefined') installIdentityFetch();
 
   /**
    * 後端路徑說明：
@@ -142,6 +148,11 @@ export function AuthProvider({ children, optional = false }: { children: React.R
       const data = await makeRequest('session', { method: 'GET' });
 
       if (data?.logged_in && data?.user) {
+        // app_token 由 mu-plugin a4k-app-identity.php 簽發，伺服器端 API 以它確認會員身分
+        if (!data.app_token) {
+          console.warn('[WARN] session 未回傳 app_token，伺服器端將以訪客身分處理此會員');
+        }
+        setMemberSession({ token: data.app_token || null, userId: String(data.user.id) });
         setUser({
           user_id: String(data.user.id),
           nonce: data.nonce,
@@ -152,9 +163,11 @@ export function AuthProvider({ children, optional = false }: { children: React.R
           subscription: normalizeSubscription(data?.subscription),
         });
       } else {
+        setMemberSession({ token: null, userId: null });
         setUser(null);
       }
     } catch (err) {
+      setMemberSession({ token: null, userId: null });
       // 在可選模式下，靜默降級為未登入，避免噴錯干擾開發體驗
       if (isOptional) {
         console.warn('[WARN] 会话验证失败（已降級為可選）：', err);
@@ -166,6 +179,7 @@ export function AuthProvider({ children, optional = false }: { children: React.R
         setError(err instanceof Error ? err.message : '认证失败');
       }
     } finally {
+      setIdentityId(await getIdentityId());
       setLoading(false);
     }
   };
@@ -180,7 +194,9 @@ export function AuthProvider({ children, optional = false }: { children: React.R
     } catch (err) {
       console.error('[ERROR] 登出失败:', err);
     } finally {
+      setMemberSession({ token: null, userId: null });
       setUser(null);
+      setIdentityId(await getIdentityId());
       setLoading(false);
       setError(null);
     }
@@ -245,6 +261,7 @@ export function AuthProvider({ children, optional = false }: { children: React.R
 
   // 初始化檢查
   useEffect(() => {
+    registerSessionRefresher(checkAuth);
     checkAuth();
     // 若瀏覽器封鎖第三方 Cookie，可在此嘗試 Storage Access API 再重試
     // if ('hasStorageAccess' in document && 'requestStorageAccess' in document) { ... }
@@ -293,6 +310,7 @@ export function AuthProvider({ children, optional = false }: { children: React.R
     hasRole,
     canAccessFeature,
     canUploadFiles,
+    identityId,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

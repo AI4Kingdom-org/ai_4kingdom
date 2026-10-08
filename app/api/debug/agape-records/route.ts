@@ -2,10 +2,15 @@ import { NextResponse } from 'next/server';
 import { createDynamoDBClient } from '@/app/utils/dynamodb';
 import { ScanCommand } from '@aws-sdk/lib-dynamodb';
 import { ASSISTANT_IDS } from '@/app/config/constants';
+import { requireAdmin } from '@/app/lib/identity/admin';
 
 const TABLE = process.env.NEXT_PUBLIC_SUNDAY_GUIDE_TABLE || 'SundayGuide';
 
-export async function GET() {
+export async function GET(request: Request) {
+  // 管理用端點：僅限管理員或帶 service token 的內部呼叫（見 app/lib/identity/admin.ts）
+  const auth = await requireAdmin(request);
+  if ('response' in auth) return auth.response;
+
   try {
     const client = await createDynamoDBClient();
     let items: any[] = []; let lastKey: any;

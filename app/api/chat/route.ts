@@ -1,7 +1,8 @@
 import { DynamoDBDocumentClient, GetCommand, QueryCommand } from "@aws-sdk/lib-dynamodb";
 import { NextResponse } from 'next/server';
-import { updateMonthlyTokenUsage } from '../../utils/monthlyTokenUsage';
 import { getConcernLabel } from '../../types/homeschool';
+import { getRequestIdentity, unauthorized } from '../../lib/identity/server';
+import { checkCredits, recordUsage } from '../../lib/credits';
 import { createDynamoDBClient } from '../../utils/dynamodb';
 import { getOpenAI } from '../../lib/openai/client';
 import { resolveAssistantProfile, AssistantNotFoundError } from '../../lib/openai/profiles';
@@ -20,6 +21,9 @@ const getDocClient = async (): Promise<DynamoDBDocumentClient> => {
   return await createDynamoDBClient();
 };
 
+// 訪客單則訊息長度上限（避免貼整篇長文燒掉試用額度與成本）
+const GUEST_MAX_MESSAGE_CHARS = 2000;
+
 // CORS 配置
 const ALLOWED_ORIGINS = [
   'https://main.d1b5nk0vz3t0hz.amplifyapp.com',
@@ -33,7 +37,7 @@ function setCORSHeaders(origin: string | null) {
     'Content-Type': 'application/json',
     'Access-Control-Allow-Credentials': 'true',
     'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-WP-Nonce, X-Requested-With, Accept',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-WP-Nonce, X-Requested-With, Accept, X-A4K-Auth, X-A4K-Guest',
   });
 
   if (origin && ALLOWED_ORIGINS.includes(origin)) {
@@ -115,7 +119,29 @@ export async function POST(request: Request) {
       });
     }
 
-    const { message, threadId, userId, config, unitId, fileId } = requestBody;
+    const { message, threadId, config, unitId, fileId } = requestBody;
+
+    // 身分一律由簽章 token 判定，不再相信 body 裡的 userId
+    const identity = getRequestIdentity(request);
+    if (!identity) {
+      const headers = setCORSHeaders(request.headers.get('origin'));
+      const res = unauthorized();
+      headers.forEach((v, k) => res.headers.set(k, v));
+      return res;
+    }
+    const userId = identity.id;
+
+    if (identity.kind === 'guest' && typeof message === 'string' && message.length > GUEST_MAX_MESSAGE_CHARS) {
+      return NextResponse.json({
+        error: `訪客單則訊息上限為 ${GUEST_MAX_MESSAGE_CHARS} 字，登入後可輸入更長內容。`
+      }, { status: 400, headers: setCORSHeaders(request.headers.get('origin')) });
+    }
+
+    const creditError = await checkCredits(identity, request);
+    if (creditError) {
+      setCORSHeaders(request.headers.get('origin')).forEach((v, k) => creditError.headers.set(k, v));
+      return creditError;
+    }
 
     // 驗證必要參數
     if (!message || !config || !config.assistantId) {
@@ -204,7 +230,9 @@ export async function POST(request: Request) {
     lockedConversationId = conversationId;
 
     // Homeschool 指令覆寫（沿用舊 run 級 instructions 覆寫語意）
-    const homeschoolInstructions = config.type === 'homeschool' ? await buildHomeschoolInstructions(userId) : undefined;
+    const homeschoolInstructions = config.type === 'homeschool' && identity.kind === 'member'
+      ? await buildHomeschoolInstructions(identity.userId)
+      : undefined;
     const instructions = homeschoolInstructions ?? profile.instructions;
 
     // 若前端帶了選定的講章 fileId，且該記錄確實屬於本對話的單位/助手，就把 file_search 限縮到這篇；
@@ -315,21 +343,8 @@ export async function POST(request: Request) {
                   // 記錄 token 使用量（Responses usage → 內部 Run usage 形狀）
                   const tokenUsage = toTokenUsage(event.response?.usage);
                   if (tokenUsage) {
-                    if (userId) {
-                      try {
-                        await updateMonthlyTokenUsage(userId, tokenUsage);
-                        console.log('[SUCCESS] ✅ 已成功記錄用戶 token 使用量:', { userId, tokenUsage });
-                        controller.enqueue(encoder.encode(sseEncode({ event: 'usage.recorded', usage: tokenUsage })));
-                      } catch (usageErr: any) {
-                        console.error('[ERROR] stream 分支記錄 token 使用量失敗:', {
-                          error: usageErr?.message || String(usageErr),
-                          userId,
-                          conversationId
-                        });
-                      }
-                    } else {
-                      console.warn('[WARN] stream 完成但缺少 userId，無法記錄 token 使用量');
-                    }
+                    await recordUsage(identity, tokenUsage, request);
+                    controller.enqueue(encoder.encode(sseEncode({ event: 'usage.recorded', usage: tokenUsage })));
                   }
                   controller.enqueue(encoder.encode(sseEncode({
                     event: 'thread.run.completed',
@@ -415,22 +430,10 @@ export async function POST(request: Request) {
 
     // 添加 token 使用量记录
     const tokenUsage = toTokenUsage((response as any).usage);
-    if (!userId) {
-      console.warn('[WARN] 非流式模式完成但缺少 userId，無法記錄 token 使用量');
-    } else if (!tokenUsage) {
+    if (!tokenUsage) {
       console.warn('[WARN] 非流式模式完成但缺少 usage 資料，無法記錄 token 使用量');
     } else {
-      try {
-        await updateMonthlyTokenUsage(userId, tokenUsage);
-        console.log(`[SUCCESS] ✅ 已成功記錄用戶 ${userId} 的聊天 token 使用量 (非流式):`, tokenUsage);
-      } catch (usageError: any) {
-        // 记录错误但不中断请求
-        console.error('[ERROR] 記錄 token 使用量失敗:', {
-          error: usageError?.message || String(usageError),
-          userId,
-          conversationId
-        });
-      }
+      await recordUsage(identity, tokenUsage, request);
     }
 
     await releaseConversationLock(conversationId);

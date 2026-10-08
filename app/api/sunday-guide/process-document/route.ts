@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
 import { runProcessDocument } from '@/app/lib/sunday-guide/processDocument';
+import { isInternalRequest } from '@/app/lib/identity/server';
+import { requireUploader } from '@/app/lib/identity/uploadPermission';
 
 export const maxDuration = 300;
 
@@ -21,8 +23,16 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: '請求格式錯誤' }, { status: 400 });
   }
 
-  const { assistantId, vectorStoreId, fileName, userId, fileId, unitId } = body || {};
+  const { assistantId, vectorStoreId, fileName, fileId, unitId } = body || {};
+  let { userId } = body || {};
   console.log('[DEBUG] 處理文件請求:', { assistantId, vectorStoreId, fileName });
+
+  // 內部呼叫（documents 上傳後觸發）沿用其傳入的 userId；前端直接呼叫則需具備該單位上傳權限
+  if (!isInternalRequest(request)) {
+    const auth = await requireUploader(request, unitId);
+    if ('response' in auth) return auth.response;
+    userId = auth.identity.userId;
+  }
 
   if (!assistantId || !vectorStoreId || !fileName) {
     return NextResponse.json(

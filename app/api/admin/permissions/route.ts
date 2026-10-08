@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { PutCommand, QueryCommand } from '@aws-sdk/lib-dynamodb';
 import { createDynamoDBClient } from '@/app/utils/dynamodb';
 import { PERMISSION_GROUPS, UPLOAD_PERMITTED_USERS } from '@/app/config/userPermissions';
+import { requireAdmin } from '@/app/lib/identity/admin';
 
 const SUNDAY_GUIDE_TABLE = process.env.NEXT_PUBLIC_SUNDAY_GUIDE_TABLE || 'SundayGuide';
 const PERMISSIONS_CONFIG_ASSISTANT_ID = '__SYSTEM_PERMISSIONS__';
@@ -103,15 +104,11 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
-    const { uploadPermittedUsers, permissionGroups, userId } = await request.json();
-    
-    // 驗證管理員權限
-    if (userId !== '1') {
-      return NextResponse.json(
-        { success: false, error: '沒有權限執行此操作' },
-        { status: 403 }
-      );
-    }
+    // 驗證管理員權限：此設定含 ADMINS 群組本身，只允許超級管理員修改（身分取自簽章 token，不看 body 的 userId）
+    const auth = await requireAdmin(request, { superOnly: true });
+    if ('response' in auth) return auth.response;
+
+    const { uploadPermittedUsers, permissionGroups } = await request.json();
     
     const normalizedUsers = normalizeStringArray(uploadPermittedUsers);
     const normalizedGroups = normalizePermissionGroups(permissionGroups);
@@ -126,7 +123,7 @@ export async function POST(request: NextRequest) {
           recordType: PERMISSIONS_CONFIG_TYPE,
           uploadPermittedUsers: normalizedUsers,
           permissionGroups: normalizedGroups,
-          updatedBy: String(userId),
+          updatedBy: auth.actorId,
           updatedAt: new Date().toISOString(),
         },
       })

@@ -11,7 +11,9 @@ import AIFloatingBubble from '../../components/Chat/AIFloatingBubble';
 import styles from './JianZhuNavigator.module.css';
 
 function JianZhuNavigatorContent() {
-  const { user } = useAuth();
+  const { user, identityId } = useAuth();
+  // 訪客也能使用：對話紀錄以身分 id（會員 userId／訪客 guest id）為 key
+  const chatUserId = user?.user_id || identityId;
   const {
     messages,
     currentThreadId,
@@ -28,9 +30,9 @@ function JianZhuNavigatorContent() {
   const shouldLoadHistory = useRef(false);
 
   useEffect(() => {
-    if (currentThreadId && user && shouldLoadHistory.current) {
+    if (currentThreadId && chatUserId && shouldLoadHistory.current) {
       shouldLoadHistory.current = false;
-      loadChatHistory(user.user_id);
+      loadChatHistory(chatUserId);
     }
   }, [currentThreadId]);
 
@@ -53,7 +55,7 @@ function JianZhuNavigatorContent() {
     window.dispatchEvent(new CustomEvent('refreshConversations'));
   };
 
-  if (!user) return null;
+  if (!chatUserId) return null;
 
   return (
     <div className={styles.pageBackground}>
@@ -68,7 +70,7 @@ function JianZhuNavigatorContent() {
               <span>📋 對話記錄</span><span>{sidebarOpen ? '▲' : '▼'}</span>
             </button>
             <ConversationList
-              userId={user.user_id}
+              userId={chatUserId}
               type="jian-zhu"
               currentThreadId={currentThreadId}
               onSelectThread={handleSelectThread}

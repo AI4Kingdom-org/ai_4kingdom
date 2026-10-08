@@ -1,16 +1,16 @@
 import { NextResponse } from 'next/server';
 import { createDynamoDBClient } from '../../utils/dynamodb';
 import { QueryCommand } from "@aws-sdk/lib-dynamodb";
+import { getRequestIdentity, unauthorized } from '../../lib/identity/server';
 
-// 获取用户的所有对话
+// 获取用户的所有对话（以簽章身分為準，忽略 query 的 userId，避免讀取他人對話列表）
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
-  const userId = searchParams.get('userId');
   const type = searchParams.get('type') || 'general';
 
-  if (!userId) {
-    return NextResponse.json({ error: 'UserId is required' }, { status: 400 });
-  }
+  const identity = getRequestIdentity(request);
+  if (!identity) return unauthorized();
+  const userId = identity.id;
 
   try {
     const docClient = await createDynamoDBClient();

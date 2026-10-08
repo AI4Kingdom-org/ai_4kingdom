@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { YoutubeTranscript } from 'youtube-transcript';
+import { requireMember } from '../../../lib/identity/server';
 
 /**
  * POST /api/sunday-guide/youtube-transcript
@@ -10,6 +11,10 @@ import { YoutubeTranscript } from 'youtube-transcript';
  * Response: { transcript: string, source: 'caption', videoId: string, charCount: number }
  */
 export async function POST(request: Request) {
+  // 轉錄屬上傳流程，僅限登入會員
+  const auth = requireMember(request);
+  if ('response' in auth) return auth.response;
+
   try {
     const body = await request.json();
     const { url, lang, startTime, endTime } = body;

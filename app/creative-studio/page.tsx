@@ -123,6 +123,7 @@ export default function CreativeStudioPage() {
   const [renderStatus, setRenderStatus] = useState<string | null>(null);
   const [renderError, setRenderError] = useState<string | null>(null);
   const [renderJobId, setRenderJobId] = useState<string | null>(null);
+  const [renderProviderJobId, setRenderProviderJobId] = useState<string | null>(null);
   const [renderResult, setRenderResult] = useState<RenderResult | null>(null);
 
   const canGenerate = summary.trim().length >= 20 && referenceImages.length > 0;
@@ -252,6 +253,7 @@ export default function CreativeStudioPage() {
     setRenderError(null);
     setRenderResult(null);
     setRenderJobId(null);
+    setRenderProviderJobId(null);
     setRenderStatus(null);
 
     try {
@@ -295,6 +297,7 @@ export default function CreativeStudioPage() {
     setRenderResult(null);
     setRenderStatus('queued');
     setRenderJobId(null);
+    setRenderProviderJobId(null);
 
     try {
       const response = await fetch('/api/creative-studio/render', {
@@ -322,9 +325,11 @@ export default function CreativeStudioPage() {
       }
 
       const jobId = String(data.jobId);
+      const providerJobId = data.providerJobId ? String(data.providerJobId) : null;
       setRenderJobId(jobId);
+      setRenderProviderJobId(providerJobId);
       setRenderStatus(String(data.status || 'queued'));
-      startPolling(jobId);
+      startPolling(providerJobId || jobId);
     } catch (error) {
       setRenderStatus('error');
       setRenderError(error instanceof Error ? error.message : '建立創作任務失敗');

@@ -12,6 +12,7 @@ import chatStyles from './chat.module.css';
 import { getSundayGuideUnitConfig } from '../../config/constants';
 import { ASSISTANT_IDS, VECTOR_STORE_IDS } from '../../config/constants';
 import ReactMarkdown from 'react-markdown';
+import { openAuthenticatedDownload } from '../../utils/openAuthenticatedDownload';
 
 type GuideMode = 'summary' | 'devotional' | 'bible' | null;
 
@@ -27,7 +28,9 @@ function CfscChurchNavigatorContent() {
   const cfscChurchUnit = getSundayGuideUnitConfig('cfscChurch');
   const [fileList, setFileList] = useState<CfscChurchRecord[]>([]);
   const [selectedFileUniqueId, setSelectedFileUniqueId] = useState<string | null>(null);
-  const { user } = useAuth();
+  const { user, identityId } = useAuth();
+  // 訪客也能閱讀與聊天：對話紀錄以身分 id（會員 userId／訪客 guest id）為 key
+  const chatUserId = user?.user_id || identityId;
   const { refreshUsage } = useCredit();
   const [selectedMode, setSelectedMode] = useState<GuideMode>(null);
   const [sermonContent, setSermonContent] = useState<string | null>(null);
@@ -52,9 +55,9 @@ function CfscChurchNavigatorContent() {
   }, [chatError, setChatError]);
 
   useEffect(() => {
-    if (currentThreadId && user && shouldLoadHistory.current) {
+    if (currentThreadId && chatUserId && shouldLoadHistory.current) {
       shouldLoadHistory.current = false;
-      loadChatHistory(user.user_id);
+      loadChatHistory(chatUserId);
     }
   }, [currentThreadId]);
 
@@ -78,9 +81,8 @@ function CfscChurchNavigatorContent() {
   };
 
   useEffect(() => {
-    if (user?.user_id) {
-      fetchCfscFiles();
-    }
+    // 文件清單對訪客開放，不再要求登入
+    fetchCfscFiles();
   }, [user]);
 
   const fetchCfscFiles = async () => {
@@ -195,7 +197,8 @@ function CfscChurchNavigatorContent() {
       <div className={styles.contentBox}>
         <div className={styles.contentHeader}>
           <h2>{titles[selectedMode!]}</h2>
-          {sermonContent && (
+          {/* 下载完整版僅限登入會員 */}
+          {sermonContent && user && (
             <button
               style={{ marginLeft: 8 }}
               className={styles.downloadButton}
@@ -214,7 +217,7 @@ function CfscChurchNavigatorContent() {
     );
   };
 
-  const handleDownloadPDF = () => {
+  const handleDownloadPDF = async () => {
     setPdfError(null);
     setPdfLoading(true);
     try {
@@ -224,8 +227,8 @@ function CfscChurchNavigatorContent() {
       params.set('assistantId', cfscChurchUnit.assistantId);
       params.set('userId', userId);
       params.set('includeAll', 'true');
-      window.open(`${base}?${params.toString()}`, '_blank');
-      setTimeout(() => setPdfLoading(false), 1200);
+      await openAuthenticatedDownload(`${base}?${params.toString()}`);
+      setPdfLoading(false);
     } catch (err) {
       console.error('PDF 下載失敗', err);
       setPdfError(err instanceof Error ? err.message : '下載失敗');
@@ -233,9 +236,7 @@ function CfscChurchNavigatorContent() {
     }
   };
 
-  if (!user) {
-    return <div>請先登錄</div>;
-  }
+  if (!chatUserId) return null;
 
   return (
     <div className={styles.container}>
@@ -270,7 +271,7 @@ function CfscChurchNavigatorContent() {
                     <span>{sidebarOpen ? '▲' : '▼'}</span>
                   </button>
                   <ConversationList
-                    userId={user.user_id}
+                    userId={chatUserId}
                     type="cfsc-church"
                     currentThreadId={currentThreadId}
                     onSelectThread={handleSelectThread}
@@ -301,17 +302,18 @@ function CfscChurchNavigatorContent() {
 
 export default function CfscChurchNavigatorPage() {
   const [mounted, setMounted] = useState(false);
-  const { user, loading } = useAuth();
+  const { user, loading, identityId } = useAuth();
+  const chatUserId = user?.user_id || identityId;
   useEffect(() => setMounted(true), []);
   if (!mounted || loading) return null;
-  if (!user) return <div>请先登录</div>;
+  if (!chatUserId) return null;
   return (
     <ChatProvider
       initialConfig={{
         type: 'cfsc-church',
         assistantId: ASSISTANT_IDS.CFSC_CHURCH,
         vectorStoreId: VECTOR_STORE_IDS.CFSC_CHURCH,
-        userId: user.user_id,
+        userId: chatUserId,
       }}
     >
       <CfscChurchNavigatorContent />

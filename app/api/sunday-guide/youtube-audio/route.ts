@@ -7,6 +7,7 @@ import { existsSync, statSync } from 'fs';
 import { join } from 'path';
 import os from 'os';
 import { formatTranscript } from '../../../lib/formatTranscript';
+import { requireMember } from '../../../lib/identity/server';
 
 // Whisper API 單次上限（保留 1MB buffer）
 const WHISPER_MAX_BYTES = 24 * 1024 * 1024; // 24 MB
@@ -435,6 +436,10 @@ function extractVideoId(url: string): string | null {
  * Response: { transcript: string, source: 'whisper', videoId: string, charCount: number }
  */
 export async function POST(request: Request) {
+  // 轉錄屬上傳流程，僅限登入會員
+  const auth = requireMember(request);
+  if ('response' in auth) return auth.response;
+
   // ── Fly.io 微服務代理模式（Amplify 生產環境）──────────────────
   // 設定 YOUTUBE_WORKER_URL 環境變數後，所有 YouTube 轉錄請求將代理到 Fly.io 微服務
   // 未設定時走本地 yt-dlp 管道（Windows 開發）

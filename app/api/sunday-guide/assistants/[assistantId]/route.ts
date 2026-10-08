@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createDynamoDBClient } from '../../../../utils/dynamodb';
 import { ScanCommand, UpdateCommand, DeleteCommand } from "@aws-sdk/lib-dynamodb";
+import { requireAdmin } from '@/app/lib/identity/admin';
 
 interface Assistant {
   assistantId: string;
@@ -15,6 +16,10 @@ export async function GET(
   request: Request,
   { params }: { params: { assistantId: string } }
 ) {
+  // 管理用端點：僅限管理員或帶 service token 的內部呼叫（見 app/lib/identity/admin.ts）
+  const auth = await requireAdmin(request);
+  if ('response' in auth) return auth.response;
+
   try {
     const { assistantId } = params;
     console.log('获取助手信息:', assistantId);
@@ -58,6 +63,9 @@ export async function PUT(
   request: Request,
   { params }: { params: { assistantId: string } }
 ) {
+  const auth = await requireAdmin(request);
+  if ('response' in auth) return auth.response;
+
   try {
     const { assistantId } = params;
     const { transcription } = await request.json();
@@ -122,6 +130,9 @@ export async function DELETE(
   request: Request,
   { params }: { params: { assistantId: string } }
 ) {
+  const auth = await requireAdmin(request);
+  if ('response' in auth) return auth.response;
+
   try {
     const { assistantId } = params;
     console.log('删除助手:', assistantId);
