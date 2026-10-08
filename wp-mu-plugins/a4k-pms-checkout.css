@@ -1,0 +1,99 @@
+.a4k-pms{--a4k-accent:#BF4F26;--a4k-accent-dark:#A8431F;--a4k-ink:#29292A;--a4k-muted:#55575F;--a4k-faint:#6B6E76;--a4k-line:#E4E6EA;--a4k-soft:#F7F8FA;--a4k-tint:#FFF7F3;max-width:560px;margin:0 auto;text-align:left;color:var(--a4k-ink);font-family:"PingFang SC","Microsoft YaHei","Noto Sans SC",sans-serif;font-size:15px;line-height:1.6}
+.a4k-pms ul{list-style:none;margin:0;padding:0}
+.a4k-pms li{list-style:none}
+.a4k-pms li::marker{content:none}
+.a4k-pms .pms-field-subscriptions,.a4k-pms .pms-upgrade__group{display:flex;flex-direction:column;gap:12px;margin:0;padding:0}
+.a4k-pms .pms-upgrade__message{display:none}
+.a4k-pms .a4k-head{display:flex;flex-direction:column;gap:6px;margin:4px 0 6px}
+.a4k-pms .a4k-eyebrow{font-size:12px;font-weight:700;letter-spacing:2px;color:var(--a4k-accent)}
+.a4k-pms .a4k-title{margin:0;padding:0;font-family:"Noto Serif SC","Songti SC","SimSun",Prata,serif;font-size:28px;font-weight:700;line-height:1.25;color:var(--a4k-ink);text-align:left}
+.a4k-pms .a4k-sub{margin:0;font-size:14px;color:var(--a4k-muted)}
+.a4k-pms .a4k-toggle{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px;padding:4px;background:#E9EAEE;border-radius:999px}
+.a4k-pms .a4k-toggle button{height:44px;margin:0;padding:0 12px;border:0;border-radius:999px;background:transparent;color:var(--a4k-muted);font-family:inherit;font-size:14px;font-weight:500;letter-spacing:0;text-transform:none;box-shadow:none;cursor:pointer}
+.a4k-pms .a4k-toggle button[aria-pressed="true"]{background:#fff;color:var(--a4k-ink);font-weight:700;box-shadow:0 1px 3px rgba(41,41,42,.15)}
+.a4k-pms .a4k-toggle button:focus-visible{outline:2px solid var(--a4k-accent);outline-offset:2px}
+.a4k-pms .a4k-save{margin-left:4px;font-size:12px;font-weight:700;color:var(--a4k-accent)}
+.a4k-pms .a4k-plan{margin:0}
+.a4k-pms .a4k-plan>label{position:relative;display:grid;grid-template-columns:22px minmax(0,1fr) auto;grid-template-areas:"ring info price" ". credits price";column-gap:14px;row-gap:12px;align-items:center;margin:0;padding:18px;border:2px solid var(--a4k-line);border-radius:14px;background:#fff;text-align:left;font-weight:400;cursor:pointer;transition:border-color .15s,background-color .15s}
+.a4k-pms .a4k-plan>label:hover{border-color:#C9CBD1}
+.a4k-pms .a4k-plan.a4k-selected>label{border-color:var(--a4k-accent);background:var(--a4k-tint)}
+.a4k-pms .a4k-plan>label:focus-within{outline:2px solid var(--a4k-accent);outline-offset:2px}
+.a4k-pms .a4k-plan input[type=radio]{position:absolute;width:1px;height:1px;margin:0;opacity:0;pointer-events:none}
+.a4k-pms .a4k-ring{grid-area:ring;display:flex;align-items:center;justify-content:center;width:22px;height:22px;box-sizing:border-box;border:2px solid #B5B8C0;border-radius:50%}
+.a4k-pms .a4k-plan.a4k-selected .a4k-ring{border-color:var(--a4k-accent)}
+.a4k-pms .a4k-plan.a4k-selected .a4k-ring::after{content:"";width:10px;height:10px;border-radius:50%;background:var(--a4k-accent)}
+.a4k-pms .a4k-plan-info{grid-area:info;display:flex;flex-direction:column;gap:2px;min-width:0}
+.a4k-pms .a4k-plan-name{font-size:18px;font-weight:700;line-height:1.3}
+.a4k-pms .a4k-plan-blurb{font-size:13px;color:var(--a4k-muted)}
+.a4k-pms .a4k-plan-credits{grid-area:credits;display:flex;align-items:baseline;gap:6px;padding-top:12px;border-top:1px solid #ECEDF0;font-size:13px;color:var(--a4k-muted)}
+.a4k-pms .a4k-plan-credits-value{font-family:Prata,Georgia,serif;font-size:18px;color:var(--a4k-ink)}
+.a4k-pms .a4k-plan-price{grid-area:price;align-self:start;display:flex;flex-direction:column;align-items:flex-end;gap:2px;text-align:right}
+.a4k-pms .a4k-plan .pms-subscription-plan-name{display:none}
+.a4k-pms .a4k-plan .pms-subscription-plan-price{white-space:nowrap;font-size:13px;color:var(--a4k-faint)}
+.a4k-pms .a4k-plan .pms-subscription-plan-price>.pms-divider:first-child{display:none}
+.a4k-pms .a4k-plan .pms-subscription-plan-currency,.a4k-pms .a4k-plan .pms-subscription-plan-price-value{font-family:Prata,Georgia,serif;font-size:24px;color:var(--a4k-ink)}
+.a4k-pms .a4k-plan-sub{font-size:12px;color:var(--a4k-faint)}
+.a4k-pms .a4k-plan .pms-subscription-plan-trial:empty,.a4k-pms .a4k-plan .pms-subscription-plan-sign-up-fee:empty{display:none}
+.a4k-pms .a4k-hidden{display:none!important}
+.a4k-pms #pms-paygates-wrapper{display:none!important}
+.a4k-pms #pms-subscription-plans-discount-messages-wrapper{margin:0}
+.a4k-pms #pms-subscription-plans-discount-messages-wrapper:not(:has(#pms-subscription-plans-discount-messages:not(:empty))){display:none}
+.a4k-pms .a4k-summary{display:flex;flex-direction:column;gap:10px;margin-top:6px;padding:20px;border:1px solid var(--a4k-line);border-radius:14px;background:#fff}
+.a4k-pms .a4k-summary-title{font-size:16px;font-weight:700}
+.a4k-pms .a4k-row{display:flex;justify-content:space-between;gap:12px;font-size:14px}
+.a4k-pms .a4k-row>span:first-child{color:var(--a4k-faint)}
+.a4k-pms .a4k-row>span:last-child{font-weight:500;text-align:right}
+.a4k-pms .a4k-divider{height:1px;background:var(--a4k-line)}
+.a4k-pms .a4k-row.a4k-due{align-items:baseline}
+.a4k-pms .a4k-row.a4k-due>span:first-child{font-size:15px;font-weight:700;color:var(--a4k-ink)}
+.a4k-pms .a4k-row.a4k-due>span:last-child{font-family:Prata,Georgia,serif;font-size:28px;font-weight:400}
+.a4k-pms .pms-subscription-plan-auto-renew label{display:flex;gap:12px;align-items:flex-start;margin:0;padding:14px;border-radius:12px;background:var(--a4k-soft);text-align:left;font-weight:400;cursor:pointer}
+.a4k-pms .pms-subscription-plan-auto-renew input{flex-shrink:0;width:18px;height:18px;margin:3px 0 0;accent-color:var(--a4k-accent)}
+.a4k-pms .a4k-renew-text{display:flex;flex-direction:column;gap:2px}
+.a4k-pms .a4k-renew-text strong{font-size:14px}
+.a4k-pms .a4k-renew-note{font-size:13px;color:var(--a4k-muted)}
+.a4k-pms .a4k-link{align-self:flex-start;min-height:44px;margin:0;padding:0;border:0;background:none!important;box-shadow:none;color:var(--a4k-accent-dark)!important;font-family:inherit;font-size:13px;text-decoration:underline;text-underline-offset:3px;cursor:pointer}
+.a4k-pms #pms-subscription-plans-discount{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.a4k-pms #pms-subscription-plans-discount label{width:100%;margin:0;font-size:13px;color:var(--a4k-muted)}
+.a4k-pms #pms-subscription-plans-discount #pms_subscription_plans_discount_code{flex:1 1 180px;width:auto}
+form.a4k-pms{width:auto!important;max-width:560px!important;margin-left:auto!important;margin-right:auto!important}
+.a4k-pms #pms-stripe-connect{margin-top:12px;padding:20px;border:1px solid var(--a4k-line);border-radius:14px;background:#fff}
+.a4k-pms #pms-stripe-connect .pms-field-type-heading h3{margin:0 0 14px;padding:0;font-family:inherit;font-size:16px;font-weight:700;color:var(--a4k-ink);text-align:left}
+.a4k-pms .a4k-cta{display:block;width:100%;height:54px;margin:18px 0 0;padding:0 16px;border:0!important;border-radius:12px!important;background:var(--a4k-accent)!important;color:#fff!important;font-family:inherit;font-size:16px;font-weight:700;letter-spacing:0;text-transform:none;box-shadow:none;cursor:pointer}
+.a4k-pms .a4k-cta:hover{background:var(--a4k-accent-dark)!important}
+.a4k-pms .a4k-cta:disabled{background:#B5B8C0!important;cursor:default}
+.a4k-pms .a4k-cta:focus-visible{outline:3px solid rgba(191,79,38,.35);outline-offset:2px}
+.a4k-pms .a4k-orig-submit{display:none!important}
+.a4k-pms .a4k-trust{display:flex;align-items:center;justify-content:center;gap:6px;margin:10px 0 0;font-size:12px;color:var(--a4k-faint);text-align:center}
+.a4k-pms .a4k-trust svg{flex-shrink:0}
+.a4k-pms input[name="pms_redirect_back"]{display:block;margin:12px auto 0;padding:8px;border:0!important;background:none!important;box-shadow:none;color:var(--a4k-muted)!important;font-family:inherit;font-size:14px;text-decoration:underline;cursor:pointer}
+.a4k-pms .a4k-explain{display:flex;flex-direction:column;gap:6px;margin-top:24px;padding:18px 20px;border:1px solid var(--a4k-line);border-radius:14px;background:#fff;font-size:13px;line-height:1.7;color:var(--a4k-muted)}
+.a4k-pms .a4k-explain strong{font-size:15px;color:var(--a4k-ink)}
+@media (max-width:420px){.a4k-pms .a4k-plan>label{grid-template-columns:22px minmax(0,1fr) auto;padding:16px;column-gap:12px}.a4k-pms .a4k-title{font-size:24px}}
+
+/* 帳戶頁（Elementor page 10）有一條自訂 CSS 把整頁 label 設成 20px 粗體置中 block，
+   選擇器權重高於本檔，所以關鍵屬性用 !important 蓋回。 */
+.a4k-pms .a4k-plan>label{display:grid!important;margin:0!important;text-align:left!important;font-size:15px!important;font-weight:400!important;line-height:1.5!important;color:var(--a4k-ink)!important}
+.a4k-pms .pms-subscription-plan-auto-renew label{display:flex!important;margin:0!important;text-align:left!important;font-size:15px!important;font-weight:400!important;line-height:1.5!important;color:var(--a4k-ink)!important}
+.a4k-pms #pms-subscription-plans-discount label{margin:0!important}
+
+/* 註冊頁帳號區：與方案區同一套卡片、欄位與焦點樣式。
+   註冊頁（Elementor page 8）的自訂 CSS 把 label 設成 20px 粗體、input 設成 6px 圓角＋藍色焦點＋15px 下邊距，
+   選擇器權重高於本檔，所以這裡用 !important。 */
+#pms_register-form.a4k-pms{container-type:inline-size;container-name:a4kform}
+.a4k-pms .pms-account-section-wrapper{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px 14px;margin:0 0 28px!important;padding:20px!important;border:1px solid var(--a4k-line);border-radius:14px;background:#fff}
+.a4k-pms .pms-account-section-wrapper>li{min-width:0;margin:0!important;padding:0!important}
+.a4k-pms .pms-account-section-wrapper>.pms-user-login-field,.a4k-pms .pms-account-section-wrapper>.pms-user-email-field{grid-column:1/-1}
+@container a4kform (max-width:420px){.a4k-pms .pms-account-section-wrapper{grid-template-columns:minmax(0,1fr);gap:14px;padding:16px!important}}
+.a4k-pms .pms-account-section-wrapper label,.a4k-pms #pms-subscription-plans-discount label{display:block!important;margin:0 0 6px!important;text-align:left!important;font-size:13px!important;font-weight:500!important;line-height:1.5!important;color:var(--a4k-muted)!important}
+.a4k-pms #pms-subscription-plans-discount label{margin:0!important}
+.a4k-pms .a4k-req{margin-left:2px;color:var(--a4k-accent)}
+.a4k-pms input[type=text],.a4k-pms input[type=email],.a4k-pms input[type=password]{width:100%!important;height:48px!important;box-sizing:border-box!important;margin:0!important;padding:0 14px!important;border:1px solid #D5D7DD!important;border-radius:10px!important;background:#fff!important;color:var(--a4k-ink)!important;font-family:inherit!important;font-size:16px!important;box-shadow:none!important;transition:border-color .15s,box-shadow .15s}
+.a4k-pms input[type=text]:focus,.a4k-pms input[type=email]:focus,.a4k-pms input[type=password]:focus{border-color:var(--a4k-accent)!important;outline:none!important;box-shadow:0 0 0 3px rgba(191,79,38,.15)!important}
+.a4k-pms input::placeholder{color:#8C8E96}
+.a4k-pms #pms-subscription-plans-discount #pms_subscription_plans_discount_code{flex:1 1 180px;width:auto!important}
+.a4k-pms #pms-apply-discount{width:auto!important;height:48px!important;margin:0!important;padding:0 18px!important;border:1px solid var(--a4k-ink)!important;border-radius:10px!important;background:#fff!important;color:var(--a4k-ink)!important;font-family:inherit!important;font-size:14px!important;font-weight:500!important;cursor:pointer}
+.a4k-pms #pms-apply-discount:hover{background:var(--a4k-soft)!important}
+.a4k-pms .pms_field-errors-wrapper{margin:6px 0 0;padding:0}
+.a4k-pms .pms_field-errors-wrapper p{margin:0;font-size:13px;color:#B42318}
+.a4k-pms .a4k-head-account{margin-top:0}
