@@ -36,6 +36,9 @@ export default function UserPermissionsPage() {
   // CFSC Church 單位專屬上傳者
   const [cfscChurchUploaders, setCfscChurchUploaders] = useState<string[]>([]);
   const [newCfscChurchUserId, setNewCfscChurchUserId] = useState('');
+  // 华牧网络教会事工联盟 單位專屬上傳者
+  const [cpnUploaders, setCpnUploaders] = useState<string[]>([]);
+  const [newCpnUserId, setNewCpnUserId] = useState('');
 
   // 檢查當前用戶是否為管理員
   const isAdmin = user?.user_id === '1' || PERMISSION_GROUPS.ADMINS.includes(user?.user_id || '');
@@ -65,6 +68,7 @@ export default function UserPermissionsPage() {
   await loadEastUploaders();
   await loadJianZhuUploaders();
   await loadCfscChurchUploaders();
+  await loadCpnUploaders();
         await fetchUserDetails();
       } else {
         throw new Error(data.error);
@@ -80,6 +84,7 @@ export default function UserPermissionsPage() {
   await loadEastUploaders();
   await loadJianZhuUploaders();
   await loadCfscChurchUploaders();
+  await loadCpnUploaders();
       await fetchUserDetails();
     } finally {
       setLoading(false);
@@ -122,6 +127,19 @@ export default function UserPermissionsPage() {
       }
     } catch (e) {
       console.error('載入 Jian Zhu 單位上傳者失敗', e);
+    }
+  };
+
+  // 讀取 华牧网络 單位 allowedUploaders
+  const loadCpnUploaders = async () => {
+    try {
+      const res = await fetch('/api/admin/sunday-guide-units');
+      const data = await res.json();
+      if (data.success) {
+        setCpnUploaders(data.data.units.chinesePastorNetwork?.allowedUploaders || []);
+      }
+    } catch (e) {
+      console.error('載入华牧网络單位上傳者失敗', e);
     }
   };
 
@@ -377,6 +395,24 @@ export default function UserPermissionsPage() {
     }
   };
 
+  // 更新 华牧网络 單位 allowedUploaders
+  const updateCpnUploaders = async (uploaders: string[]) => {
+    try {
+      const res = await fetch('/api/admin/sunday-guide-units', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ unitId: 'chinesePastorNetwork', allowedUploaders: uploaders, userId: user?.user_id })
+      });
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error || '更新失敗');
+      return true;
+    } catch (e) {
+      console.error('更新华牧网络上傳者失敗', e);
+      setMessage({ type: 'error', text: '更新华牧网络上傳者失敗' });
+      return false;
+    }
+  };
+
   // 更新 Jian Zhu 單位 allowedUploaders
   const updateJianZhuUploaders = async (uploaders: string[]) => {
     try {
@@ -480,6 +516,21 @@ export default function UserPermissionsPage() {
       setAgapeUploaders(updated);
       setMessage({ type: 'success', text: 'Agape 上傳者已移除' });
     }
+  };
+
+  const addCpnUploader = async () => {
+    if (!newCpnUserId.trim()) { setMessage({ type: 'error', text: '請輸入用戶ID' }); return; }
+    if (cpnUploaders.includes(newCpnUserId.trim())) { setMessage({ type: 'error', text: '該用戶已在华牧网络上傳清單中' }); return; }
+    const updated = [...cpnUploaders, newCpnUserId.trim()];
+    const ok = await updateCpnUploaders(updated);
+    if (ok) { setCpnUploaders(updated); setNewCpnUserId(''); setMessage({ type: 'success', text: '华牧网络上傳者已新增' }); await fetchUserDetails(); }
+  };
+
+  const removeCpnUploader = async (uId: string) => {
+    if (!confirm(`確定要移除用戶 ${userDetails[uId]?.displayName || uId} 的华牧网络上傳權限嗎？`)) return;
+    const updated = cpnUploaders.filter((id) => id !== uId);
+    const ok = await updateCpnUploaders(updated);
+    if (ok) { setCpnUploaders(updated); setMessage({ type: 'success', text: '华牧网络上傳者已移除' }); }
   };
 
   const addCfscChurchUploader = async () => {
@@ -719,6 +770,36 @@ export default function UserPermissionsPage() {
         </div>
       </div>
 
+      {/* 华牧网络教会事工联盟 單位專屬上傳權限管理 */}
+      <div className={styles.section}>
+        <h2 className={styles.sectionTitle}>华牧网络教会事工联盟 單位專屬上傳權限</h2>
+        <div className={styles.addUserForm}>
+          <input type="text" placeholder="輸入用戶ID" value={newCpnUserId} onChange={(e) => setNewCpnUserId(e.target.value)} className={styles.input} />
+          <button onClick={addCpnUploader} className={styles.button}>添加华牧网络上傳權限</button>
+        </div>
+        <div className={styles.userList}>
+          <h3>华牧网络具有上傳權限的用戶</h3>
+          {loading ? (
+            <div className={styles.loading}>載入中...</div>
+          ) : cpnUploaders.length === 0 ? (
+            <div className={styles.noUsers}>暫無用戶</div>
+          ) : (
+            <ul className={styles.list}>
+              {cpnUploaders.map((userId) => (
+                <li key={userId} className={styles.listItem}>
+                  <div className={styles.userInfo}>
+                    <strong>{userDetails[userId]?.displayName || `用戶${userId}`}</strong>
+                    <span className={styles.userId}>ID: {userId}</span>
+                    {userDetails[userId]?.email && <span className={styles.userEmail}>{userDetails[userId].email}</span>}
+                  </div>
+                  <button onClick={() => removeCpnUploader(userId)} className={styles.removeButton}>移除</button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>
+
       {/* 權限組管理 */}
       <div className={styles.section}>
         <h2 className={styles.sectionTitle}>權限組管理</h2>
@@ -788,7 +869,7 @@ export default function UserPermissionsPage() {
             <p>控制哪些用戶可以在 Sunday Guide（/sunday-guide-v2）看到並使用文檔上傳功能。此名單儲存於資料庫，修改後立即生效，無需重新部署。</p>
           </div>
           <div className={styles.infoItem}>
-            <strong>單位專屬上傳權限（Agape／East Christ Home／Jian Zhu／CFSC Church）：</strong>
+            <strong>單位專屬上傳權限（Agape／East Christ Home／Jian Zhu／CFSC Church／华牧网络）：</strong>
             <p>分別控制各單位頁面的上傳與刪除管理員資格。名單中的用戶可以看到所有人的文件刪除按鈕，並有權上傳至該單位。修改後重新整理頁面即可生效，無需重新部署。</p>
           </div>
           <div className={styles.infoItem}>

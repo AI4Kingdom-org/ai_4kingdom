@@ -42,6 +42,12 @@ const managementTools: ManagementTool[] = [
     iconEmoji: '👥'
   },
   {
+    title: 'AI 工具管理',
+    description: '管理 AI 工具目录的分类、资料、图标与显示状态',
+    path: '/admin/ai-tools',
+    iconEmoji: '🧭'
+  },
+  {
     title: '獨立創作助手',
     description: '使用 3 張圖片與文字摘要建立 10 秒短影音草稿與影片任務',
     path: '/creative-studio',
