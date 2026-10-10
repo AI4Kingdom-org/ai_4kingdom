@@ -49,8 +49,8 @@ function setCORSHeaders(origin: string | null) {
   return headers;
 }
 
-// 構建 Homeschool 專用的 instructions，強制助手在回覆中引用孩子資料
-async function buildHomeschoolInstructions(userId?: string) {
+// 構建 Homeschool 孩子資料段落（接在助手原本人設之後），強制助手在回覆中引用孩子資料
+async function buildHomeschoolChildContext(userId?: string) {
   if (!userId) return undefined;
   try {
     const doc = await getDocClient();
@@ -63,6 +63,7 @@ async function buildHomeschoolInstructions(userId?: string) {
     if (!data || (!data.childName && !data.age && !data.gender && !data.concerns)) return undefined;
 
     const parts: string[] = [];
+    if (data.childName) parts.push(`姓名：${data.childName}`);
     if (typeof data.age === 'number') parts.push(`年齡：${data.age} 歲`);
     if (data.gender) parts.push(`性別：${data.gender === 'male' ? '男孩' : '女孩'}`);
     if (Array.isArray(data.concerns) && data.concerns.length > 0) {
@@ -70,10 +71,11 @@ async function buildHomeschoolInstructions(userId?: string) {
       const other = data.concerns.includes('other') && data.otherConcern ? `（${data.otherConcern}）` : '';
       parts.push(`主要關注：${labels.join('、')}${other}`);
     }
+    if (data.basicInfo) parts.push(`基本情況：${data.basicInfo}`);
+    if (data.recentChanges) parts.push(`近期變化：${data.recentChanges}`);
 
-    const summary = parts.join('；');
-    // 指令：要求每次回覆開頭列出資料摘要
-    return `你是家庭教育輔導助手。以下是此孩子的資料摘要，請務必根據此資料提供個人化建議，且每次回覆開頭先輸出一行「學生資料：${summary}」。若資料不完整，先友善提醒使用者到 /homeschool-prompt 完善資料。`;
+    // 「學生資料：…」那一行由前端顯示，這裡不再要求助手輸出，避免重複
+    return `【孩子資料】\n以下是家長填寫的孩子資料，請務必根據此資料提供個人化建議。若資料不完整，可友善提醒家長點聊天視窗右上角的「📝 孩子資料」補充。\n${parts.map(p => `- ${p}`).join('\n')}`;
   } catch (e) {
     console.warn('[WARN] 構建 Homeschool 指令失敗，將略過:', e);
     return undefined;
@@ -229,11 +231,11 @@ export async function POST(request: Request) {
     }
     lockedConversationId = conversationId;
 
-    // Homeschool 指令覆寫（沿用舊 run 級 instructions 覆寫語意）
-    const homeschoolInstructions = config.type === 'homeschool' && identity.kind === 'member'
-      ? await buildHomeschoolInstructions(identity.userId)
+    // Homeschool：孩子資料接在助手人設之後一起送，不取代人設
+    const homeschoolChildContext = config.type === 'homeschool' && identity.kind === 'member'
+      ? await buildHomeschoolChildContext(identity.userId)
       : undefined;
-    const instructions = homeschoolInstructions ?? profile.instructions;
+    const instructions = [profile.instructions, homeschoolChildContext].filter(Boolean).join('\n\n') || undefined;
 
     // 若前端帶了選定的講章 fileId，且該記錄確實屬於本對話的單位/助手，就把 file_search 限縮到這篇；
     // 否則（沒選、或 fileId 是別頁殘留）維持搜尋整個單位向量庫。
