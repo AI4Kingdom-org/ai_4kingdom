@@ -165,6 +165,70 @@
   opacity: 0.6;
 }
 
+.cancelButton {
+  background: none;
+  color: #555;
+  border: 1px solid #ccc;
+  padding: 0.6rem 2rem;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.95rem;
+  margin-top: 0.75rem;
+  width: 100%;
+}
+
+.cancelButton:hover:not(:disabled) {
+  background-color: #f5f5f5;
+}
+
+/* 嵌在聊天面板：去掉卡片外框，面板內捲動 */
+.embedded {
+  max-width: none;
+  margin: 0;
+  padding: 1rem 1.25rem;
+  border-radius: 0;
+  box-shadow: none;
+  flex: 1;
+  overflow-y: auto;
+}
+
+.embedded .subtitle {
+  margin-bottom: 1rem;
+}
+
+.embedded .formGroup {
+  margin-bottom: 1rem;
+}
+
+.embedded .formRow {
+  margin-bottom: 0;
+}
+
+.memberOnly {
+  color: #333;
+  line-height: 1.6;
+  margin-bottom: 1rem;
+}
+
+.memberLinks {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.memberLinks a {
+  padding: 0.5rem 1.25rem;
+  border-radius: 4px;
+  border: 1px solid #4CAF50;
+  color: #4CAF50;
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.memberLinks a:first-child {
+  background-color: #4CAF50;
+  color: #fff;
+}
+
 .successMessage {
   width: 100%;
   margin: 1rem 0;
