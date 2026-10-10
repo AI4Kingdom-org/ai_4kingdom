@@ -103,6 +103,12 @@ const mdComponents: Components = {
   },
 };
 
+// 聊天開場問候：只顯示在畫面上，不寫進對話紀錄
+const INTRO =
+  '平安！欢迎来到《耶稣颂》AI 助手 ✝️\n\n' +
+  '我可以根据远志明牧师《耶稣颂》的内容，陪你一起认识耶稣、默想祂的生平与教导。你可以在左侧选一篇文章，查看信息总结、每日灵修与查经指引，也可以直接问我关于信仰与圣经的问题。\n\n' +
+  '今天想从哪里开始呢？';
+
 // ─────────────────────────────────────────────────────────────────
 function ZhimingYuanContent() {
   const { user, identityId } = useAuth();
@@ -129,6 +135,8 @@ function ZhimingYuanContent() {
   // ── Floating chat widget ──────────────────────────────────────
   const [chatOpen, setChatOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  // 新對話：問候語顯示在最上方
+  const [intro, setIntro] = useState<string | null>(INTRO);
 
   // ── Chat context ──────────────────────────────────────────────
   const {
@@ -255,6 +263,7 @@ function ZhimingYuanContent() {
   const handleCreateNewThread = () => {
     setCurrentThreadId(null);
     setMessages([]);
+    setIntro(INTRO);
   };
 
   const handleSelectThread = (threadId: string) => {
@@ -262,6 +271,7 @@ function ZhimingYuanContent() {
     shouldLoadHistory.current = true;
     setChatError('');
     setMessages([]);
+    setIntro(null);
     setCurrentThreadId(threadId);
     setSidebarOpen(false);
   };
@@ -435,7 +445,7 @@ function ZhimingYuanContent() {
                 />
               </div>
               <div className={chatStyles.main}>
-                <MessageList messages={messages} isLoading={chatLoading} />
+                <MessageList messages={intro ? [{ sender: 'bot', text: intro }, ...messages] : messages} isLoading={chatLoading} />
                 {chatError && (
                   <div style={{ color: '#f55', padding: '6px 16px', background: '#3a0000' }}>
                     {chatError}
