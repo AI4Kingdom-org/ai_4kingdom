@@ -200,6 +200,17 @@ export async function canManageAiTools(userId: unknown): Promise<boolean> {
   return assignedUsers.has(normalizedUserId);
 }
 
+/** 前台「AI 工具后台」按钮只显示给超级管理员与全域上传权限名单内的用户。 */
+export async function isAiToolsDesignatedManager(userId: unknown): Promise<boolean> {
+  const normalizedUserId = String(userId ?? '').trim();
+  if (!normalizedUserId) return false;
+  if (isSuperAdmin(normalizedUserId)) return true;
+
+  const stored = await readPermissionConfig();
+  const uploadPermittedUsers = stored?.uploadPermittedUsers || UPLOAD_PERMITTED_USERS;
+  return uploadPermittedUsers.map(String).includes(normalizedUserId);
+}
+
 export function sortAiTools(tools: AiToolRecord[]): AiToolRecord[] {
   return [...tools].sort((a, b) => {
     const category = a.category.localeCompare(b.category, 'zh-Hant');
