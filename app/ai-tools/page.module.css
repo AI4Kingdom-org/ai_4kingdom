@@ -74,6 +74,32 @@
   background: var(--accent);
 }
 
+.heroTitleRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px 20px;
+}
+
+.adminLink {
+  flex: 0 0 auto;
+  padding: 9px 18px;
+  border: 1px solid var(--navy);
+  border-radius: 999px;
+  color: var(--navy);
+  font-size: 15px;
+  font-weight: 700;
+  text-decoration: none;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.adminLink:hover,
+.adminLink:focus-visible {
+  background: var(--navy);
+  color: #fff;
+}
+
 .hero h1 {
   color: var(--navy);
   font-size: 48px;

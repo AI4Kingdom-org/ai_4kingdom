@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import styles from './page.module.css';
 import IframeAutoHeight from '../components/IframeAutoHeight';
+import { useAuth } from '../contexts/AuthContext';
 import type { AiToolRecord, AiToolsCategoryGroup, AiToolsSubcategoryGroup } from '@/app/types/aiTools';
 
 interface DirectoryResponse {
@@ -47,6 +48,29 @@ export default function AiToolsDirectoryPage() {
   const [activeFilter, setActiveFilter] = useState<ActiveFilter | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const { user, loading: authLoading } = useAuth();
+  const [canManage, setCanManage] = useState(false);
+
+  useEffect(() => {
+    if (authLoading || !user?.user_id) {
+      setCanManage(false);
+      return;
+    }
+
+    let cancelled = false;
+    fetch('/api/admin/ai-tools/access', { cache: 'no-store' })
+      .then((response) => response.json())
+      .then((payload: { canManage?: boolean }) => {
+        if (!cancelled) setCanManage(Boolean(payload.canManage));
+      })
+      .catch(() => {
+        if (!cancelled) setCanManage(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authLoading, user?.user_id]);
 
   useEffect(() => {
     let cancelled = false;
@@ -119,7 +143,14 @@ export default function AiToolsDirectoryPage() {
           <p className={styles.kicker}>
             <span>精选 AI 工具目录</span>
           </p>
-          <h1>最新 AI 工具介绍</h1>
+          <div className={styles.heroTitleRow}>
+            <h1>最新 AI 工具介绍</h1>
+            {canManage && (
+              <a className={styles.adminLink} href="/admin/ai-tools" target="_blank" rel="noopener">
+                进入 AI 工具后台
+              </a>
+            )}
+          </div>
           <p className={styles.intro}>
             国度AI为教会、牧者与家庭整理实用的 AI 工具，并按用途分类。选择分类后，点选工具卡片即可查看介绍并前往官网。
           </p>

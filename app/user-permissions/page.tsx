@@ -587,7 +587,7 @@ export default function UserPermissionsPage() {
 
       {/* 上傳權限管理 */}
       <div className={styles.section}>
-        <h2 className={styles.sectionTitle}>文檔上傳權限管理</h2>
+        <h2 className={styles.sectionTitle}>文檔上傳權限管理（名單內用戶也可進入 AI 工具後台）</h2>
         
         <div className={styles.addUserForm}>
           <input
