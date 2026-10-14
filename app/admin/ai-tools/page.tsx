@@ -1,10 +1,14 @@
 'use client';
 
 import { FormEvent, ReactNode, useEffect, useMemo, useState } from 'react';
-import Link from 'next/link';
 import { useAuth } from '@/app/contexts/AuthContext';
 import styles from './page.module.css';
 import type { AiToolRecord, AiToolStatus } from '@/app/types/aiTools';
+
+// The public AI tools directory lives on the WordPress site (page 4863, which embeds
+// /ai-tools). Linking to /ai-tools directly would land on the bare Amplify app.
+const SITE = process.env.NEXT_PUBLIC_PRIMARY_DOMAIN || 'https://ai4kingdom.org';
+const PUBLIC_DIRECTORY_URL = `${SITE}/最新-ai-tools-工具介紹/`;
 
 interface FormState {
   id?: string;
@@ -393,9 +397,11 @@ export default function AdminAiToolsPage() {
           <h1>AI 工具管理</h1>
           <p>维护前台「AI 工具」目录中的工具资料、分类与图标。</p>
         </div>
-        <Link className={styles.publicLink} href="/ai-tools">
+        {/* _top: this admin page is usually embedded in a WordPress iframe (page 4869),
+            and the public directory should replace the whole window, not the frame. */}
+        <a className={styles.publicLink} href={PUBLIC_DIRECTORY_URL} target="_top">
           查看前台
-        </Link>
+        </a>
       </header>
 
       <section className={styles.editorPanel}>
