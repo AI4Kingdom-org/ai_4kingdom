@@ -5,6 +5,7 @@ import { Inter } from "next/font/google";
 import "./app.css";
 import { AuthProvider } from './contexts/AuthContext';
 import { CreditProvider } from './contexts/CreditContext';
+import VisitTracker from './components/VisitTracker';
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -19,6 +20,7 @@ export default function RootLayout({
         <AuthProvider optional={true}>
           <CreditProvider>
             <main>{children}</main>
+            <VisitTracker />
           </CreditProvider>
         </AuthProvider>
       </body>

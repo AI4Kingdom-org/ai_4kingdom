@@ -1,0 +1,430 @@
+/* 版型沿用 /token-management：全寬容器、表格在 .tableScroll 內橫捲、同款分頁列 */
+
+.container {
+  /* 外層 main 是 flex 且 overflow:hidden；min-width:0 讓容器能縮 */
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  margin: 0 auto;
+  padding: 20px;
+  font-family: Arial, sans-serif;
+  color: #333;
+}
+
+.title {
+  font-size: 24px;
+  margin-bottom: 20px;
+  color: #333;
+  text-align: center;
+}
+
+.backButton {
+  display: inline-flex;
+  align-items: center;
+  background-color: #607d8b;
+  color: white;
+  border: none;
+  padding: 8px 15px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  text-decoration: none;
+  margin-bottom: 15px;
+  transition: background-color 0.3s;
+}
+
+.backButton:hover {
+  background-color: #455a64;
+}
+
+.backButton:before {
+  content: '←';
+  margin-right: 8px;
+  font-size: 16px;
+}
+
+/* 篩選列 */
+.filterBar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+  align-items: flex-end;
+  margin-bottom: 10px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+  color: #666;
+}
+
+.field select,
+.field input,
+.search {
+  padding: 7px 8px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 14px;
+  background: white;
+  color: #333;
+}
+
+.presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.presetButton {
+  padding: 7px 10px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  background: white;
+  color: #333;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.presetButton:hover {
+  background-color: #f0f0f0;
+}
+
+.refreshButton {
+  background-color: #2196F3;
+  color: white;
+  border: none;
+  padding: 8px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: background-color 0.3s;
+}
+
+.refreshButton:hover {
+  background-color: #0b7dda;
+}
+
+.refreshButton:disabled {
+  background-color: #90caf9;
+  cursor: wait;
+}
+
+.note {
+  margin: 0 0 16px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: #666;
+}
+
+.error {
+  color: red;
+  padding: 10px;
+  margin: 10px 0;
+  border: 1px solid red;
+  border-radius: 4px;
+  background-color: #ffeeee;
+}
+
+.info {
+  color: #0d47a1;
+  padding: 10px;
+  margin: 10px 0;
+  border: 1px solid #90caf9;
+  border-radius: 4px;
+  background-color: #e3f2fd;
+  font-size: 14px;
+}
+
+/* 摘要卡 */
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px;
+  margin: 16px 0;
+}
+
+.card {
+  background: white;
+  border-radius: 6px;
+  padding: 14px 16px;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+.cardLabel {
+  font-size: 13px;
+  color: #666;
+}
+
+.cardValue {
+  font-size: 28px;
+  font-weight: bold;
+  margin: 4px 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.cardSub {
+  font-size: 12px;
+  color: #888;
+}
+
+/* 區塊 */
+.panel {
+  min-width: 0;
+  margin-top: 24px;
+}
+
+.panelHeader {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.panelTitle {
+  font-size: 18px;
+  margin: 0 0 4px;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 380px), 1fr));
+  gap: 0 24px;
+}
+
+.segmented {
+  display: inline-flex;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.segmented button {
+  border: none;
+  background: white;
+  color: #333;
+  padding: 6px 14px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.segmented button + button {
+  border-left: 1px solid #ddd;
+}
+
+.segmented .segActive {
+  background-color: #2196F3;
+  color: white;
+}
+
+/* 圖表 */
+.chartWrap {
+  position: relative;
+  margin-top: 12px;
+  background: white;
+  border-radius: 6px;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+  padding: 8px 4px 0;
+}
+
+.chart {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.gridLine {
+  stroke: #eee;
+  stroke-width: 1;
+}
+
+.baseLine {
+  stroke: #bbb;
+  stroke-width: 1;
+}
+
+.axisText {
+  fill: #888;
+  font-size: 11px;
+}
+
+.bar {
+  fill: #2196F3;
+}
+
+.barActive {
+  fill: #0b7dda;
+}
+
+.tooltip {
+  position: absolute;
+  top: 8px;
+  transform: translateX(-50%);
+  background: rgba(33, 33, 33, 0.92);
+  color: white;
+  font-size: 12px;
+  line-height: 1.6;
+  padding: 6px 10px;
+  border-radius: 4px;
+  pointer-events: none;
+  white-space: nowrap;
+  z-index: 2;
+}
+
+/* 表格 */
+.tableScroll {
+  overflow-x: auto;
+  margin-top: 12px;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+.statsTable {
+  width: 100%;
+  border-collapse: collapse;
+  background: white;
+}
+
+.statsTable th {
+  white-space: nowrap;
+  background-color: #f0f0f0;
+  padding: 10px 12px;
+  text-align: left;
+  font-weight: bold;
+  border-bottom: 2px solid #ddd;
+}
+
+.statsTable td {
+  padding: 8px 12px;
+  border-bottom: 1px solid #ddd;
+}
+
+.statsTable tr:hover td {
+  background-color: #f5f5f5;
+}
+
+.statsTable th.num,
+.statsTable td.num {
+  text-align: right;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.nowrap {
+  white-space: nowrap;
+}
+
+.path {
+  word-break: break-all;
+  min-width: 200px;
+}
+
+.path a {
+  color: #1565c0;
+  font-weight: normal;
+  text-decoration: none;
+}
+
+.path a:hover {
+  text-decoration: underline;
+}
+
+.empty {
+  text-align: center;
+  color: #888;
+}
+
+.share {
+  display: inline-block;
+  width: 60px;
+  height: 6px;
+  margin-right: 8px;
+  vertical-align: middle;
+  background: #e0e0e0;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.shareBar {
+  display: block;
+  height: 100%;
+  background: #2196F3;
+  border-radius: 3px;
+}
+
+/* 分頁（同 /token-management） */
+.pagination {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.pageGroup {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.pageGap {
+  color: #999;
+}
+
+.pagination button {
+  min-width: 36px;
+  padding: 6px 10px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  background-color: white;
+  color: #333;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.pagination button:hover:not(:disabled) {
+  background-color: #f0f0f0;
+}
+
+.pagination button:disabled {
+  color: #bbb;
+  cursor: not-allowed;
+}
+
+.pagination button.pageActive {
+  background-color: #2196F3;
+  border-color: #2196F3;
+  color: white;
+}
+
+.pageInfo {
+  margin-left: 8px;
+  font-size: 14px;
+  color: #666;
+}
+
+.loadingOverlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  color: white;
+  font-size: 18px;
+  z-index: 1000;
+}
+
+@media (max-width: 600px) {
+  .container {
+    padding: 12px;
+  }
+
+  .cardValue {
+    font-size: 22px;
+  }
+}

@@ -5,6 +5,7 @@ import { updateMonthlyTokenUsage } from '@/app/utils/monthlyTokenUsage';
 import { GUEST_TOKEN_LIMIT, TOKEN_TO_CREDIT_RATIO, getTokenLimit, tokensToCredits } from '@/app/config/plans';
 import type { Identity } from '@/app/lib/identity/server';
 import { isAdmin } from '@/app/lib/identity/admin';
+import { recordAiUsage } from '@/app/lib/analytics/store';
 
 /**
  * 伺服器端額度檢查與記帳。
@@ -183,6 +184,7 @@ export async function recordUsage(identity: Identity, usage: TokenUsage, request
       addTotalTokens(identity.id, GUEST_LIFETIME_KEY, usage),
       addTotalTokens(`guestip_${getClientIp(request)}`, day, usage),
       addTotalTokens(GUEST_BUDGET_PARTITION, day, usage),
+      recordAiUsage('guest', identity.id, usage.total_tokens || 0),
     ]);
   } catch (e) {
     console.error('[credits] 記錄用量失敗:', { id: identity.id, usage, error: e });

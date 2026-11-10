@@ -24,6 +24,12 @@ const managementTools: ManagementTool[] = [
     iconEmoji: '💰'
   },
   {
+    title: '網站流量統計',
+    description: '查看網站與 App 的瀏覽量、訪客、熱門頁面、來源、註冊與 AI 使用',
+    path: '/site-analytics',
+    iconEmoji: '📊'
+  },
+  {
     title: '檔案上傳',
     description: '上傳單一或多個檔案到指定的助手知識庫',
     path: '/file-upload',
