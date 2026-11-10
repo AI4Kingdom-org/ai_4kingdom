@@ -1,6 +1,7 @@
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocumentClient, UpdateCommand, GetCommand, PutCommand } from "@aws-sdk/lib-dynamodb";
 import { createDynamoDBClient } from "./dynamodb";
+import { recordAiUsage } from "@/app/lib/analytics/store";
 
 interface TokenUsage {
   prompt_tokens: number;
@@ -64,6 +65,8 @@ export async function updateMonthlyTokenUsage(userId: string, usage: TokenUsage)
     });
 
     const result = await docClient.send(command);
+    // 每日 AI 用量統計（/site-analytics）；內部自行吞掉錯誤，不影響記帳
+    await recordAiUsage('member', String(userId), usage.total_tokens);
     console.log('[SUCCESS] ✅ Token 使用量更新成功:', {
       userId,
       yearMonth,
