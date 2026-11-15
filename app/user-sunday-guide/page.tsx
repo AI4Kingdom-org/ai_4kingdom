@@ -370,7 +370,8 @@ function SundayGuideContent() {
       const userId = user?.user_id || '';
 
       // 使用伺服器端API下載包含所有內容的HTML文件
-      const downloadUrl = `/api/sunday-guide/download-pdf?includeAll=true&userId=${encodeURIComponent(userId)}&assistantId=${ASSISTANT_IDS.SUNDAY_GUIDE}`;
+      let downloadUrl = `/api/sunday-guide/download-pdf?includeAll=true&userId=${encodeURIComponent(userId)}&assistantId=${ASSISTANT_IDS.SUNDAY_GUIDE}`;
+      if (selectedFileUniqueId) downloadUrl += `&fileId=${encodeURIComponent(selectedFileUniqueId)}`;
 
       // 在新分頁中打開（需帶身分標頭，不能直接 window.open）
       await openAuthenticatedDownload(downloadUrl);

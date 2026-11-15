@@ -252,6 +252,7 @@ function EastChristHomeContent() {
       params.set('assistantId', eastUnit.assistantId);
       params.set('userId', user?.user_id || '');
       params.set('includeAll', 'true');
+      if (selectedFileId) params.set('fileId', selectedFileId);
       await openAuthenticatedDownload(`/api/sunday-guide/download-pdf?${params.toString()}`);
       setPdfLoading(false);
     } catch (err) { setPdfError(err instanceof Error ? err.message : '下載失敗'); setPdfLoading(false); }

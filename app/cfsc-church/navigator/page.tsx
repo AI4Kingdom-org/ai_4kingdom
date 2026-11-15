@@ -227,6 +227,7 @@ function CfscChurchNavigatorContent() {
       params.set('assistantId', cfscChurchUnit.assistantId);
       params.set('userId', userId);
       params.set('includeAll', 'true');
+      if (selectedFileUniqueId) params.set('fileId', selectedFileUniqueId);
       await openAuthenticatedDownload(`${base}?${params.toString()}`);
       setPdfLoading(false);
     } catch (err) {
