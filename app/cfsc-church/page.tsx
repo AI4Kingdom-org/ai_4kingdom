@@ -279,6 +279,7 @@ function CfscChurchContent() {
       params.set('assistantId', cfscChurchUnit.assistantId);
       params.set('userId', userId);
       params.set('includeAll', 'true');
+      if (selectedFileId) params.set('fileId', selectedFileId);
       await openAuthenticatedDownload(`/api/sunday-guide/download-pdf?${params.toString()}`);
       setPdfLoading(false);
     } catch (err) {

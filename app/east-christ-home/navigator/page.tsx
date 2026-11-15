@@ -229,6 +229,7 @@ function EastNavigatorContent() {
       params.set('assistantId', eastUnit.assistantId);
       params.set('userId', userId);
       params.set('includeAll', 'true');
+      if (selectedFileUniqueId) params.set('fileId', selectedFileUniqueId);
       const url = `${base}?${params.toString()}`;
       await openAuthenticatedDownload(url);
       setPdfLoading(false);

@@ -16,6 +16,7 @@ const traditionalToSimplified: Record<string, string> = {
 const SUNDAY_GUIDE_TABLE = process.env.NEXT_PUBLIC_SUNDAY_GUIDE_TABLE || 'SundayGuide';
 // 默認助手ID，用於查詢內容
 const DEFAULT_ASSISTANT_ID = process.env.NEXT_PUBLIC_SUNDAY_GUIDE_ASSISTANT_ID || 'asst_KsH3Sm5fB968SLr2TaAIuZF8';
+const MAX_SCAN_PAGES = 50;
 
 // 將繁體中文轉換為簡體中文
 function convertToSimplified(text: string): string {
@@ -44,12 +45,13 @@ export async function GET(
     const userId = auth.identity.userId;
     const assistantId = url.searchParams.get('assistantId') || DEFAULT_ASSISTANT_ID;
     const includeAll = url.searchParams.get('includeAll') === 'true';
+    const fileId = url.searchParams.get('fileId');
 
-    console.log(`[DEBUG] PDF下載請求: type=${type}, userId=${userId}, assistantId=${assistantId}, includeAll=${includeAll}`);
+    console.log(`[DEBUG] PDF下載請求: type=${type}, userId=${userId}, assistantId=${assistantId}, includeAll=${includeAll}, fileId=${fileId || ''}`);
 
     // 如果是包含所有內容的請求
     if (includeAll) {
-      const allContent = await getAllContentForPDF(assistantId);
+      const allContent = await getAllContentForPDF(assistantId, fileId);
       
       if (!allContent || (!allContent.summary && !allContent.devotional && !allContent.bible)) {
         console.error(`[ERROR] 找不到完整內容: assistantId=${assistantId}`);
@@ -83,7 +85,7 @@ export async function GET(
     }
 
     // 原有的單個內容下載邏輯
-    const content = await getContentForPDF(type, assistantId);
+    const content = await getContentForPDF(type, assistantId, fileId);
     
     if (!content) {
       console.error(`[ERROR] 找不到內容: type=${type}, assistantId=${assistantId}`);
@@ -184,46 +186,55 @@ export async function GET(
   }
 }
 
-// 獲取所有內容類型的輔助函數
-async function getAllContentForPDF(assistantId: string) {
-  try {
-    const docClient = await createDynamoDBClient();
-    
-    console.log(`[DEBUG] 查詢所有內容: 表=${SUNDAY_GUIDE_TABLE}, assistantId=${assistantId}`);
-    
-    const command = new ScanCommand({
+// 分頁掃描並取出最新一筆記錄。
+// DynamoDB Scan 每次只看 1MB，FilterExpression 是在那 1MB 裡再過濾，
+// 所以只掃一頁時，資料落在後面頁數的單位（例如耶稣团契）會整個找不到。
+// 有 fileId 時只取那一篇講章，否則取該助手最新上傳的一篇。
+async function findLatestRecord(assistantId: string, fileId: string | null) {
+  const docClient = await createDynamoDBClient();
+  const filter = fileId ? 'assistantId = :assistantId AND fileId = :fileId' : 'assistantId = :assistantId';
+  const values: Record<string, string> = { ':assistantId': assistantId };
+  if (fileId) values[':fileId'] = fileId;
+
+  console.log(`[DEBUG] 查詢內容: 表=${SUNDAY_GUIDE_TABLE}, assistantId=${assistantId}, fileId=${fileId || '(最新)'}`);
+
+  let items: Record<string, any>[] = [];
+  let lastEvaluatedKey: Record<string, any> | undefined;
+  let pages = 0;
+  do {
+    const result = await docClient.send(new ScanCommand({
       TableName: SUNDAY_GUIDE_TABLE,
-      FilterExpression: 'assistantId = :assistantId',
-      ExpressionAttributeValues: {
-        ':assistantId': assistantId
-      }
-    });
+      FilterExpression: filter,
+      ExpressionAttributeValues: values,
+      ExclusiveStartKey: lastEvaluatedKey
+    }));
+    items = items.concat(result.Items || []);
+    lastEvaluatedKey = result.LastEvaluatedKey;
+    pages++;
+  } while (lastEvaluatedKey && pages < MAX_SCAN_PAGES);
 
-    const response = await docClient.send(command);
-    const items = response.Items;
-
-    if (!items || items.length === 0) {
-      console.error('[ERROR] 未找到任何內容記錄');
-      return null;
-    }
-
-    // 獲取最新的文件內容
-    const latestItem = items.sort((a, b) => 
-      new Date(b.Timestamp).getTime() - new Date(a.Timestamp).getTime()
-    )[0];
-
-    console.log(`[DEBUG] 找到最新記錄: ${latestItem.id || 'unknown ID'}, 時間戳: ${latestItem.Timestamp}`);
-    
-    return {
-      summary: latestItem.summary || '',
-      devotional: latestItem.devotional || '',
-      bible: latestItem.bibleStudy || '',
-      timestamp: latestItem.Timestamp
-    };
-  } catch (error) {
-    console.error('[ERROR] 獲取所有內容失敗:', error);
-    throw error;
+  if (items.length === 0) {
+    console.error(`[ERROR] 未找到任何內容記錄（掃描 ${pages} 頁）`);
+    return null;
   }
+
+  const latestItem = items.sort((a, b) =>
+    new Date(b.Timestamp).getTime() - new Date(a.Timestamp).getTime()
+  )[0];
+  console.log(`[DEBUG] 找到記錄: ${latestItem.fileName || latestItem.fileId || 'unknown'}, 時間戳: ${latestItem.Timestamp}, 掃描 ${pages} 頁`);
+  return latestItem;
+}
+
+// 獲取所有內容類型的輔助函數
+async function getAllContentForPDF(assistantId: string, fileId: string | null) {
+  const latestItem = await findLatestRecord(assistantId, fileId);
+  if (!latestItem) return null;
+  return {
+    summary: latestItem.summary || '',
+    devotional: latestItem.devotional || '',
+    bible: latestItem.bibleStudy || '',
+    timestamp: latestItem.Timestamp
+  };
 }
 
 // 創建包含所有內容的完整 HTML
@@ -322,63 +333,24 @@ function createCompleteHTML(allContent: { summary: string; devotional: string; b
   `;
 }
 
-// 獲取內容的輔助函數，使用與內容 API 相同的邏輯
-async function getContentForPDF(type: string, assistantId: string) {
-  try {
-    const docClient = await createDynamoDBClient();
-    
-    console.log(`[DEBUG] 查詢內容: 表=${SUNDAY_GUIDE_TABLE}, assistantId=${assistantId}`);
-    
-    // 使用與內容 API 相同的查詢邏輯 - 根據 assistantId 查詢
-    const command = new ScanCommand({
-      TableName: SUNDAY_GUIDE_TABLE,
-      FilterExpression: 'assistantId = :assistantId',
-      ExpressionAttributeValues: {
-        ':assistantId': assistantId
-      }
-    });
+// 獲取單一類型內容的輔助函數
+async function getContentForPDF(type: string, assistantId: string, fileId: string | null) {
+  const latestItem = await findLatestRecord(assistantId, fileId);
+  if (!latestItem) return null;
 
-    const response = await docClient.send(command);
-    const items = response.Items;
+  const fieldByType: Record<string, string> = {
+    summary: 'summary',
+    text: 'fullText',
+    devotional: 'devotional',
+    bible: 'bibleStudy'
+  };
+  const field = fieldByType[type];
+  const content: string | null = field ? latestItem[field] || null : null;
 
-    if (!items || items.length === 0) {
-      console.error('[ERROR] 未找到任何內容記錄');
-      return null;
-    }
-
-    // 獲取最新的文件內容
-    const latestItem = items.sort((a, b) => 
-      new Date(b.Timestamp).getTime() - new Date(a.Timestamp).getTime()
-    )[0];
-
-    console.log(`[DEBUG] 找到最新記錄: ${latestItem.id || 'unknown ID'}, 時間戳: ${latestItem.Timestamp}`);
-    
-    // 根據類型返回對應內容
-    let content: string | null = null;
-    switch (type) {
-      case 'summary':
-        content = latestItem.summary;
-        break;
-      case 'text':
-        content = latestItem.fullText;
-        break;
-      case 'devotional':
-        content = latestItem.devotional;
-        break;
-      case 'bible':
-        content = latestItem.bibleStudy;
-        break;
-    }
-
-    if (!content) {
-      console.error(`[ERROR] 在找到的記錄中未找到 ${type} 類型的內容`);
-    } else {
-      console.log(`[DEBUG] 成功獲取 ${type} 類型的內容，長度: ${content.length} 字符`);
-    }
-    
-    return content;
-  } catch (error) {
-    console.error('[ERROR] 獲取PDF內容失敗:', error);
-    throw error;
+  if (!content) {
+    console.error(`[ERROR] 在找到的記錄中未找到 ${type} 類型的內容`);
+  } else {
+    console.log(`[DEBUG] 成功獲取 ${type} 類型的內容，長度: ${content.length} 字符`);
   }
+  return content;
 }

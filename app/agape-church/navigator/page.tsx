@@ -232,6 +232,7 @@ function AgapeNavigatorContent() {
   params.set('assistantId', ASSISTANT_IDS.AGAPE_CHURCH);
       params.set('userId', userId);
       params.set('includeAll', 'true');
+      if (selectedFileUniqueId) params.set('fileId', selectedFileUniqueId);
       const url = `${base}?${params.toString()}`;
       await openAuthenticatedDownload(url);
       setPdfLoading(false);
