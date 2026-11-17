@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import OpenAI from 'openai';
-import { exec } from 'child_process';
+import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { unlink, mkdir, readdir, readFile, writeFile, chmod } from 'fs/promises';
 import { existsSync, statSync } from 'fs';
@@ -8,6 +8,12 @@ import { join } from 'path';
 import os from 'os';
 import { formatTranscript } from '../../../lib/formatTranscript';
 import { requireMember } from '../../../lib/identity/server';
+import {
+  INVALID_TIME_RESPONSE,
+  isValidTrimTime,
+  pickYouTubeAudioPayload,
+  workerAuthHeaders,
+} from '../../../lib/workerAuth';
 
 // Whisper API 單次上限（保留 1MB buffer）
 const WHISPER_MAX_BYTES = 24 * 1024 * 1024; // 24 MB
@@ -18,7 +24,16 @@ const CHUNK_DURATION_SEC = 20 * 60;
 // Amplify 相容：YouTube 影片最長 180 分鐘
 const MAX_VIDEO_DURATION_SEC = 180 * 60; // 10800s
 
-const execAsync = promisify(exec);
+// 外部指令一律用 execFile + 參數陣列，不經 shell：請求內容（例如裁剪時間）
+// 以前被直接拼進 exec 指令字串，可被注入任意 shell 指令。
+const execFileAsync = promisify(execFile);
+function run(
+  bin: string,
+  args: string[],
+  opts: { timeout: number; maxBuffer?: number }
+): Promise<{ stdout: string; stderr: string }> {
+  return execFileAsync(bin, args, { maxBuffer: 10 * 1024 * 1024, ...opts, encoding: 'utf8' });
+}
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -33,18 +48,18 @@ let ytDlpPath: string | null = null;
  * - Windows（本地開發）：使用簡化參數，避免 cmd.exe 引號解析問題
  */
 const isWindows = os.platform() === 'win32';
-const YT_DLP_COMMON_ARGS = isWindows
+const YT_DLP_COMMON_ARGS: string[] = isWindows
   ? [
       '--no-check-certificates',
       '--no-warnings',
-    ].join(' ')
+    ]
   : [
       '--js-runtimes', 'node',
-      '--extractor-args', '"youtube:player_client=tv_embedded,ios,mweb"',
-      '--user-agent', '"Mozilla/5.0 (iPhone; CPU iPhone OS 17_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.6 Mobile/15E148 Safari/604.1"',
+      '--extractor-args', 'youtube:player_client=tv_embedded,ios,mweb',
+      '--user-agent', 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.6 Mobile/15E148 Safari/604.1',
       '--no-check-certificates',
       '--no-warnings',
-    ].join(' ');
+    ];
 
 /**
  * 確保 yt-dlp 二進制可用。
@@ -56,7 +71,7 @@ async function ensureYtDlp(): Promise<string> {
   if (ytDlpPath) return ytDlpPath;
 
   try {
-    const { stdout } = await execAsync('yt-dlp --version', { timeout: 5000 });
+    const { stdout } = await run('yt-dlp', ['--version'], { timeout: 5000 });
     if (stdout.trim()) {
       console.log('[youtube-audio] Using system yt-dlp:', stdout.trim());
       ytDlpPath = 'yt-dlp';
@@ -112,7 +127,7 @@ async function ensureYtDlp(): Promise<string> {
  */
 async function getFfmpegPath(): Promise<string | null> {
   try {
-    await execAsync('ffmpeg -version', { timeout: 5000 });
+    await run('ffmpeg', ['-version'], { timeout: 5000 });
     return 'ffmpeg';
   } catch {
     try {
@@ -136,7 +151,7 @@ async function getFfmpegPath(): Promise<string | null> {
 async function getAudioDuration(ffmpegPath: string, filePath: string): Promise<number> {
   try {
     // ffmpeg -i 會把 Duration 輸出到 stderr
-    const result = await execAsync(`"${ffmpegPath}" -i "${filePath}"`, { timeout: 15000 })
+    const result = await run(ffmpegPath, ['-hide_banner', '-i', filePath], { timeout: 15000 })
       .catch((e: any) => ({ stdout: '', stderr: e.stderr || e.message || '' }));
     const output = (result.stdout || '') + (result.stderr || '');
     const m = output.match(/Duration:\s*(\d+):(\d+):(\d+)/);
@@ -159,9 +174,12 @@ async function splitAudio(
 ): Promise<string[]> {
   const ext = inputPath.split('.').pop()?.toLowerCase() || 'm4a';
   const pattern = join(outputDir, `chunk_%03d.${ext}`);
-  const cmd = `"${ffmpegPath}" -i "${inputPath}" -f segment -segment_time ${chunkSec} -c copy -reset_timestamps 1 "${pattern}"`;
   console.log('[youtube-audio] Splitting with ffmpeg...');
-  await execAsync(cmd, { timeout: 120_000, maxBuffer: 50 * 1024 * 1024 });
+  await run(
+    ffmpegPath,
+    ['-i', inputPath, '-f', 'segment', '-segment_time', String(chunkSec), '-c', 'copy', '-reset_timestamps', '1', pattern],
+    { timeout: 120_000, maxBuffer: 50 * 1024 * 1024 }
+  );
   const files = await readdir(outputDir);
   return files
     .filter((f) => /^chunk_\d+\.\w+$/.test(f))
@@ -440,6 +458,12 @@ export async function POST(request: Request) {
   const auth = requireMember(request);
   if ('response' in auth) return auth.response;
 
+  // 只取 Worker 認得的欄位；裁剪時間只接受 HH、HH:MM、HH:MM:SS
+  const payload = pickYouTubeAudioPayload(await request.json().catch(() => null));
+  if (!isValidTrimTime(payload.startTime) || !isValidTrimTime(payload.endTime)) {
+    return NextResponse.json(INVALID_TIME_RESPONSE, { status: 400 });
+  }
+
   // ── Fly.io 微服務代理模式（Amplify 生產環境）──────────────────
   // 設定 YOUTUBE_WORKER_URL 環境變數後，所有 YouTube 轉錄請求將代理到 Fly.io 微服務
   // 未設定時走本地 yt-dlp 管道（Windows 開發）
@@ -448,17 +472,12 @@ export async function POST(request: Request) {
     '| YOUTUBE_WORKER_SECRET:', process.env.YOUTUBE_WORKER_SECRET ? '(set)' : '(not set)');
   if (WORKER_URL) {
     try {
-      const body = await request.json();
       console.log('[youtube-audio] Proxying to Fly.io worker:', WORKER_URL);
-
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      const workerSecret = process.env.YOUTUBE_WORKER_SECRET;
-      if (workerSecret) headers['x-worker-secret'] = workerSecret;
 
       const workerRes = await fetch(`${WORKER_URL}/api/youtube-audio`, {
         method: 'POST',
-        headers,
-        body: JSON.stringify(body),
+        headers: { 'Content-Type': 'application/json', ...workerAuthHeaders() },
+        body: JSON.stringify(payload),
         signal: AbortSignal.timeout(160_000), // 160 秒（Amplify Lambda 限制 180s，留 20s buffer）
       });
 
@@ -485,8 +504,7 @@ export async function POST(request: Request) {
   const chunkDir = join(tmpDir, 'chunks');
 
   try {
-    const body = await request.json();
-    const { url, startTime, endTime } = body;
+    const { url, startTime, endTime } = payload;
 
     if (!url || typeof url !== 'string') {
       return NextResponse.json(
@@ -575,9 +593,10 @@ export async function POST(request: Request) {
 
         // 時長預檢（代理策略未成功時才需要）
         try {
-          const { stdout: infoJson } = await execAsync(
-            `"${ytDlp}" ${YT_DLP_COMMON_ARGS} --dump-json --no-playlist "https://www.youtube.com/watch?v=${videoId}"`,
-            { timeout: 30_000, maxBuffer: 10 * 1024 * 1024 }
+          const { stdout: infoJson } = await run(
+            ytDlp,
+            [...YT_DLP_COMMON_ARGS, '--dump-json', '--no-playlist', `https://www.youtube.com/watch?v=${videoId}`],
+            { timeout: 30_000 }
           );
           const dur: number = JSON.parse(infoJson).duration || 0;
           if (dur > MAX_VIDEO_DURATION_SEC) {
@@ -596,9 +615,12 @@ export async function POST(request: Request) {
         const fmtSel =
           'bestaudio[abr<=48][ext=webm]/bestaudio[abr<=48]/bestaudio[abr<=64][ext=m4a]/bestaudio[ext=webm]/bestaudio[ext=m4a]/bestaudio';
         const outTpl = join(tmpDir, '%(id)s.%(ext)s');
-        const cmd = `"${ytDlp}" ${YT_DLP_COMMON_ARGS} -f "${fmtSel}" --no-playlist --no-post-overwrites -o "${outTpl}" "https://www.youtube.com/watch?v=${videoId}"`;
         console.log('[youtube-audio] Running yt-dlp...');
-        const { stderr } = await execAsync(cmd, { timeout: 600_000, maxBuffer: 50 * 1024 * 1024 });
+        const { stderr } = await run(
+          ytDlp,
+          [...YT_DLP_COMMON_ARGS, '-f', fmtSel, '--no-playlist', '--no-post-overwrites', '-o', outTpl, `https://www.youtube.com/watch?v=${videoId}`],
+          { timeout: 600_000, maxBuffer: 50 * 1024 * 1024 }
+        );
         if (stderr) console.log('[youtube-audio] yt-dlp stderr:', stderr.slice(0, 300));
       } catch (dlpErr: any) {
         console.error('[youtube-audio] yt-dlp also failed:', (dlpErr as Error).message?.slice(0, 300));
@@ -637,11 +659,14 @@ export async function POST(request: Request) {
     // ── 時段裁剪（若有指定 startTime 或 endTime）─────────────────────────────
     if ((startTime || endTime) && ffmpegPath) {
       const trimmedPath = join(tmpDir, `trimmed.${ext}`);
-      const ssArg = startTime ? `-ss "${startTime}"` : '';
-      const toArg = endTime ? `-to "${endTime}"` : '';
-      const trimCmd = `"${ffmpegPath}" -i "${audioFilePath}" ${ssArg} ${toArg} -c copy "${trimmedPath}"`;
+      const trimArgs = [
+        '-i', audioFilePath,
+        ...(startTime ? ['-ss', startTime] : []),
+        ...(endTime ? ['-to', endTime] : []),
+        '-c', 'copy', trimmedPath,
+      ];
       console.log(`[youtube-audio] Trimming segment: ${startTime || '00:00:00'} → ${endTime || 'end'}`);
-      await execAsync(trimCmd, { timeout: 60_000, maxBuffer: 50 * 1024 * 1024 });
+      await run(ffmpegPath, trimArgs, { timeout: 60_000, maxBuffer: 50 * 1024 * 1024 });
       if (existsSync(trimmedPath)) {
         audioFilePath = trimmedPath;
       } else {

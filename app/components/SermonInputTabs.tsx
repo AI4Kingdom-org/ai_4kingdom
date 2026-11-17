@@ -69,7 +69,6 @@ export default function SermonInputTabs({
   const [audioDragging, setAudioDragging] = useState(false);
   const [audioFileName, setAudioFileName] = useState('');
   const audioInputRef = useRef<HTMLInputElement>(null);
-  const publicWorkerUrl = process.env.NEXT_PUBLIC_YOUTUBE_WORKER_URL;
 
   // Shared: transcript editor
   const [editedText, setEditedText] = useState('');
@@ -159,16 +158,18 @@ export default function SermonInputTabs({
     // The synchronous route cannot outlive API Gateway's hard 29s cap, and when it is
     // cut off the worker keeps transcribing a request nobody is listening to — so the
     // client pays for the same video twice. Polling removes both problems.
-    if (publicWorkerUrl) {
-      const startRes = await fetch(`${publicWorkerUrl}/api/youtube-audio/start`, {
+    // Both calls go through our own API, which checks the member and adds the worker
+    // secret server-side — the browser no longer talks to the worker directly.
+    {
+      const startRes = await fetch('/api/sunday-guide/youtube-audio/start', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       }).catch(() => null);
 
-      // A 404 means the deployed worker predates the job API; fall through to the
-      // synchronous path so a frontend release can ship before the worker one.
-      if (startRes && startRes.status !== 404) {
+      // 404: the deployed worker predates the job API. 501: no worker configured
+      // (local dev). Either way fall through to the synchronous route.
+      if (startRes && startRes.status !== 404 && startRes.status !== 501) {
         const startData = await tryParseJson(startRes);
         if (!startRes.ok || !startData.jobId) {
           throw new Error(
@@ -184,7 +185,7 @@ export default function SermonInputTabs({
           await new Promise((r) => setTimeout(r, POLL_MS));
 
           const statusRes = await fetch(
-            `${publicWorkerUrl}/api/youtube-audio/status/${startData.jobId}`
+            `/api/sunday-guide/youtube-audio/status/${encodeURIComponent(startData.jobId)}`
           ).catch(() => null);
           if (!statusRes) continue; // transient network blip — keep polling
 
@@ -229,34 +230,9 @@ export default function SermonInputTabs({
 
     if (apiRes.ok && apiData.transcript) return apiData;
 
-    // If Amplify/API Gateway returns 5xx or a proxy timeout (WORKER_PROXY_FAILED),
-    // retry directly against the Fly.io worker URL (bypasses the 160s Amplify limit).
-    const shouldTryDirectWorker =
-      !apiRes.ok &&
-      !!publicWorkerUrl &&
-      apiRes.status >= 500 &&
-      (!apiData.message || apiData.error === 'WORKER_PROXY_FAILED');
-
-    if (!shouldTryDirectWorker) {
-      throw new Error(apiData.message || apiData.error || `音频转录失败（HTTP ${apiRes.status}）`);
-    }
-
-    const workerRes = await fetch(`${publicWorkerUrl}/api/youtube-audio`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-    const workerData = await tryParseJson(workerRes);
-
-    if (!workerRes.ok || !workerData.transcript) {
-      throw new Error(
-        workerData.message ||
-        workerData.error ||
-        `音频转录失败（直连 Worker HTTP ${workerRes.status}）`
-      );
-    }
-
-    return workerData;
+    // (The old "retry straight against the worker" step is gone: long videos are handled
+    // by the job API above, and the browser must not call the worker directly anymore.)
+    throw new Error(apiData.message || apiData.error || `音频转录失败（HTTP ${apiRes.status}）`);
   };
 
   const handleYouTubeFetch = async () => {
@@ -412,7 +388,9 @@ export default function SermonInputTabs({
           'x-filename': encodeURIComponent(file.name),
           'content-type': file.type || 'application/octet-stream',
         };
-        if (config.workerSecret) headers['x-worker-secret'] = config.workerSecret;
+        // 短效上傳通行證（15 分鐘、只能上傳轉錄），不是 Worker 密鑰
+        const uploadToken = config.uploadToken || config.workerSecret;
+        if (uploadToken) headers['x-upload-token'] = uploadToken;
 
         const workerRes = await fetch(config.uploadUrl, {
           method: 'POST',

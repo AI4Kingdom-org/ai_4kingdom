@@ -2,27 +2,36 @@ import { NextResponse } from 'next/server';
 import OpenAI from 'openai';
 import { formatTranscript } from '../../../lib/formatTranscript';
 import { requireMember } from '../../../lib/identity/server';
+import { getWorkerUrl, issueUploadToken } from '../../../lib/workerAuth';
 
 /**
  * GET /api/sunday-guide/transcription
  * 回傳大檔案直接上傳到 Fly.io Worker 所需的 config。
- * 前端在檔案 > 10MB 時呼叫此端點，取得 uploadUrl 後直接上傳，繞過 Amplify 10MB 限制。
- * 回應含 worker secret，因此僅限登入會員（上傳區塊本身也只對指定使用者顯示）。
+ * 前端取得 uploadUrl 後直接上傳，繞過 Amplify 10MB 限制。
+ *
+ * 以前這裡會把 Worker 總密鑰交給瀏覽器（等於每個會員都拿得到）；現在改發
+ * 15 分鐘有效、只能用來上傳轉錄的通行證（app/lib/workerAuth.ts）。
+ * `workerSecret` 欄位保留且放同一張通行證：更新前就開著的舊頁面會把它當成
+ * x-worker-secret 送出，Worker 也接受，舊頁面因此不需重新整理也能繼續上傳。
  */
 export async function GET(request: Request) {
   const auth = requireMember(request);
   if ('response' in auth) return auth.response;
 
-  const workerUrl = process.env.YOUTUBE_WORKER_URL;
-  const workerSecret = process.env.YOUTUBE_WORKER_SECRET;
+  const workerUrl = getWorkerUrl();
   if (!workerUrl) {
     return NextResponse.json({ directUpload: false });
   }
-  return NextResponse.json({
-    directUpload: true,
-    uploadUrl: `${workerUrl}/api/audio-transcribe`,
-    workerSecret: workerSecret || '',
-  });
+  const uploadToken = issueUploadToken(auth.identity.userId) || '';
+  return NextResponse.json(
+    {
+      directUpload: true,
+      uploadUrl: `${workerUrl}/api/audio-transcribe`,
+      uploadToken,
+      workerSecret: uploadToken, // 舊頁面相容用，見上方說明
+    },
+    { headers: { 'Cache-Control': 'no-store' } }
+  );
 }
 
 const openai = new OpenAI({

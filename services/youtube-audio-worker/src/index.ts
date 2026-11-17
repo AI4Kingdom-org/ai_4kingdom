@@ -5,7 +5,7 @@
  * Strategy 2: yt-dlp audio download + ffmpeg + Whisper + GPT
  */
 import express from 'express';
-import { exec } from 'child_process';
+import { execFile } from 'child_process';
 import { promisify } from 'util';
 import {
   mkdir, readdir, readFile, writeFile, rm,
@@ -13,7 +13,7 @@ import {
 import { existsSync, statSync, chmodSync } from 'fs';
 import { join } from 'path';
 import os from 'os';
-import { randomUUID } from 'crypto';
+import { createHmac, randomUUID, timingSafeEqual } from 'crypto';
 import OpenAI from 'openai';
 import { ProxyAgent, fetch as undiciFetch } from 'undici';
 import { registerSundayGuideRoutes, failRunningJobsOnShutdown } from './sundayGuide';
@@ -27,7 +27,7 @@ app.use((req: express.Request, res: express.Response, next: express.NextFunction
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader(
     'Access-Control-Allow-Headers',
-    'content-type, x-worker-secret, x-filename, authorization',
+    'content-type, x-worker-secret, x-upload-token, x-filename, authorization',
   );
   // Preflight: browsers send OPTIONS before the real POST — respond immediately
   // without going through authMiddleware (which would reject it as Unauthorized)
@@ -38,58 +38,149 @@ app.use((req: express.Request, res: express.Response, next: express.NextFunction
   next();
 });
 
-const execAsync = promisify(exec);
+// External commands always go through execFile with an argument array — never a shell
+// string. Request values (trim times, uploaded file names) used to be pasted into
+// `exec` command lines, which let a caller run arbitrary shell commands on this host.
+const execFileAsync = promisify(execFile);
+function run(
+  bin: string,
+  args: string[],
+  opts: { timeout: number; maxBuffer?: number },
+): Promise<{ stdout: string; stderr: string }> {
+  return execFileAsync(bin, args, { maxBuffer: 10 * 1024 * 1024, ...opts, encoding: 'utf8' });
+}
+
 const PORT = parseInt(process.env.PORT || '8080', 10);
 
-// Auth
-const SHARED_SECRET = process.env.WORKER_SECRET || '';
-const PUBLIC_ALLOWED_ORIGINS = (process.env.PUBLIC_ALLOWED_ORIGINS || '*.amplifyapp.com,ai4kingdom.org,www.ai4kingdom.org,localhost,127.0.0.1')
+// ── Auth ─────────────────────────────────────────────────────────────────────
+// Callers prove themselves in one of these ways:
+// 1. Service secret (x-worker-secret): the Next.js server. WORKER_SECRET_NEXT is a
+//    second accepted secret, so the secret can be rotated without failed calls:
+//    add the new one as NEXT, switch the app to it, then promote it to WORKER_SECRET.
+// 2. Upload token (x-upload-token, or x-worker-secret from older pages): a short-lived
+//    HMAC token the Next.js app issues to a signed-in member for one audio upload.
+//    Only accepted on /api/audio-transcribe.
+// 3. Legacy Origin check, only on the YouTube routes and only until
+//    LEGACY_ORIGIN_AUTH_UNTIL (ISO date). Browser tabs opened before the app moved
+//    these calls server-side still call the worker directly; this keeps them working
+//    through the changeover and then switches itself off. The Origin header is
+//    trivially forged, so it must never be a permanent way in.
+const SERVICE_SECRETS = [process.env.WORKER_SECRET, process.env.WORKER_SECRET_NEXT]
+  .map((s) => (s || '').trim())
+  .filter(Boolean);
+const LEGACY_ORIGIN_AUTH_UNTIL = Date.parse(process.env.LEGACY_ORIGIN_AUTH_UNTIL || '') || 0;
+const LEGACY_ALLOWED_ORIGINS = (process.env.PUBLIC_ALLOWED_ORIGINS
+  || 'main.d1b5nk0vz3t0hz.amplifyapp.com,ai4kingdom.org,www.ai4kingdom.org')
   .split(',')
   .map((s) => s.trim().toLowerCase())
   .filter(Boolean);
+const UPLOAD_TOKEN_PURPOSE = 'audio-transcribe';
 
-function isOriginAllowed(originRaw?: string): boolean {
-  if (!originRaw) return false;
+if (!SERVICE_SECRETS.length) {
+  console.error('[worker] WORKER_SECRET is not set — every protected route will refuse requests');
+}
+
+const REFRESH_MESSAGE = '系統已更新，請重新整理頁面後再試。';
+
+function safeEqual(a: string, b: string): boolean {
+  const ab = Buffer.from(a);
+  const bb = Buffer.from(b);
+  return ab.length === bb.length && timingSafeEqual(ab, bb);
+}
+
+function headerValue(req: express.Request, name: string): string {
+  const v = req.headers[name];
+  return (Array.isArray(v) ? v[0] : v || '').trim();
+}
+
+function hasServiceSecret(req: express.Request): boolean {
+  const sent = headerValue(req, 'x-worker-secret');
+  return !!sent && SERVICE_SECRETS.some((s) => safeEqual(sent, s));
+}
+
+function b64url(buf: Buffer): string {
+  return buf.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+/** Must match app/lib/workerAuth.ts (issueUploadToken). */
+function uploadTokenKey(secret: string): Buffer {
+  return createHmac('sha256', secret).update('a4k-worker-upload-v1').digest();
+}
+
+/** `<payload b64url>.<HMAC b64url>`; payload { p: purpose, uid, exp (unix seconds) }. */
+function verifyUploadToken(token: string): { uid: string } | null {
+  const [payloadB64, sig] = token.split('.');
+  if (!payloadB64 || !sig) return null;
+  const signedBySomeSecret = SERVICE_SECRETS.some((secret) =>
+    safeEqual(sig, b64url(createHmac('sha256', uploadTokenKey(secret)).update(payloadB64).digest())));
+  if (!signedBySomeSecret) return null;
   try {
-    const host = new URL(originRaw).hostname.toLowerCase();
-    return PUBLIC_ALLOWED_ORIGINS.some((rule) => {
-      if (rule === host) return true;
-      if (rule.startsWith('*.')) {
-        const suffix = rule.slice(1); // keep leading dot
-        return host.endsWith(suffix);
-      }
-      return false;
-    });
+    const p = JSON.parse(Buffer.from(payloadB64.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8'));
+    if (p?.p !== UPLOAD_TOKEN_PURPOSE || typeof p.exp !== 'number' || p.exp * 1000 < Date.now()) return null;
+    return { uid: String(p.uid ?? '') };
+  } catch {
+    return null;
+  }
+}
+
+function legacyOriginAllowed(req: express.Request): boolean {
+  if (Date.now() >= LEGACY_ORIGIN_AUTH_UNTIL) return false;
+  const origin = headerValue(req, 'origin');
+  if (!origin) return false;
+  try {
+    return LEGACY_ALLOWED_ORIGINS.includes(new URL(origin).hostname.toLowerCase());
   } catch {
     return false;
   }
 }
 
-function authMiddleware(
-  req: express.Request,
-  res: express.Response,
-  next: express.NextFunction,
-): void {
-  if (!SHARED_SECRET) { next(); return; }
-  const token = req.headers['x-worker-secret'] as string | undefined;
-  if (token === SHARED_SECRET) {
-    next();
+function rejectUnauthorized(res: express.Response): void {
+  if (!SERVICE_SECRETS.length) {
+    res.status(503).json({ error: 'WORKER_NOT_CONFIGURED', message: 'Worker secret is not configured' });
     return;
   }
-
-  // Browser direct fallback: allow trusted origins without exposing worker secret.
-  const origin = req.headers.origin as string | undefined;
-  if (isOriginAllowed(origin)) {
-    next();
-    return;
-  }
-
-  if (token !== SHARED_SECRET) {
-    res.status(401).json({ error: 'Unauthorized' });
-    return;
-  }
-  next();
+  // Older open pages show `message` as-is, so tell the user what to do.
+  res.status(401).json({ error: 'Unauthorized', message: REFRESH_MESSAGE });
 }
+
+/** Server-to-server routes: service secret only. */
+function authMiddleware(req: express.Request, res: express.Response, next: express.NextFunction): void {
+  if (hasServiceSecret(req)) { next(); return; }
+  rejectUnauthorized(res);
+}
+
+/** YouTube routes: service secret, or (during the changeover window) a trusted Origin. */
+function youtubeAuthMiddleware(req: express.Request, res: express.Response, next: express.NextFunction): void {
+  if (hasServiceSecret(req)) { next(); return; }
+  if (legacyOriginAllowed(req)) {
+    console.log(`[worker] Legacy origin auth used for ${req.path} (until ${new Date(LEGACY_ORIGIN_AUTH_UNTIL).toISOString()})`);
+    next();
+    return;
+  }
+  rejectUnauthorized(res);
+}
+
+/** Audio upload: service secret, or a member's upload token. */
+function uploadAuthMiddleware(req: express.Request, res: express.Response, next: express.NextFunction): void {
+  if (hasServiceSecret(req)) { next(); return; }
+  const token = headerValue(req, 'x-upload-token') || headerValue(req, 'x-worker-secret');
+  const verified = token ? verifyUploadToken(token) : null;
+  if (verified) {
+    console.log(`[worker] Upload token accepted for user ${verified.uid || '(unknown)'}`);
+    next();
+    return;
+  }
+  rejectUnauthorized(res);
+}
+
+/** Trim times reach ffmpeg as arguments; accept only what the page's input mask produces. */
+const TRIM_TIME_RE = /^\d{1,2}(:\d{2}){0,2}$/;
+function isValidTrimTime(v: unknown): boolean {
+  return v === undefined || v === null || v === '' || (typeof v === 'string' && TRIM_TIME_RE.test(v.trim()));
+}
+
+/** Uploaded file extension, used in a temp file name and as a Whisper hint. */
+const ALLOWED_AUDIO_EXTS = new Set(['mp3', 'm4a', 'wav', 'webm', 'ogg', 'opus', 'mp4', 'aac', 'mpeg', 'mpga', 'flac']);
 
 // Lazy OpenAI client — routes through HTTP proxy when OPENAI_HTTP_PROXY is set,
 // bypassing Fly.io → OpenAI direct connection issues.
@@ -138,15 +229,15 @@ async function initCookies(): Promise<void> {
   console.log(`[worker] Wrote YouTube cookies to ${COOKIES_PATH} (${content.length} chars)`);
 }
 
-function cookiesArg(): string {
-  return existsSync(COOKIES_PATH) ? `--cookies "${COOKIES_PATH}"` : '';
+function cookiesArgs(): string[] {
+  return existsSync(COOKIES_PATH) ? ['--cookies', COOKIES_PATH] : [];
 }
 
 // Proxy support: set YTDLP_PROXY env var, e.g. "socks5://user:pass@host:port" or "http://user:pass@host:port"
 // Webshare.io residential proxy: https://proxy.webshare.io/ (~$3/month)
-function proxyArg(): string {
+function proxyArgs(): string[] {
   const p = process.env.YTDLP_PROXY;
-  return p ? `--proxy "${p}"` : '';
+  return p ? ['--proxy', p] : [];
 }
 
 // Python script for youtube_transcript_api (bypasses bot detection via timedtext API)
@@ -214,8 +305,11 @@ async function ensureTranscriptScript(): Promise<void> {
 
 async function getYouTubeTranscript(videoId: string): Promise<string | null> {
   try {
-    const cmd = `python3 "${TRANSCRIPT_SCRIPT_PATH}" ${videoId} zh-TW zh-Hant zh-Hans zh en`;
-    const { stdout, stderr } = await execAsync(cmd, { timeout: 30_000, maxBuffer: 10 * 1024 * 1024 });
+    const { stdout, stderr } = await run(
+      'python3',
+      [TRANSCRIPT_SCRIPT_PATH, videoId, 'zh-TW', 'zh-Hant', 'zh-Hans', 'zh', 'en'],
+      { timeout: 30_000 },
+    );
     if (stderr && !stdout.trim()) {
       console.log(`[worker] Transcript fetch stderr: ${stderr.slice(0, 200)}`);
       return null;
@@ -262,7 +356,7 @@ async function downloadLatestYtDlp(): Promise<string> {
   const buf = await resp.arrayBuffer();
   await writeFile(binaryPath, Buffer.from(buf));
   chmodSync(binaryPath, 0o755);
-  const { stdout: ver } = await execAsync(`"${binaryPath}" --version`, { timeout: 5000 });
+  const { stdout: ver } = await run(binaryPath, ['--version'], { timeout: 5000 });
   console.log(`[worker] yt-dlp downloaded: ${ver.trim()}`);
   return binaryPath;
 }
@@ -272,7 +366,7 @@ async function ensureYtDlp(): Promise<string> {
 
   // 1. Try system yt-dlp (installed in Dockerfile) — but only if it is fresh enough.
   try {
-    const { stdout } = await execAsync('yt-dlp --version', { timeout: 5000 });
+    const { stdout } = await run('yt-dlp', ['--version'], { timeout: 5000 });
     const version = stdout.trim();
     const ageDays = ytDlpVersionAgeDays(version);
     console.log(`[worker] system yt-dlp: ${version} (${Math.round(ageDays)} days old)`);
@@ -292,7 +386,7 @@ async function ensureYtDlp(): Promise<string> {
   const cachedPath = join(binDir, assetName);
   if (existsSync(cachedPath)) {
     try {
-      const { stdout: cachedVer } = await execAsync(`"${cachedPath}" --version`, { timeout: 5000 });
+      const { stdout: cachedVer } = await run(cachedPath, ['--version'], { timeout: 5000 });
       const ageDays = ytDlpVersionAgeDays(cachedVer.trim());
       console.log(`[worker] cached yt-dlp: ${cachedVer.trim()} (${Math.round(ageDays)} days old)`);
       if (ageDays <= YTDLP_MAX_AGE_DAYS) {
@@ -313,7 +407,7 @@ async function ensureFfmpeg(): Promise<string> {
   const candidates = ['ffmpeg', '/usr/bin/ffmpeg', '/usr/local/bin/ffmpeg'];
   for (const bin of candidates) {
     try {
-      const { stdout } = await execAsync(`${bin} -version`, { timeout: 10000 });
+      const { stdout } = await run(bin, ['-version'], { timeout: 10000 });
       console.log(`[worker] ffmpeg found: ${bin}`, (stdout || '').split('\n')[0]);
       return bin;
     } catch (err: any) {
@@ -321,7 +415,7 @@ async function ensureFfmpeg(): Promise<string> {
     }
   }
   try {
-    const { stdout } = await execAsync('which ffmpeg', { timeout: 5000 });
+    const { stdout } = await run('which', ['ffmpeg'], { timeout: 5000 });
     const found = stdout.trim();
     if (found) {
       console.log(`[worker] ffmpeg found via which: ${found}`);
@@ -336,7 +430,8 @@ async function ensureFfmpeg(): Promise<string> {
 // Audio utilities
 async function getAudioDuration(ffmpeg: string, filePath: string): Promise<number> {
   try {
-    const result = await execAsync(`"${ffmpeg}" -i "${filePath}"`, { timeout: 15000 })
+    // `ffmpeg -i` with no output always exits non-zero; the Duration line is in stderr.
+    const result = await run(ffmpeg, ['-hide_banner', '-i', filePath], { timeout: 15000 })
       .catch((e: any) => ({ stdout: '', stderr: e.stderr || e.message || '' }));
     const output = ((result as any).stdout || '') + ((result as any).stderr || '');
     const m = output.match(/Duration:\s*(\d+):(\d+):(\d+)/);
@@ -353,8 +448,10 @@ async function splitAudio(
   const pattern = join(outputDir, `chunk_%03d.mp3`);
   // -vn: drop any video stream — muxed fallback downloads (best[height<=360]) carry
   // a video track that the mp3 segment muxer can't accept, which fails the whole command.
-  const cmd = `"${ffmpeg}" -i "${inputPath}" -vn -f segment -segment_time ${chunkSec} -c:a libmp3lame -q:a 5 -ar 16000 -ac 1 -reset_timestamps 1 "${pattern}"`;
-  await execAsync(cmd, { timeout: 180_000, maxBuffer: 50 * 1024 * 1024 });
+  await run(ffmpeg, [
+    '-i', inputPath, '-vn', '-f', 'segment', '-segment_time', String(chunkSec),
+    '-c:a', 'libmp3lame', '-q:a', '5', '-ar', '16000', '-ac', '1', '-reset_timestamps', '1', pattern,
+  ], { timeout: 180_000, maxBuffer: 50 * 1024 * 1024 });
   const files = await readdir(outputDir);
   return files.filter((f) => /^chunk_\d+\.mp3$/.test(f)).sort().map((f) => join(outputDir, f));
 }
@@ -564,14 +661,17 @@ function extractVideoId(url: string): string | null {
 // 前端直接 POST binary 到此端點，X-Filename header 傳檔名
 // 支援最大 250MB，自動 ffmpeg 分片後逐片 Whisper 轉錄
 app.post('/api/audio-transcribe',
-  authMiddleware,
+  uploadAuthMiddleware,
   express.raw({ type: '*/*', limit: '250mb' }),
   async (req: express.Request, res: express.Response) => {
     const rawFileName = (req.headers['x-filename'] as string) || 'audio.mp3';
     // Front-end encodes filename with encodeURIComponent to stay ISO-8859-1 safe
     let fileName = rawFileName;
     try { fileName = decodeURIComponent(rawFileName); } catch { /* already plain ASCII */ }
-    const ext = (fileName.split('.').pop() || 'mp3').toLowerCase();
+    // The extension names a temp file on disk, so only known audio/video extensions get
+    // through; anything else is stored as .mp3 and ffmpeg/Whisper sniff the real format.
+    const claimedExt = (fileName.split('.').pop() || '').toLowerCase();
+    const ext = ALLOWED_AUDIO_EXTS.has(claimedExt) ? claimedExt : 'mp3';
     const skipFormat = req.query.format === 'false';
     const tmpDir = join(os.tmpdir(), `audio-upload-${Date.now()}`);
     const chunkDir = join(tmpDir, 'chunks');
@@ -694,6 +794,14 @@ const handleYouTubeAudio = async (req: express.Request, res: express.Response): 
       return;
     }
 
+    if (!isValidTrimTime(startTime) || !isValidTrimTime(endTime)) {
+      res.status(400).json({
+        error: 'INVALID_TIME',
+        message: '時間格式錯誤，請使用 HH:MM:SS 格式，例如 00:10:30',
+      });
+      return;
+    }
+
     console.log(`[worker] Starting: ${videoId}`);
 
     // Strategy 1: youtube_transcript_api (Python — no bot detection, no proxy needed)
@@ -724,15 +832,21 @@ const handleYouTubeAudio = async (req: express.Request, res: express.Response): 
     await mkdir(chunkDir, { recursive: true });
 
     const fakeUA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
-    const ytBase = `"${ytDlp}" --no-warnings --js-runtimes node --user-agent "${fakeUA}" --add-headers "Accept-Language:zh-TW,zh;q=0.9,en;q=0.8" ${cookiesArg()} ${proxyArg()}`.trim();
+    const watchUrl = `https://www.youtube.com/watch?v=${videoId}`;
+    const ytArgsNoProxy = [
+      '--no-warnings', '--js-runtimes', 'node', '--user-agent', fakeUA,
+      '--add-headers', 'Accept-Language:zh-TW,zh;q=0.9,en;q=0.8', ...cookiesArgs(),
+    ];
+    const ytArgs = [...ytArgsNoProxy, ...proxyArgs()];
     // tv_embedded often bypasses bot detection; web_creator is another good option
     const playerClients = ['tv_embedded', 'ios', 'web_creator', 'android', 'mweb', 'web'];
 
     // Check video duration
     try {
-      const { stdout: infoJson } = await execAsync(
-        `${ytBase} --extractor-args "youtube:player_client=tv_embedded" --dump-json --no-playlist "https://www.youtube.com/watch?v=${videoId}"`,
-        { timeout: 30_000, maxBuffer: 10 * 1024 * 1024 },
+      const { stdout: infoJson } = await run(
+        ytDlp,
+        [...ytArgs, '--extractor-args', 'youtube:player_client=tv_embedded', '--dump-json', '--no-playlist', watchUrl],
+        { timeout: 30_000 },
       );
       const dur: number = JSON.parse(infoJson).duration || 0;
       console.log(`[worker] Duration: ${Math.round(dur / 60)} min`);
@@ -751,42 +865,45 @@ const handleYouTubeAudio = async (req: express.Request, res: express.Response): 
     const outTpl = join(tmpDir, '%(id)s.%(ext)s');
     let downloadOk = false;
     let lastErr = '';
-    const proxyStr = proxyArg();
-    console.log(`[worker] Downloading audio (proxy: ${proxyStr ? 'yes' : 'no'})...`);
+    const hasProxy = proxyArgs().length > 0;
+    console.log(`[worker] Downloading audio (proxy: ${hasProxy ? 'yes' : 'no'})...`);
 
-    // Build command variants: with proxy first, then without proxy as fallback.
+    // Argument variants: with proxy first, then without proxy as fallback.
     // Webshare rotating proxy can cause 403 when the signed URL IP doesn't match download IP.
-    const ytBaseNoProxy = `"${ytDlp}" --no-warnings --js-runtimes node --user-agent "${fakeUA}" --add-headers "Accept-Language:zh-TW,zh;q=0.9,en;q=0.8" ${cookiesArg()}`.trim();
-    const commandBases = proxyStr ? [ytBase, ytBaseNoProxy] : [ytBase];
+    const argBases = hasProxy
+      ? [{ args: ytArgs, usingProxy: true }, { args: ytArgsNoProxy, usingProxy: false }]
+      : [{ args: ytArgs, usingProxy: false }];
+    const dlTail = ['-f', fmtSel, '--no-playlist', '--no-post-overwrites', '-o', outTpl, watchUrl];
+    const dlOpts = { timeout: 600_000, maxBuffer: 50 * 1024 * 1024 };
+    // Only yt-dlp's own stderr is surfaced: execFile's error.message starts with the full
+    // command line, which includes the proxy URL and its credentials.
+    const dlErrorText = (dlError: any): string => String(dlError?.stderr || '').trim() || 'yt-dlp exited with an error';
 
-    outer: for (const base of commandBases) {
-      const usingProxy = base.includes('--proxy');
+    outer: for (const { args, usingProxy } of argBases) {
       for (const client of playerClients) {
-        const dlCmd = `${base} --extractor-args "youtube:player_client=${client}" -f "${fmtSel}" --no-playlist --no-post-overwrites -o "${outTpl}" "https://www.youtube.com/watch?v=${videoId}"`;
         try {
           console.log(`[worker] Trying player_client=${client} (proxy=${usingProxy})...`);
-          const { stderr } = await execAsync(dlCmd, { timeout: 600_000, maxBuffer: 50 * 1024 * 1024 });
+          const { stderr } = await run(ytDlp, [...args, '--extractor-args', `youtube:player_client=${client}`, ...dlTail], dlOpts);
           if (stderr) console.log('[worker] yt-dlp stderr:', stderr.slice(0, 300));
           downloadOk = true;
           console.log(`[worker] Download succeeded with player_client=${client} proxy=${usingProxy}`);
           break outer;
         } catch (dlError: any) {
-          lastErr = dlError?.stderr || dlError?.message || 'unknown';
+          lastErr = dlErrorText(dlError);
           console.log(`[worker] player_client=${client} proxy=${usingProxy} failed:`, lastErr.slice(0, 300));
         }
       }
 
       // Also try default (no explicit player_client) for this proxy setting
       try {
-        const dlCmd = `${base} -f "${fmtSel}" --no-playlist --no-post-overwrites -o "${outTpl}" "https://www.youtube.com/watch?v=${videoId}"`;
         console.log(`[worker] Trying default client (proxy=${usingProxy})...`);
-        const { stderr } = await execAsync(dlCmd, { timeout: 600_000, maxBuffer: 50 * 1024 * 1024 });
+        const { stderr } = await run(ytDlp, [...args, ...dlTail], dlOpts);
         if (stderr) console.log('[worker] yt-dlp stderr:', stderr.slice(0, 300));
         downloadOk = true;
         console.log(`[worker] Download succeeded with default proxy=${usingProxy}`);
         break outer;
       } catch (dlError: any) {
-        lastErr = dlError?.stderr || dlError?.message || 'unknown';
+        lastErr = dlErrorText(dlError);
         console.log(`[worker] Default proxy=${usingProxy} failed:`, lastErr.slice(0, 300));
       }
     }
@@ -823,11 +940,14 @@ const handleYouTubeAudio = async (req: express.Request, res: express.Response): 
     // Trim to time range if specified
     if (startTime || endTime) {
       const trimmedPath = join(tmpDir, `trimmed.${ext}`);
-      const ssArg = startTime ? `-ss "${startTime}"` : '';
-      const toArg = endTime ? `-to "${endTime}"` : '';
-      const trimCmd = `"${ffmpeg}" -i "${audioPath}" ${ssArg} ${toArg} -c copy "${trimmedPath}"`;
+      const trimArgs = [
+        '-i', audioPath,
+        ...(startTime ? ['-ss', String(startTime).trim()] : []),
+        ...(endTime ? ['-to', String(endTime).trim()] : []),
+        '-c', 'copy', trimmedPath,
+      ];
       console.log(`[worker] Trimming: ${startTime || '00:00:00'} to ${endTime || 'end'}`);
-      await execAsync(trimCmd, { timeout: 60_000, maxBuffer: 50 * 1024 * 1024 });
+      await run(ffmpeg, trimArgs, { timeout: 60_000, maxBuffer: 50 * 1024 * 1024 });
       if (existsSync(trimmedPath)) audioPath = trimmedPath;
     }
 
@@ -890,10 +1010,16 @@ const handleYouTubeAudio = async (req: express.Request, res: express.Response): 
 };
 
 // Synchronous route — kept for short videos and for callers that predate /start.
-app.post('/api/youtube-audio', authMiddleware, handleYouTubeAudio);
+app.post('/api/youtube-audio', youtubeAuthMiddleware, handleYouTubeAudio);
 
 // Start a transcription job and return immediately; the client polls /status/:jobId.
-app.post('/api/youtube-audio/start', authMiddleware, (req: express.Request, res: express.Response) => {
+app.post('/api/youtube-audio/start', youtubeAuthMiddleware, (req: express.Request, res: express.Response) => {
+  // Reject bad input up front so the caller gets a 400 now, not a failed job later.
+  const { startTime, endTime } = req.body || {};
+  if (!isValidTrimTime(startTime) || !isValidTrimTime(endTime)) {
+    res.status(400).json({ error: 'INVALID_TIME', message: '時間格式錯誤，請使用 HH:MM:SS 格式，例如 00:10:30' });
+    return;
+  }
   const jobId = newJobId();
   jobs.set(jobId, { status: 'running', startedAt: Date.now() });
   console.log(`[worker] Job ${jobId} started`);
@@ -917,7 +1043,7 @@ app.post('/api/youtube-audio/start', authMiddleware, (req: express.Request, res:
   });
 });
 
-app.get('/api/youtube-audio/status/:jobId', authMiddleware, (req: express.Request, res: express.Response) => {
+app.get('/api/youtube-audio/status/:jobId', youtubeAuthMiddleware, (req: express.Request, res: express.Response) => {
   const jobId = String(req.params.jobId ?? '');
   const job = jobs.get(jobId);
   if (!job) {
